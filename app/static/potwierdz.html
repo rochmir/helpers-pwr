@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wpisz kod od wolontariusza · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-confirm">
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
+      <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
+      <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+    </a>
+    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
+  </div>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz" class="active" aria-current="page">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></div></nav>
+</header>
+<section class="hero hero-small">
+  <div class="container">
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Wpisz kod od wolontariusza</h1>
+      <p class="lead">Kod dostajesz od wolontariusza po rejestracji na stoisku. Wpisz go, wybierz wydział, a Twój wydział dostanie punkt w Bitwie Wydziałów. Odbierzesz też certyfikat i 10 dodatkowych prób w grze.</p>
+  </div>
+</section>
+<main class="section section-tight">
+<div class="container">
+  <div class="narrow">
+  <div id="confirm-msg" class="msg" hidden></div>
+
+  <form id="confirm-form" class="card">
+    <label for="code">Kod od wolontariusza <span class="req">*</span></label>
+    <input type="text" id="code" name="code" autocapitalize="characters" autocomplete="off" spellcheck="false" required>
+    <p id="code-status" class="hint"></p>
+
+    <label for="faculty">Wydział <span class="req">*</span></label>
+    <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
+
+    <label for="study-year">Rok studiów <span class="req">*</span></label>
+    <select id="study-year" name="study_year" required><option value="">Wybierz rok</option></select>
+
+    <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
+    <input type="text" id="donor-name" maxlength="80" autocomplete="off">
+    <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
+
+    <div id="turnstile" class="turnstile"></div>
+    <button class="btn btn-primary btn-lg" type="submit" id="submit-btn"><i class="ti ti-circle-check" aria-hidden="true"></i> Wyślij kod</button>
+  </form>
+
+  <section id="done-section" class="card" hidden>
+    <span class="iconbox" aria-hidden="true"><i class="ti ti-circle-check"></i></span>
+    <h2>Dziękujemy za udział w akcji!</h2>
+    <p id="done-text"></p>
+    <div class="eyecatcher bonus-box" id="bonus-box" hidden>
+      <div>
+        <p class="title" id="bonus-title">Masz 10 dodatkowych prób w HLA Match Maker</p>
+        <p id="bonus-text"></p>
+      </div>
+      <a class="btn btn-plain btn-lg" id="bonus-play" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a>
+    </div>
+    <div id="cert-output" class="download" hidden></div>
+  </section>
+  </div>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-main"><div class="container">
+    <div>
+      <div class="footer-logos">
+        <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+        <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+      </div>
+      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+    </div>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+  </div></div>
+  <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
+</footer>
+<script type="module" src="/static/potwierdz.js"></script>
+</body>
+</html>

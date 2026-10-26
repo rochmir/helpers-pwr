@@ -1,0 +1,10 @@
+data/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.venv/
+tests/
+README.md
+PLAN.md

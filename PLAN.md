@@ -1,0 +1,276 @@
+# helpersi-pwr — plan implementacji (źródło prawdy dla agentów)
+
+Spec biznesowy: `/srv/infra/dkms_pwr/projekt.md`. Ten plik go **nadpisuje** tam, gdzie się różnią.
+Docelowy adres: `https://helpers-pwr.rupary.pl` (tunel Cloudflare → `http://localhost:8010`).
+
+## Twarde zasady (od właściciela)
+1. **Zero danych osobowych na serwerze.** Imię/nazwisko/ksywka do certyfikatów żyją tylko w przeglądarce
+   (canvas). Kolumny `matched_by_nickname` NIE MA. Nie zapisujemy IP (uvicorn `--no-access-log`, nie wysyłamy
+   `remoteip` do Turnstile, nie logujemy IP nigdzie). Rejestracja dawcy nie przechowuje kodu ani pełnego
+   znacznika czasu — tylko datę (`registered_date`), żeby nie dało się powiązać wpisu z osobą.
+   **Wyjątek (losowanie finałowe):** zapisujemy anonimowo wzór trafienia 10/10 i jego godzinę (`genotype_history`,
+   `game_sessions.won_genotype/won_at`, losowy `session_id`) — bez nicku, bez IP, bez niczego, co wskazuje osobę.
+2. **Wygląd nieistotny teraz.** Właściciel dostarczy CSS i projekty certyfikatów później. Frontend: czysty,
+   semantyczny HTML z sensownymi klasami/id, jeden `static/style.css` z minimalnym, neutralnym stylem.
+   Renderery canvas = proste placeholdery, ale z kompletną logiką (dane, font preload, PNG, `<img>` fallback).
+3. **Role:** admin (`ADMIN_SECRET`) ≠ wolontariusz (PIN stoiska). Wolontariusz widzi tylko swoje stoisko.
+4. **eduroam:** zero blokad po IP. Ochrona przed botami = Cloudflare Turnstile.
+5. Bez wymyślonych treści. Słownik kierunków to seed do weryfikacji, edytowalny w adminie.
+
+## Stack (jak w opis-faktury)
+Python 3.12, FastAPI, uvicorn (1 worker), stdlib `sqlite3` (WAL, `busy_timeout=5000`, `foreign_keys=ON`),
+`itsdangerous` (podpisy), `argon2-cffi` (PIN-y), `segno` (QR SVG). Statyczny HTML/JS bez frameworka i bez
+kroku budowania. Bez Jinja. Testy: pytest + httpx (`TestClient`).
+
+## Układ katalogów
+```
+/srv/infra/helpersi-pwr/
+  Dockerfile  docker-compose.yml  .env.example  .dockerignore  .gitignore
+  requirements.txt  requirements-dev.txt  README.md  PLAN.md
+  app/
+    main.py          # app, middleware (nagłówki), routing stron statycznych
+    config.py        # env: ADMIN_SECRET, SECRET_KEY, DATA_DIR, PUBLIC_URL, TURNSTILE_*, CODE_TTL_MINUTES, COOKIE_SECURE, TZ
+    db.py            # połączenie, schema, migracja, seed słownika
+    auth.py          # podpisane cookies, zależności require_admin / require_volunteer / game_session
+    captcha.py       # Turnstile siteverify (bez remoteip)
+    game.py          # logika genotypów (czysta, testowalna)
+    routes/          # game.py, volunteer.py, donor.py, stats.py, admin.py, misc.py
+    seed_dictionary.json
+    static/          # *.html, *.js, style.css, cert.js, common.js
+  tests/
+  data/              # wolumen (gitignored)
+```
+
+## Schemat SQLite (`$DATA_DIR/dkms.db`, DATA_DIR=/app/data)
+```sql
+booths(id TEXT PK CHECK(id GLOB '[a-z0-9]*'), name TEXT NOT NULL, pin_hash TEXT NOT NULL,
+       current_genotype TEXT NOT NULL, genotype_updated_at TEXT NOT NULL,
+       matches_count INTEGER NOT NULL DEFAULT 0, rolls_count INTEGER NOT NULL DEFAULT 0,
+       created_at TEXT NOT NULL)
+genotype_history(genotype TEXT PK, booth_id TEXT NOT NULL, created_at TEXT NOT NULL,
+                 matched_at TEXT NULL,            -- brak nicku!
+                 is_test INTEGER NOT NULL DEFAULT 0)  -- 1 = trafienie z narzędzi testowych (poza losowaniem)
+game_sessions(session_id TEXT PK, created_at TEXT NOT NULL, has_won INTEGER NOT NULL DEFAULT 0,
+              won_genotype TEXT NULL, won_at TEXT NULL)  -- wzór i godzina trafienia (= genotype_history.matched_at)
+raffle_draws(id INTEGER PK AUTOINCREMENT, genotype TEXT NOT NULL REFERENCES genotype_history(genotype),
+             drawn_at TEXT NOT NULL)
+game_attempts(session_id TEXT, date TEXT, attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id,date))
+registration_codes(code TEXT PK, booth_id TEXT NOT NULL REFERENCES booths(id),
+                   status TEXT NOT NULL CHECK(status IN('ACTIVE','USED','EXPIRED')),
+                   created_at TEXT NOT NULL, used_at TEXT NULL)
+donors_stats(id INTEGER PK AUTOINCREMENT, booth_id TEXT NOT NULL REFERENCES booths(id),
+             faculty TEXT NOT NULL, major TEXT NOT NULL, study_year INTEGER NOT NULL,
+             registered_date TEXT NOT NULL)       -- YYYY-MM-DD, bez kodu i godziny
+settings(key TEXT PK, value TEXT NOT NULL)        -- 'dictionary' = JSON słownika
+```
+Czasy: ISO 8601 UTC. „Dzień” (limit prób, podsumowania dzienne) = data w strefie `Europe/Warsaw` (`zoneinfo`).
+Genotyp: 10 znaków z `0123`. Nowy genotyp musi być unikalny względem `genotype_history` (zapisywany tam przy
+utworzeniu stoiska i każdej zmianie).
+
+## Logika
+**Losowanie** (`POST /api/game/roll`, body `{booth_id}`), jedna transakcja `BEGIN IMMEDIATE`:
+- brak sesji → 401; stoisko nie istnieje → 404; `attempts` dziś ≥ 5 → 429 `{detail, attempts_left:0}`.
+- `attempts += 1`, `booths.rolls_count += 1`.
+- Wygrana z p = 1/300 (`game.WIN_ONE_IN`) **i tylko gdy sesja `has_won=0`**: odczyt
+  `current_genotype` wewnątrz transakcji (więc wyścig nie istnieje), `matches_count += 1`, `has_won=1`,
+  `genotype_history.matched_at` dla starego, nowy unikalny genotyp na stoisko. Zwraca stary genotyp jako trafiony.
+  Tym samym znacznikiem czasu: `game_sessions.won_genotype/won_at` (do certyfikatu). Trafienie z `arm-win` /
+  `force-win` dostaje `genotype_history.is_test=1`.
+- Inaczej k ∈ {5:25, 6:35, 7:25, 8:10, 9:5}%; ciąg z dokładnie k zgodnymi pozycjami (losowe pozycje,
+  na niezgodnych losowy *inny* symbol). Funkcje w `game.py` przyjmują `rng` do testów.
+- Wolne od wyścigu: rolls/attempts liczone w tej samej transakcji.
+
+**Kody rejestracyjne:** `{BOOTH_ID.upper()}-{4 znaki}` z alfabetu `23456789ABCDEFGHJKMNPQRSTUVWXYZ`
+(bez 0/O/1/I/L). Unikalność po PK (retry). Ważność `CODE_TTL_MINUTES` (domyślnie 60) — wygaszane leniwie
+(przy każdym odczycie/użyciu, `UPDATE ... SET status='EXPIRED' WHERE status='ACTIVE' AND created_at < ?`).
+Wejście kodu normalizowane: upper, trim, usunięcie spacji, `O→0`? NIE — po prostu upper/trim.
+
+**Rok studiów:** 1–5, 6 = Szkoła Doktorska, 7 = Pracownik PWr (etykiety w słowniku).
+
+## Auth
+- `SECRET_KEY` z env, inaczej losowy zapisany w `$DATA_DIR/secret_key` (chmod 600).
+- **Sesja gry:** id = `secrets.token_urlsafe(24)`; token = podpis itsdangerous (`Signer`, salt `game`).
+  Cookie `hp_game` (HttpOnly, SameSite=Lax, Secure gdy `COOKIE_SECURE=1`, max-age 30 dni) + ten sam token
+  w JSON odpowiedzi → frontend trzyma w `localStorage['hp_game']` i wysyła nagłówek `X-Game-Token`, gdy
+  cookie zniknie. Serwer akceptuje cookie lub nagłówek; jeśli tylko nagłówek — odnawia cookie.
+- **Personel:** cookie `hp_staff` = `URLSafeTimedSerializer` (salt `staff`) z `{role:'admin'}` albo
+  `{role:'volunteer', booth:'c13'}`; HttpOnly, SameSite=Strict, max-age 12h (admin) / 14h (wolontariusz).
+  Admin to nadzbiór: `require_volunteer(booth)` przepuszcza też admina (admin może wygenerować kod dla
+  dowolnego stoiska podając `booth_id`).
+- `ADMIN_SECRET` porównywany `hmac.compare_digest`. PIN stoiska: min. 6 cyfr, argon2.
+  Zmiana PIN-u stoiska unieważnia stare sesje wolontariuszy (w tokenie trzymaj 8 znaków hash-u `pin_hash`
+  i porównuj).
+- Throttle PIN w pamięci per stoisko (NIE per IP): po 10 błędach w 10 min stoisko blokuje logowanie na 5 min.
+- CSRF: wszystkie POST/PUT/PATCH/DELETE pod `/api/` wymagają `Content-Type: application/json` (inaczej 415).
+- **Turnstile** (`cf_turnstile` w body) wymagany przy: `POST /api/game/session`, `POST /api/donor/register`,
+  `POST /api/volunteer/auth`, `POST /api/admin/login`. Wyłączony, gdy brak kluczy (lokalnie/testy) — warning w logu.
+  `siteverify` bez `remoteip`. Opcjonalnie `TURNSTILE_EXEMPT=1` dla testów.
+
+## Nagłówki
+- `/api/*`: `Cache-Control: no-store, no-cache, must-revalidate`, `Pragma: no-cache`.
+- Wszystko: `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
+  CSP: `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`.
+  **Żadnego inline JS** w HTML.
+
+## Kontrakt API (JSON; błędy `{"detail": "komunikat po polsku"}`)
+### Ogólne
+- `GET /api/config` → `{turnstile_site_key: str|null, public_url: str}`
+- `GET /api/qr.svg?path=/graj?stoisko=c13` → `image/svg+xml` QR z `PUBLIC_URL + path` (path musi zaczynać się od `/`, max 200 zn.)
+- `GET /healthz` → `{ok:true}`
+### Gra
+- `GET /api/booth/{id}/state` → `{id, name, genotype, genotype_updated_at, matches_count, rolls_count, play_path:"/graj?stoisko=c13"}`
+- `POST /api/game/session` `{cf_turnstile}` → `{token, attempts_left, has_won, won_genotype, won_at}` (+cookie). Jeśli ważna sesja już jest — zwraca ją (bez captchy).
+- `GET /api/game/me` → `{attempts_left, has_won, won_genotype, won_at}` (ostatnie dwa `null` bez trafienia) lub 401
+- `POST /api/game/roll` `{booth_id}` → `{matches:int(5..10), win:bool, player_genotype, booth_genotype, attempts_left, has_won, won_at}` (`won_at` = UTC ISO trafienia, `null` bez wygranej)
+### Wolontariusz
+- `POST /api/volunteer/auth` `{booth_id, pin, cf_turnstile}` → `{booth:{id,name}}` (+cookie)
+- `POST /api/volunteer/logout` → `{ok}`
+- `GET /api/volunteer/me` → `{role, booth:{id,name}, registered_count, matches_count, rolls_count, codes:[{code,status,created_at,expires_at}] (20 ostatnich)}`
+- `POST /api/volunteer/generate-code` `{booth_id?}` (booth_id tylko dla admina) → `{code, expires_at, confirm_path:"/potwierdz?kod=C13-AB7K"}`
+- `POST /api/volunteer/codes/{code}/cancel` → `{ok}` (tylko ACTIVE i własne stoisko)
+### Dawca i statystyki
+- `GET /api/dictionary/faculties` → `{faculties:[{code,name,majors:[str]}], study_years:[{value,label}]}`
+- `GET /api/donor/check-code?kod=X` → `{valid:bool, booth_name?:str}` (do wstępnej walidacji z QR; nie zużywa kodu)
+- `POST /api/donor/register` `{code, faculty, major, study_year, cf_turnstile}` → `{ok, faculty_name, booth_name}`;
+  błędy: 404 nieznany kod, 410 użyty/wygasły, 422 wydział/kierunek/rok spoza słownika. Atomowo (`BEGIN IMMEDIATE`).
+- `GET /api/stats/live` → `{total, faculties:[{code,name,count}] (wszystkie, malejąco), top_majors:[{faculty,major,count}] (5),
+   booths:[{id,name,registered,matches_count,rolls_count}], game:{rolls,matches,players}}`
+### Admin
+- `POST /api/admin/login` `{secret, cf_turnstile}` / `POST /api/admin/logout` / `GET /api/admin/me` → `{role:'admin'}`
+- `GET /api/admin/booths` → `[{id,name,current_genotype,genotype_updated_at,matches_count,rolls_count,registered,active_codes}]`
+- `POST /api/admin/booths` `{id,name,pin}` (201) · `PATCH /api/admin/booths/{id}` `{name?,pin?}` ·
+  `DELETE /api/admin/booths/{id}` (409, gdy ma rejestracje lub kody)
+- `POST /api/admin/booths/{id}/reset-genotype` → `{genotype}`
+- `GET /api/admin/codes?booth_id=&status=` (max 200, najnowsze) · `POST /api/admin/codes/{code}/cancel`
+- `GET /api/admin/dictionary` / `PUT /api/admin/dictionary` (cały JSON w formacie jak `/api/dictionary/faculties`
+  bez study_years; walidacja: unikalne kody, niepuste nazwy). Nie wolno usunąć wydziału, który ma rejestracje (409).
+- `GET /api/admin/summary?date=YYYY-MM-DD|all` → `{scope:'day'|'all', date, registered:int, registered_total:int,
+   podium:[{code,name,count}] (top3 w zakresie), top_major:{faculty,major,count}|null,
+   game:{players, rolls, matches}}` (dla dnia: players = sesje z próbą tego dnia, rolls = suma prób dnia,
+   matches = `genotype_history.matched_at` tego dnia w Europe/Warsaw)
+- `GET /api/admin/days` → lista dat z jakąkolwiek aktywnością (do selecta)
+- `GET /api/admin/export-csv` → `text/csv; charset=utf-8` z BOM, `id,booth_id,faculty,major,study_year,registered_date`
+
+## Strony (FastAPI serwuje pliki z `app/static/`)
+| URL | plik | rola |
+|---|---|---|
+| `/` | index.html | linki: Graj, Statystyki, Potwierdź rejestrację |
+| `/stoisko/{id}` | stoisko.html | ekran pasywny: genotyp (▲●■★), liczniki, QR do `/graj?stoisko=id`, polling 2.5 s, animacja „Zebrano Genotyp 10/10!” przy zmianie |
+| `/graj` | graj.html | gracz: Turnstile → sesja; „Losuj”; wynik porównania pozycja po pozycji; po 10/10 formularz ksywki → certyfikat 9:16 (tylko lokalnie) |
+| `/wolontariusz` | wolontariusz.html | login (stoisko + PIN + Turnstile); wielki przycisk; duży kod + QR do `/potwierdz?kod=`; lista ostatnich kodów z „Anuluj”; liczniki stoiska; wyloguj |
+| `/potwierdz` | potwierdz.html | kod (prefill z `?kod=`, check-code), kaskadowe selecty, opcjonalne imię i nazwisko (NIE wysyłane), Turnstile, po sukcesie certyfikat dawcy |
+| `/statystyki` | statystyki.html | live ranking, odświeżanie co 10 s |
+| `/admin` | admin.html | login; stoiska (CRUD, reset genotypu, PIN), kody, edytor słownika (textarea JSON), CSV, generator grafik (zakres dzień/całość, format 9:16 / 4:5 / 1:1) |
+
+Wspólne JS: `common.js` (fetch wrapper z `X-Game-Token`, obsługa błędów, `loadTurnstile(container)` → Promise tokenu
+w trybie explicit render, no-op gdy brak site key), `cert.js` (`ensureFonts()`, `renderPlayerCert(nick)`,
+`renderDonorCert({name, facultyName})`, `renderSocial(summary, format)`, `showDownload(canvas, container, filename)`
+— pokazuje `<img src=dataURL>`, link `download` i tekst „Kliknij przycisk Pobierz lub przytrzymaj palcem na obrazku,
+aby zapisać go w galerii”). Font canvasu: `@font-face 'HelpersiCert'` z `/static/fonts/cert.woff2`; jeśli pliku
+nie ma, `ensureFonts()` po `document.fonts.ready` spada na `system-ui, sans-serif` (diakrytyki działają w fontach
+systemowych). Teksty UI po polsku.
+
+## Docker
+- `python:3.12-slim-bookworm`, user uid 10001, `WORKDIR /app`, `DATA_DIR=/app/data`, `VOLUME /app/data`,
+  `EXPOSE 8000`, HEALTHCHECK `/healthz`, CMD `uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --no-access-log`.
+- compose: kontener `helpersi-pwr`, `ports: "127.0.0.1:8010:8000"` (cloudflared ma network_mode host),
+  `./data:/app/data`, `env_file: .env`, `TZ=Europe/Warsaw`, logi json-file 10m×3, restart unless-stopped.
+
+## Podział pracy
+- **Sonnet A (backend + docker + testy):** wszystko poza `app/static/`.
+- **Sonnet B (frontend):** `app/static/` wg kontraktu powyżej.
+- **Opus:** integracja, przegląd, uruchomienie.
+
+---
+## Iteracja 2 (zmiany od właściciela)
+1. **Bez kierunku studiów.** Usuwamy `major` wszędzie: słownik = tylko wydziały `{code,name}`, `donors_stats` bez kolumny
+   `major` (migracja `ALTER TABLE donors_stats DROP COLUMN major`, jeśli istnieje; słownik w `settings` — usuń klucze
+   `majors`), `POST /api/donor/register` `{code, faculty, study_year, cf_turnstile}` (nadmiarowe pola ignorowane),
+   `stats/live` bez `top_majors`, `admin/summary` bez `top_major`, CSV bez `major`.
+2. **Narzędzia testowe admina** (wszystkie `require_admin`, prefiks `/api/admin/test/`):
+   - `POST force-win {booth_id}` → wykonuje prawdziwą logikę trafienia na stoisku (bez sesji gracza): `matches_count+1`,
+     nowy unikalny genotyp, `matched_at` starego → `{old_genotype, new_genotype}`. Do testu animacji ekranu stoiska.
+   - `POST arm-win` → następne losowanie **sesji gry z tej przeglądarki** (cookie `hp_game`/`X-Game-Token` admina) będzie
+     10/10, także gdy `has_won=1`. Trzymane w pamięci (set session_id, 1 worker). Brak sesji gry → 400
+     „Najpierw otwórz /graj w tej przeglądarce”. → `{ok:true}`
+   - `POST reset-my-game` → dla sesji gry tej przeglądarki: usuń dzisiejsze próby, `has_won=0` → `{ok, attempts_left}`.
+   - `POST fake-registrations {count:1..500, booth_id?:str, date?:YYYY-MM-DD}` → losowe wpisy `donors_stats`
+     (losowy wydział ze słownika, rok 1..7, stoisko podane lub losowe istniejące, data podana lub dziś) → `{created}`.
+     Brak stoisk → 409.
+   - `POST wipe {confirm:"USUŃ"}` → kasuje donors_stats, registration_codes, game_sessions, game_attempts, zeruje
+     raffle_draws, liczniki stoisk, nadaje każdemu stoisku nowy genotyp i odbudowuje genotype_history tylko z bieżących genotypów.
+     Stoiska, PIN-y i słownik zostają. Zły confirm → 400. → `{ok}`
+   - `GET status` → `{armed: bool, game_session: bool, attempts_left: int|null}` dla tej przeglądarki.
+3. **Wygląd** (frontend): identyfikacja DKMS / Helpers' Generation, loga DKMS, Helpers' Generation, PWr jako lokalne
+   pliki w `app/static/brand/`. Fonty self-hosted w `app/static/fonts/`. **Ikony z biblioteki (self-hosted), zero emoji
+   i znaków-ikon** — kształty genotypu też jako ikony. Gra: animacja jednorękiego bandyty (10 bębnów zatrzymujących się
+   kolejno na genotypie gracza). Admin: sekcja „Testy” + podgląd certyfikatów i grafik.
+
+---
+## Iteracja 3 (zmiany od właściciela; nadpisuje wcześniejsze punkty tam, gdzie się różnią)
+Wszystkie zmiany schematu to idempotentne migracje w `db._migrate` (ALTER TABLE ADD COLUMN gdy brak kolumny,
+CREATE TABLE IF NOT EXISTS); produkcyjna baza migruje się bez utraty danych.
+1. **Bez długich myślników** w tekstach widocznych dla użytkownika (HTML, JS, komunikaty API): przecinek, kropka,
+   dwukropek lub nawias; zakresy „5-6”. Placeholdery braku danych to „-”.
+2. **Najlepszy wynik dnia.** `game_attempts.best` (MAX z liczby zgodności dziś, łącznie z próbami bonusowymi;
+   wygrana = 10). `/api/game/me`, `/api/game/session` i `/api/game/roll` zwracają `best_today`. Po wyczerpaniu prób
+   (`attempts_left==0` po rzucie, 429 albo wejście z 0 prób) ekran końcowy pokazuje „Twój najlepszy wynik dziś: X/10”
+   i bębny ustawione na najlepszy rzut z tej wizyty (po przeładowaniu tylko liczba). Ostatni rzut nie jest wynikiem.
+3. **+10 prób za wpisanie kodu ze stoiska (rejestrację dawcy), sumują się.** `game_sessions.bonus_attempts`, bonus
+   nie wygasa o północy. Próby dostępne = (5 − zużyte dziennie) + bonus; rzut zużywa najpierw pulę dzienną, potem
+   bonus (w jednej transakcji). API zwraca `attempts_left` (suma) i `bonus_attempts`. `/api/donor/register` używa
+   opcjonalnej sesji gry albo tworzy nową (cookie + `token`), bonus w tej samej transakcji co zużycie kodu; odpowiedź
+   ma `bonus_attempts_granted`, `attempts_left`, `play_path` ze świeżym tokenem QR.
+4. **Nazewnictwo:** to nie jest rejestracja u nas (ta odbywa się na stoisku w bazie DKMS). Nav/przycisk „Wpisz kod
+   ze stoiska”, h1 /potwierdz „Wpisz kod od wolontariusza”; URL /potwierdz bez zmian; bez form rodzajowych.
+5. **Kod QR stoiska zmienia się co minutę.** `app/qrtoken.py`: `HMAC-SHA256(secret_key, "qr:<stoisko>:<minuta>")`,
+   10 znaków base32; ważny bieżący i 2 poprzednie (ok. 2-3 min). `play_path = /graj?stoisko=<id>&t=<token>`.
+   `POST /api/game/enter {booth_id,t}` zapisuje w sesji przepustkę (`pass_booth`, `pass_until` = +30 min; ponowne
+   skanowanie odnawia). `/api/game/roll` wymaga ważnej przepustki dla stoiska, inaczej 403 „Zeskanuj ponownie kod
+   QR ze stoiska.” (limit prób sprawdzany wcześniej, więc gracz bez prób dostaje 429). `/api/booth/{id}/state` zwraca
+   `play_path` i `qr_seconds_left` tylko personelowi (admin albo wolontariusz tego stoiska); `/stoisko/<id>` wymaga
+   więc zalogowania (inaczej link do /wolontariusz). Admin: „Otwórz ekran stoiska” i „Link do gry (ważny ~2 min)”.
+   `reset-my-game` zeruje też bonus.
+6. **Szansa na wygraną 1/300** (`game.WIN_ONE_IN`).
+7. **Konta wolontariuszy zamiast PIN-u.** Tabela `volunteers(login, password_hash argon2, created_at)`, login
+   `^[a-z0-9._-]{3,32}$`, hasło min. 8 znaków (puste = losowe 12 znaków bez 0/O/1/l/I; jawne tylko w odpowiedzi na
+   utworzenie/reset). `POST /api/volunteer/auth {login,password,booth_id,cf_turnstile}` (throttle per login),
+   stoisko wybierane przy logowaniu (`GET /api/booths`, publiczna lista id+nazwa). Cookie `{role,booth,login,ph}`:
+   reset hasła lub usunięcie konta wylogowuje. Kolumna `booths.pin_hash` zostaje (wpisywany hash losowego sekretu).
+   `BOOTSTRAP_BOOTHS` przyjmuje `id:nazwa:pin` (pin ignorowany) i `id:nazwa`. Admin API: `GET/POST /api/admin/volunteers`,
+   `POST .../{login}/reset-password`, `DELETE .../{login}`; w UI gotowa wiadomość z przyciskiem „Kopiuj”.
+8. **Wydziały:** etykieta „Wx - Wydział ...” (wyjątek: „Inne”), kolejność jak w słowniku (remisy w rankingu też wg
+   słownika). Pozycja `INNE` / „Inne” zawsze na końcu (seed, migracja, `PUT /api/admin/dictionary`).
+9. **Logo Helpers' Generation i Samorządu Studenckiego:** prawdziwe logo HG (`helpers-generation-logo.svg`, czerwone, 777.54×264.69)
+   pokazywane jako białe wariant `-white.svg` na czerwonym tle (kafelek na stronie, pas na certyfikatach); logo Samorządu
+   (`samorzad-studencki.svg`, 221.3×60.9) w headerze (≥992px), stopce, pasku stoiska i w nagłówku certyfikatów (cert.js).
+10. **Dawca faktyczny (legitymacja Dawcy Przeszczepu / Zasłużonego Dawcy Przeszczepu).** Wolontariusz przy generowaniu
+    kodu wybiera typ `potential` (domyślny) albo `actual`; dla `actual` podaje numer legitymacji i datę wydania.
+    Nie zapisujemy danych osobowych ani jawnego numeru czy daty, tylko
+    `card_hash = HMAC-SHA256(secret_key, "card:" + numer_znormalizowany + "|" + data_iso)` (hex; numer: trim, bez
+    spacji i myślników, uppercase, 1-40 znaków). Tabele/kolumny: `registration_codes.kind` + `card_hash`,
+    `actual_donor_cards(card_hash PK, registered_date)`, `donors_stats.kind`. Blokada podwójnej rejestracji: 409 przy
+    generowaniu, gdy hash jest w `actual_donor_cards` albo ma aktywny kod (wygasły/anulowany nie blokuje); przy
+    rejestracji wstawienie do `actual_donor_cards` w tej samej transakcji, `IntegrityError` = 409. Bonus +20 prób
+    (zamiast +10, sumuje się). `check-code` zwraca `kind`. Statystyki: per wydział `potential`/`actual`/`total`
+    (`count` = total), wykres skumulowany (czerwony #e2001a + granat #2c5a82) z legendą i tabelą; panel wolontariusza
+    rozbija liczniki. CSV ma kolumnę `kind`. `wipe` czyści też `actual_donor_cards`. Certyfikat dawcy faktycznego ma
+    osobny tytuł i podziękowanie.
+11. **/graj bez stoiska:** nagłówek „Podejdź do jednego ze stanowisk”, lista „C-13 - Budynek C-13, 3-7 listopada”,
+    „Godziny: ...” i „Zeskanuj kod QR u wolontariusza.”; pusta lista „Terminy stanowisk wkrótce.”. `booths` dostaje
+    `building`, `date_from`, `date_to`; godziny wspólne w `settings.booth_hours` (`GET/PUT /api/admin/booth-hours`).
+    Publiczne `GET /api/booths/public` (building, name, daty, hours; bez genotypów i tokenów; bez stoisk po `date_to`;
+    kolejność wg `date_from`, potem budynku). Daty formatuje frontend (`formatDateRange` w common.js).
+
+12. **Losowanie finałowe i certyfikat gracza.** Framing gry: wzór stoiska należy do pacjenta czekającego na Dawcę,
+    gracz sprawdza, czy to on jest jego bliźniakiem genetycznym (nie „szuka bliźniaka”). Po trafieniu 10/10 gracz dostaje
+    certyfikat (canvas, tylko w przeglądarce) z wzorem (10 kształtów) i godziną trafienia do minuty w Europe/Warsaw
+    (`formatWarsaw` w common.js, z czasu serwera, nie zegara przeglądarki); po przeładowaniu strony dane wracają z
+    `/api/game/me`. Na koniec akcji admin losuje jeden genotyp spośród wszystkich prawdziwych trafień
+    (`genotype_history.matched_at IS NOT NULL AND is_test=0`); zwycięzca potwierdza się certyfikatem (wzór + czas).
+    Zapisywane jest wyłącznie anonimowe: wzór, stoisko, czas trafienia, `session_id` (losowy). Nick nigdy nie opuszcza telefonu.
+    - `GET /api/admin/raffle` → `{entries_count, entries:[{genotype, booth_id, booth_name, matched_at}], draws:[{genotype, drawn_at, booth_id, matched_at}]}`
+    - `POST /api/admin/raffle/draw` → `{genotype, drawn_at, booth_id, booth_name, matched_at, remaining}`; losuje `secrets.choice`
+      spośród jeszcze niewylosowanych (ponowne losowanie, gdy zwycięzca się nie zgłosi); 409 „Brak trafień do wylosowania.”
+    - Admin: sekcja „Losowanie finałowe” (przycisk z potwierdzeniem, wynik jako kształty, historia losowań, lista wszystkich trafień).
+    - `reset-my-game` zeruje też `won_genotype/won_at` sesji; `wipe` czyści `raffle_draws`.

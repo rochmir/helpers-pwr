@@ -1,0 +1,95 @@
+{
+  "_note": "Lista wydziałów to seed do weryfikacji — administrator musi ją sprawdzić i uzupełnić w panelu admina.",
+  "faculties": [
+    {
+      "code": "W1",
+      "name": "Wydział Architektury"
+    },
+    {
+      "code": "W2",
+      "name": "Wydział Budownictwa Lądowego i Wodnego"
+    },
+    {
+      "code": "W3",
+      "name": "Wydział Chemiczny"
+    },
+    {
+      "code": "W4N",
+      "name": "Wydział Informatyki i Telekomunikacji"
+    },
+    {
+      "code": "W5",
+      "name": "Wydział Elektryczny"
+    },
+    {
+      "code": "W6",
+      "name": "Wydział Geoinżynierii, Górnictwa i Geologii"
+    },
+    {
+      "code": "W7",
+      "name": "Wydział Inżynierii Środowiska"
+    },
+    {
+      "code": "W8N",
+      "name": "Wydział Zarządzania"
+    },
+    {
+      "code": "W9",
+      "name": "Wydział Mechaniczno-Energetyczny"
+    },
+    {
+      "code": "W10",
+      "name": "Wydział Mechaniczny"
+    },
+    {
+      "code": "W11",
+      "name": "Wydział Podstawowych Problemów Techniki"
+    },
+    {
+      "code": "W12N",
+      "name": "Wydział Elektroniki, Fotoniki i Mikrosystemów"
+    },
+    {
+      "code": "W13",
+      "name": "Wydział Matematyki"
+    },
+    {
+      "code": "WMED",
+      "name": "Wydział Medyczny"
+    },
+    {
+      "code": "INNE",
+      "name": "Inne"
+    }
+  ],
+  "study_years": [
+    {
+      "value": 1,
+      "label": "1 rok"
+    },
+    {
+      "value": 2,
+      "label": "2 rok"
+    },
+    {
+      "value": 3,
+      "label": "3 rok"
+    },
+    {
+      "value": 4,
+      "label": "4 rok"
+    },
+    {
+      "value": 5,
+      "label": "5 rok"
+    },
+    {
+      "value": 6,
+      "label": "Szkoła Doktorska"
+    },
+    {
+      "value": 7,
+      "label": "Pracownik PWr"
+    }
+  ]
+}

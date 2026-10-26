@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graj · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-game">
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
+      <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
+      <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+    </a>
+    
+  </div>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj" class="active" aria-current="page">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></div></nav>
+</header>
+<section class="hero hero-small">
+  <div class="container">
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Sprawdź, czy jesteś bliźniakiem genetycznym</h1>
+      <p class="lead">Wzór stoiska należy do pacjenta czekającego na Dawcę. Wylosuj swój genotyp i sprawdź, czy jesteś jego bliźniakiem genetycznym. Każdego dnia masz 5 prób, a za kod ze stoiska dostajesz 10 kolejnych.</p><p class="booth-line" id="game-booth-wrap" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Stoisko: <strong id="game-booth"></strong></p>
+  </div>
+</section>
+<main class="section section-tight">
+<div class="container">
+  <div id="game-msg" class="msg" hidden></div>
+
+  <section id="booths-section" class="card narrow" hidden>
+    <h2>Podejdź do jednego ze stanowisk</h2>
+    <ul class="booth-list" id="booth-list"></ul>
+    <p id="booth-hours" hidden></p>
+    <p id="booth-empty" hidden>Terminy stanowisk wkrótce.</p>
+    <p><strong>Zeskanuj kod QR u wolontariusza.</strong></p>
+  </section>
+
+  <section id="start-section" class="card narrow" hidden>
+    <h2>Zacznij grę</h2>
+    <p>Wylosuj swój genotyp i porównaj go z genotypem stoiska. Do gry nie potrzebujesz konta.</p>
+    <div id="turnstile" class="turnstile"></div>
+    <button class="btn btn-primary btn-lg" id="start-btn" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Zacznij grę</button>
+  </section>
+
+  <section id="scan-section" class="card narrow" hidden>
+    <span class="iconbox" aria-hidden="true"><i class="ti ti-qrcode"></i></span>
+    <h2>Zeskanuj kod QR ponownie</h2>
+    <p id="scan-text">Kod QR na ekranie stoiska zmienia się co minutę. Zeskanuj go jeszcze raz telefonem, żeby wrócić do gry.</p>
+  </section>
+
+  <section id="play-section" hidden>
+    <div class="machine" id="machine">
+      <div class="machine-sign">
+        <p class="sign-title">HLA Match Maker</p>
+        <p class="win-banner" id="win-banner" hidden>Genotyp 10/10!</p>
+      </div>
+      <div class="machine-grid">
+        <div class="machine-center">
+          <div class="machine-target">
+            <p class="target-label">Wzór stoiska</p>
+            <div class="genotype" id="booth-genotype" role="group" aria-label="Genotyp stoiska"></div>
+          </div>
+          <div class="reel-window">
+            <div class="reels" id="player-genotype" role="group" aria-label="Twój genotyp"></div>
+            <div class="payline" aria-hidden="true"></div>
+          </div>
+          <div class="machine-display">
+            <span class="display-label">Zgodność</span>
+            <span class="score" id="score" aria-live="polite">0/10</span>
+          </div>
+          <div class="machine-controls">
+            <div class="attempts">
+              <span>Pozostałe próby: <strong id="attempts-left">-</strong> <span class="bonus-note" id="bonus-note" hidden></span></span>
+              <span class="pips" id="pips" aria-hidden="true"></span>
+            </div>
+            <button class="btn btn-spin" id="roll-btn" type="button"><i class="ti ti-dice-5" aria-hidden="true"></i> Losuj</button>
+          </div>
+        </div>
+        <button class="lever" id="lever" type="button" tabindex="-1" aria-hidden="true">
+          <span class="lever-base"></span><span class="lever-arm"><span class="lever-ball"></span></span>
+        </button>
+      </div>
+    </div>
+
+    <div id="result" class="result" role="status" aria-live="polite" hidden>
+      <h2 class="result-title" id="result-title"></h2>
+      <p class="result-text" id="result-text"></p>
+    </div>
+
+    <div id="bonus-hint" class="eyecatcher" hidden>
+      <div>
+        <p class="title">Chcesz zagrać jeszcze raz?</p>
+        <p>Zarejestruj się na stoisku. Gdy dostaniesz kod od wolontariusza, wpisz go u nas, a dostaniesz 10 dodatkowych prób.</p>
+      </div>
+      <a class="btn btn-plain btn-lg" href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i> Wpisz kod ze stoiska</a>
+    </div>
+
+    <div id="after-roll" class="after-roll" hidden>
+      <div class="fact"><i class="ti ti-info-circle" aria-hidden="true"></i>
+        <p>W prawdziwym życiu o tym, czy Dawca może pomóc choremu, decyduje zgodność genów HLA. Bada się ją dopiero po rejestracji w bazie Dawców.</p></div>
+      <div class="eyecatcher" id="signup-cta">
+        <div>
+          <p class="title">Zostań potencjalnym Dawcą szpiku</p>
+          <p>Podejdź do wolontariuszy na stoisku. Pomogą Ci się zarejestrować i pobiorą wymaz z policzka.</p>
+        </div>
+        <span class="iconbox iconbox-flat" aria-hidden="true"><i class="ti ti-heart-handshake"></i></span>
+      </div>
+      <p class="link-row">Masz już kod od wolontariusza? <a href="/potwierdz">Wpisz kod ze stoiska</a> i odbierz 10 dodatkowych prób.</p>
+    </div>
+    <p id="end-note" class="hint center" hidden>Limit prób odnawia się codziennie.</p>
+  </section>
+
+  <section id="win-section" class="card" hidden>
+    <h2><i class="ti ti-trophy" aria-hidden="true"></i> Genotyp 10/10!</h2>
+    <p>Jesteś bliźniakiem genetycznym! Szansa na to była 1 do 300. Wpisz ksywkę lub imię, żeby stworzyć certyfikat.</p>
+    <p>Twój wzór i godzina trafienia biorą udział w losowaniu na koniec akcji. Zachowaj certyfikat: pokazuje wzór i czas, więc potwierdzisz nim, że to Ty.</p>
+    <label for="nick">Ksywka lub imię (opcjonalnie)</label>
+    <input type="text" id="nick" maxlength="60" autocomplete="off">
+    <p class="privacy">Ksywki i imienia nie wysyłamy na serwer, służą tylko do wygenerowania certyfikatu na Twoim telefonie. Na serwerze zapisujemy anonimowo wyłącznie wzór i godzinę trafienia.</p>
+    <button class="btn btn-primary" id="cert-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Stwórz certyfikat</button>
+    <div id="cert-output" class="download" hidden></div>
+  </section>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-main"><div class="container">
+    <div>
+      <div class="footer-logos">
+        <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+        <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+      </div>
+      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+    </div>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+  </div></div>
+  <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
+</footer>
+<script type="module" src="/static/graj.js"></script>
+</body>
+</html>

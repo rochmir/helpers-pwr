@@ -1,0 +1,20 @@
+# helpersi-pwr — wdrożenie na rupary-infra.
+# Dostęp: tunel Cloudflare (cloudflared, network_mode: host) -> http://localhost:8010
+services:
+  app:
+    build: .
+    image: helpersi-pwr
+    container_name: helpersi-pwr
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Europe/Warsaw
+    ports:
+      - "127.0.0.1:8010:8000"
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

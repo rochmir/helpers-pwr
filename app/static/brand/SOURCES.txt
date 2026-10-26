@@ -1,0 +1,25 @@
+Brand assets - downloaded 2026-10-26
+
+dkms-logo.svg
+  Source: https://www.dkms.pl/  (inline <svg class="logo" viewBox="0 0 132 40"> in the site header; extracted from homepage HTML)
+  Note: DKMS Polska brand mark. Fills kept as in the source (#E2001A and black).
+
+pwr-logo.svg
+  Source: https://pwr.edu.pl/  (inline header logo <svg viewBox="0 0 340 73">; site CSS https://pwr.edu.pl/files/cache/1/pl/css/style.css)
+  Note: Fills baked in from the site's main-site header CSS: background #af1c05, figure #fbd09e, title #000.
+
+pwr-logo-white.svg
+  Derived from pwr-logo.svg (same source as above), not an official file: background removed, figure and title set to #ffffff.
+
+Note: width/height attributes of both pwr-logo*.svg changed from 268x120 to 340x73 (match viewBox, so <img> has no letterbox padding).
+
+helpers-generation-logo.svg
+  Prawdziwe logo Helpers' Generation dostarczone przez wlasciciela (viewBox 777.54 x 264.69, caly w czerwieni). Zastapilo wczesniejszy placeholder.
+
+helpers-generation-logo-white.svg
+  Derived from helpers-generation-logo.svg, not an official file: fill zmieniony na #ffffff. Uzywane na czerwonym tle
+  (kafelek var(--primary) na stronie, czerwony pas na certyfikatach).
+
+samorzad-studencki.svg
+  Logo Samorzadu Studenckiego PWr dostarczone przez wlasciciela (viewBox 221.3 x 60.9, eksport z Illustratora, kolory #1d1d1b i odcienie niebieskiego).
+  Przeznaczone na jasne tlo. Uzywane w naglowku (od 992px), stopce, pasku stoiska i na certyfikatach.

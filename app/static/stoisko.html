@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stoisko · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-booth">
+<header class="booth-strip">
+  <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+  <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+  <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+  <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+</header>
+<main class="booth" id="booth">
+  <p class="booth-status" id="offline" hidden><i class="ti ti-wifi-off" aria-hidden="true"></i> offline, próbuję ponownie…</p>
+  <p class="booth-error" id="booth-error" hidden></p>
+  <div class="booth-main">
+    <p class="booth-eyebrow" id="booth-name">Helpers' Generation</p>
+    <h1 class="booth-title">Zostań potencjalnym Dawcą szpiku</h1>
+    <section class="booth-panel">
+      <p class="booth-panel-label">Genotyp do zebrania</p>
+      <div class="genotype" id="genotype" role="group" aria-label="Aktualny genotyp stoiska"></div>
+    </section>
+    <div class="booth-counters">
+      <div class="booth-counter">Trafień 10/10<strong id="matches-count">-</strong></div>
+      <div class="booth-counter">Losowań<strong id="rolls-count">-</strong></div>
+    </div>
+  </div>
+  <aside class="booth-side">
+    <p class="booth-lead">Sprawdź, czy jesteś bliźniakiem genetycznym.<br><em>Zeskanuj kod i zagraj!</em></p>
+    <img class="qr qr-big" id="qr" alt="Kod QR do gry" width="400" height="400" hidden>
+    <div class="qr-timer" id="qr-timer" hidden>
+      <div class="qr-timer-bar" aria-hidden="true"><span id="qr-timer-fill"></span></div>
+      <p class="qr-timer-text" id="qr-timer-text">Kod QR zmienia się co minutę</p>
+    </div>
+    <div class="qr-login" id="qr-login" hidden>
+      <p class="qr-login-title">Kod QR jest widoczny po zalogowaniu</p>
+      <p>Zaloguj się jako wolontariusz tego stoiska (albo admin) w tej przeglądarce, a potem odśwież ekran.</p>
+      <a class="btn btn-primary" href="/wolontariusz"><i class="ti ti-login" aria-hidden="true"></i> Przejdź do logowania</a>
+    </div>
+  </aside>
+</main>
+<div class="overlay" id="overlay" role="status" hidden>
+  <p class="overlay-text">Zebrano Genotyp 10/10!</p>
+  <div class="overlay-machine">
+    <div class="reel-window">
+      <div class="reels" id="overlay-reels" aria-label="Nowy genotyp stoiska"></div>
+      <div class="payline" aria-hidden="true"></div>
+    </div>
+  </div>
+  <p class="overlay-sub">Stoisko dostaje nowy genotyp do zebrania</p>
+</div>
+<script type="module" src="/static/stoisko.js"></script>
+</body>
+</html>

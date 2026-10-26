@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wolontariusz · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-volunteer">
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
+      <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
+      <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+    </a>
+    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
+  </div>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></div></nav>
+</header>
+<section class="hero hero-small">
+  <div class="container">
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Panel wolontariusza</h1>
+      <p class="lead">Zaloguj się kontem od administratora i wygeneruj kod dla osoby, która zarejestrowała się na stoisku.</p>
+  </div>
+</section>
+<main class="section section-tight">
+<div class="container">
+  <div class="narrow">
+  <div id="vol-msg" class="msg" hidden></div>
+
+  <section id="login-section" class="card" hidden>
+    <form id="login-form">
+      <label for="login">Login</label>
+      <input type="text" id="login" name="login" autocapitalize="none" autocomplete="username" spellcheck="false" required>
+      <label for="password">Hasło</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
+      <label for="booth-id">Stoisko</label>
+      <select id="booth-id" name="booth_id" required><option value="">Wybierz stoisko</option></select>
+      <div id="turnstile" class="turnstile"></div>
+      <button class="btn btn-primary btn-lg" type="submit" id="login-btn"><i class="ti ti-login" aria-hidden="true"></i> Zaloguj</button>
+    </form>
+  </section>
+  </div>
+
+  <section id="panel-section" hidden>
+    <div class="card">
+      <h2 id="vol-booth-name"></h2>
+      <div class="counters">
+        <div class="counter">Potencjalni Dawcy<strong id="c-potential">0</strong></div>
+        <div class="counter">Dawcy faktyczni<strong id="c-actual">0</strong></div>
+        <div class="counter">Trafienia 10/10<strong id="c-matches">0</strong></div>
+        <div class="counter">Losowania<strong id="c-rolls">0</strong></div>
+      </div>
+
+      <p class="link-row"><a id="booth-screen-link" href="/" target="_blank" rel="noopener"><i class="ti ti-device-tv" aria-hidden="true"></i> Otwórz ekran stoiska</a> (z kodem QR do gry; wymaga zalogowania w tej przeglądarce)</p>
+
+      <div id="admin-booth-pick" hidden>
+        <label for="admin-booth">Stoisko (admin)</label>
+        <select id="admin-booth"></select>
+      </div>
+
+      <label for="code-kind">Typ kodu</label>
+      <select id="code-kind">
+        <option value="potential">Nowy potencjalny Dawca</option>
+        <option value="actual">Dawca faktyczny</option>
+      </select>
+      <div id="actual-fields" hidden>
+        <p class="hint">Dawca faktyczny musi okazać legitymację Dawcy Przeszczepu lub Zasłużonego Dawcy Przeszczepu. Nie zapisujemy numeru ani daty, tylko nieodwracalny skrót, który blokuje drugą rejestrację tej samej legitymacji.</p>
+        <div class="field-row">
+          <div><label for="card-number">Numer legitymacji</label>
+          <input type="text" id="card-number" maxlength="60" autocomplete="off" spellcheck="false"></div>
+          <div><label for="card-date">Data wydania</label>
+          <input type="date" id="card-date"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg btn-block" id="gen-btn" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Wygeneruj kod dla nowego Dawcy</button>
+
+      <div id="code-box" class="code-box" hidden>
+        <p class="title3" id="code-kind-label">Kod rejestracyjny</p>
+        <div class="code-big" id="code-big"></div>
+        <img class="qr" id="code-qr" alt="Kod QR prowadzący do wpisania kodu" width="320" height="320">
+        <p>Ważny do: <strong id="code-expires"></strong></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Ostatnie kody</h3>
+      <div class="table-wrap">
+      <table class="table" id="codes-table">
+        <thead><tr><th>Kod</th><th>Typ</th><th>Status</th><th>Utworzony</th><th>Ważny do</th><th></th></tr></thead>
+        <tbody id="codes-body"></tbody>
+      </table>
+      </div>
+      <p id="codes-empty" class="hint" hidden>Brak kodów.</p>
+    </div>
+
+    <button class="btn btn-inverted" id="logout-btn" type="button"><i class="ti ti-logout" aria-hidden="true"></i> Wyloguj</button>
+  </section>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-main"><div class="container">
+    <div>
+      <div class="footer-logos">
+        <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+        <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+      </div>
+      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+    </div>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+  </div></div>
+  <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
+</footer>
+<script type="module" src="/static/wolontariusz.js"></script>
+</body>
+</html>

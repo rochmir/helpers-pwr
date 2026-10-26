@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Statystyki na żywo · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-stats">
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
+      <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
+      <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+    </a>
+    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
+  </div>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki" class="active" aria-current="page">Statystyki</a></div></nav>
+</header>
+<section class="hero hero-small">
+  <div class="container">
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Statystyki na żywo</h1><p class="lead" id="stats-status">Ładowanie…</p>
+  </div>
+</section>
+<main class="section section-tight">
+<div class="container">
+  <section id="total-section" class="card">
+    <p class="title3">Zarejestrowani Dawcy (potencjalni i faktyczni)</p>
+    <div class="total-big" id="total">-</div>
+  </section>
+
+  <section id="faculties-section" class="card">
+    <h2><i class="ti ti-trophy" aria-hidden="true"></i> Wydziały</h2>
+    <ol class="bars" id="faculties-list"></ol>
+    <ul class="legend" aria-label="Legenda wykresu">
+      <li><span class="swatch swatch-potential" aria-hidden="true"></span> Potencjalni Dawcy</li>
+      <li><span class="swatch swatch-actual" aria-hidden="true"></span> Dawcy faktyczni</li>
+    </ul>
+    <div class="table-wrap">
+    <table class="table" id="faculties-table">
+      <thead><tr><th>Wydział</th><th>Potencjalni</th><th>Faktyczni</th><th>Razem</th></tr></thead>
+      <tbody id="faculties-body"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="booths-section" class="card">
+    <h2>Stoiska</h2>
+    <div class="table-wrap">
+    <table class="table" id="booths-table">
+      <thead><tr><th>Stoisko</th><th>Zarejestrowani</th><th>Trafienia 10/10</th><th>Losowania</th></tr></thead>
+      <tbody id="booths-body"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="game-section" class="card">
+    <h2><i class="ti ti-dice-5" aria-hidden="true"></i> Gra</h2>
+    <div class="kpis">
+      <div class="kpi">Gracze<strong id="g-players">-</strong></div>
+      <div class="kpi">Losowania<strong id="g-rolls">-</strong></div>
+      <div class="kpi">Trafienia 10/10<strong id="g-matches">-</strong></div>
+    </div>
+  </section>
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-main"><div class="container">
+    <div>
+      <div class="footer-logos">
+        <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+        <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+      </div>
+      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+    </div>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+  </div></div>
+  <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
+</footer>
+<script type="module" src="/static/statystyki.js"></script>
+</body>
+</html>
