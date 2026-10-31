@@ -24,7 +24,7 @@ kroku budowania. Bez Jinja. Testy: pytest + httpx (`TestClient`).
 
 ## Układ katalogów
 ```
-/srv/infra/helpersi-pwr/
+/home/roch/projekty/helpersi-pwr/
   Dockerfile  docker-compose.yml  .env.example  .dockerignore  .gitignore
   requirements.txt  requirements-dev.txt  README.md  PLAN.md
   app/
