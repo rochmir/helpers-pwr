@@ -40,6 +40,11 @@ class RegisterIn(BaseModel):
     cf_turnstile: str | None = Field(None, max_length=4096)
 
 
+class RedeemPromoIn(BaseModel):
+    code: str = Field(max_length=64)
+    cf_turnstile: str | None = Field(None, max_length=4096)
+
+
 def norm_code(code: str) -> str:
     return code.strip().upper()
 
@@ -55,12 +60,26 @@ def check_code(kod: str = "", conn: sqlite3.Connection = Depends(db.get_db)):
     if _check_throttled():
         raise HTTPException(429, "Za dużo prób sprawdzenia kodu. Spróbuj za minutę.")
     db.expire_codes(conn)
-    row = conn.execute("SELECT b.name, c.kind FROM registration_codes c JOIN booths b ON b.id=c.booth_id "
-                       "WHERE c.code=? AND c.status='ACTIVE'", (norm_code(kod)[:64],)).fetchone()
+    row = conn.execute("SELECT b.name, c.kind FROM (SELECT code, booth_id, status, kind FROM registration_codes "
+                       "UNION ALL SELECT code, booth_id, status, 'promo' FROM promo_codes) c "
+                       "JOIN booths b ON b.id=c.booth_id WHERE c.code=? AND c.status='ACTIVE'",
+                       (norm_code(kod)[:64],)).fetchone()
     if row is None:
         _note_miss()
         return {"valid": False}
     return {"valid": True, "booth_name": row["name"], "kind": row["kind"]}
+
+
+def _grant_bonus(conn: sqlite3.Connection, sid: str | None, token: str | None, bonus: int) -> tuple[str, str | None]:
+    """Dodatkowe próby w grze, w tej samej transakcji co zużycie kodu (kod jednorazowy = bonus raz na kod).
+    Bez sesji tworzy nową; zwraca (session_id, token)."""
+    if sid is not None:
+        conn.execute("UPDATE game_sessions SET bonus_attempts=bonus_attempts+? WHERE session_id=?", (bonus, sid))
+    else:
+        sid, token = auth.new_game_token()
+        conn.execute("INSERT INTO game_sessions(session_id,created_at,bonus_attempts) VALUES(?,?,?)",
+                     (sid, config.now_iso(), bonus))
+    return sid, token
 
 
 @router.post("/api/donor/register")
@@ -94,16 +113,33 @@ def register(body: RegisterIn, request: Request, response: Response,
                              (row["card_hash"], config.today()))
             except sqlite3.IntegrityError:
                 raise HTTPException(409, "Ta legitymacja jest już zarejestrowana w systemie.")
-        # +10 prób w grze, w tej samej transakcji co zużycie kodu (kod jednorazowy = bonus raz na kod).
-        if sid is not None:
-            conn.execute("UPDATE game_sessions SET bonus_attempts=bonus_attempts+? WHERE session_id=?",
-                         (bonus, sid))
-        else:
-            sid, token = auth.new_game_token()
-            conn.execute("INSERT INTO game_sessions(session_id,created_at,bonus_attempts) VALUES(?,?,?)",
-                         (sid, config.now_iso(), bonus))
+        sid, token = _grant_bonus(conn, sid, token, bonus)
     auth.set_game_cookie(response, token)
     return {"ok": True, "faculty": fac["code"], "faculty_name": fac["name"], "booth_name": row["booth_name"],
             "token": token, "kind": row["kind"], "bonus_attempts_granted": bonus,
             "attempts_left": attempts_left(conn, sid),
+            "play_path": f"/graj?stoisko={row['booth_id']}&t={qrtoken.current(row['booth_id'])}"}
+
+
+@router.post("/api/donor/redeem-promo")
+def redeem_promo(body: RedeemPromoIn, request: Request, response: Response,
+                 sid: str | None = Depends(auth.optional_game_session),
+                 conn: sqlite3.Connection = Depends(db.get_db)):
+    """Kod „Dodatkowe losy”: tylko dodatkowe próby, bez ``donors_stats``, Bitwy i liczników rejestracji."""
+    captcha.require(body.cf_turnstile)
+    code = norm_code(body.code)
+    token = request.cookies.get(auth.GAME_COOKIE) or request.headers.get("X-Game-Token")
+    with db.tx(conn):
+        db.expire_codes(conn)
+        row = conn.execute("SELECT c.*, b.name AS booth_name FROM promo_codes c "
+                           "JOIN booths b ON b.id=c.booth_id WHERE c.code=?", (code,)).fetchone()
+        if row is None:
+            raise HTTPException(404, "Nie znamy takiego kodu. Sprawdź, czy został przepisany poprawnie.")
+        if row["status"] != "ACTIVE":
+            raise HTTPException(410, "Ten kod został już użyty lub wygasł. Poproś wolontariusza o nowy.")
+        conn.execute("UPDATE promo_codes SET status='USED', used_at=? WHERE code=?", (config.now_iso(), code))
+        sid, token = _grant_bonus(conn, sid, token, config.PROMO_BONUS)
+    auth.set_game_cookie(response, token)
+    return {"ok": True, "booth_name": row["booth_name"], "token": token, "kind": "promo",
+            "bonus_attempts_granted": config.PROMO_BONUS, "attempts_left": attempts_left(conn, sid),
             "play_path": f"/graj?stoisko={row['booth_id']}&t={qrtoken.current(row['booth_id'])}"}

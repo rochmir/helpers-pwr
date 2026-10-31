@@ -1,8 +1,9 @@
-"""Panel admina: logowanie sekretem, stoiska, konta wolontariuszy, kody, słownik, podsumowania, eksport CSV."""
+"""Panel admina: stoiska, konta, kody, słownik, ustawienia, liczby studentów, trafienia, podsumowania, eksport CSV."""
 from __future__ import annotations
 
 import csv
 import io
+import json
 import re
 import secrets
 import sqlite3
@@ -11,7 +12,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from .. import auth, captcha, config, db
+from .. import auth, config, db
 from . import stats, volunteer
 
 router = APIRouter(prefix="/api/admin")
@@ -22,11 +23,6 @@ FACULTY_CODE_RE = re.compile(r"^[A-Za-z0-9]{1,10}$")
 PASSWORD_MIN = 8
 # Alfabet bez znaków łatwych do pomylenia (0/O/1/l/I).
 PASSWORD_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
-
-class LoginIn(BaseModel):
-    secret: str = Field(max_length=256)
-    cf_turnstile: str | None = Field(None, max_length=4096)
 
 
 class BoothIn(BaseModel):
@@ -66,6 +62,21 @@ def _check_range(date_from: str | None, date_to: str | None) -> None:
 class VolunteerIn(BaseModel):
     login: str = Field(max_length=64)
     password: str | None = Field(None, max_length=256)
+    role: str = Field("volunteer", max_length=16)
+
+
+class RoleIn(BaseModel):
+    role: str = Field(max_length=16)
+
+
+class SettingsIn(BaseModel):
+    device_tolerance: int
+    facebook_url: str = Field("", max_length=300)
+
+
+class StudentsIn(BaseModel):
+    source: str = Field("", max_length=500)
+    counts: dict[str, int | None] = Field(max_length=100)
 
 
 class PasswordIn(BaseModel):
@@ -81,37 +92,14 @@ class DictionaryIn(BaseModel):
     faculties: list[Faculty] = Field(max_length=100)
 
 
-# --- sesja ----------------------------------------------------------------------
-@router.post("/login")
-def login(body: LoginIn, response: Response):
-    captcha.require(body.cf_turnstile)
-    auth.throttle.check("__admin__")
-    if not auth.check_admin_secret(body.secret):
-        auth.throttle.fail("__admin__")
-        raise HTTPException(401, "Błędny sekret administratora.")
-    auth.throttle.reset("__admin__")
-    auth.set_staff_cookie(response, {"role": "admin"})
-    return {"role": "admin"}
-
-
-@router.post("/logout")
-def logout(response: Response):
-    auth.clear_staff_cookie(response)
-    return {"ok": True}
-
-
-@router.get("/me")
-def me(_: dict = Depends(auth.require_admin)):
-    return {"role": "admin"}
-
-
 # --- stoiska --------------------------------------------------------------------
 @router.get("/booths")
 def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
     db.expire_codes(conn)
     rows = conn.execute(
         "SELECT b.*, (SELECT COUNT(*) FROM donors_stats d WHERE d.booth_id=b.id) AS registered, "
-        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') AS active_codes "
+        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') + "
+        "(SELECT COUNT(*) FROM promo_codes p WHERE p.booth_id=b.id AND p.status='ACTIVE') AS active_codes "
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
                                "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")} for r in rows]
@@ -159,8 +147,9 @@ def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sql
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
         used = conn.execute("SELECT (SELECT COUNT(*) FROM donors_stats WHERE booth_id=?) + "
-                            "(SELECT COUNT(*) FROM registration_codes WHERE booth_id=?)",
-                            (booth_id, booth_id)).fetchone()[0]
+                            "(SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
+                            "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)",
+                            (booth_id, booth_id, booth_id)).fetchone()[0]
         if used:
             raise HTTPException(409, "Stoisko ma rejestracje lub kody, więc nie można go usunąć.")
         conn.execute("DELETE FROM genotype_history WHERE booth_id=?", (booth_id,))
@@ -202,10 +191,15 @@ def _password(given: str | None) -> str:
     return given
 
 
+def _check_role(role: str) -> None:
+    if role not in ("volunteer", "admin"):
+        raise HTTPException(422, "Ranga konta: wolontariusz albo admin.")
+
+
 @router.get("/volunteers")
 def list_volunteers(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    return [{"login": r["login"], "created_at": r["created_at"]}
-            for r in conn.execute("SELECT login, created_at FROM volunteers ORDER BY login")]
+    return [{"login": r["login"], "role": r["role"], "created_at": r["created_at"]}
+            for r in conn.execute("SELECT login, role, created_at FROM volunteers ORDER BY login")]
 
 
 @router.post("/volunteers", status_code=201)
@@ -214,13 +208,27 @@ def create_volunteer(body: VolunteerIn, _: dict = Depends(auth.require_admin),
     login = body.login.strip().lower()
     if not LOGIN_RE.match(login):
         raise HTTPException(422, "Login: 3-32 znaków, małe litery, cyfry oraz . _ -")
+    if login == auth.ADMIN_LOGIN:
+        raise HTTPException(422, "Login „admin” jest zarezerwowany.")
+    _check_role(body.role)
     password = _password(body.password)
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM volunteers WHERE login=?", (login,)).fetchone():
             raise HTTPException(409, "Konto o tym loginie już istnieje.")
-        conn.execute("INSERT INTO volunteers(login,password_hash,created_at) VALUES(?,?,?)",
-                     (login, db.hasher.hash(password), config.now_iso()))
-    return {"login": login, "password": password}  # jedyny moment, w którym hasło jest widoczne
+        conn.execute("INSERT INTO volunteers(login,password_hash,created_at,role) VALUES(?,?,?,?)",
+                     (login, db.hasher.hash(password), config.now_iso(), body.role))
+    return {"login": login, "role": body.role, "password": password}  # jedyny moment, w którym hasło jest widoczne
+
+
+@router.patch("/volunteers/{login}")
+def set_volunteer_role(login: str, body: RoleIn, _: dict = Depends(auth.require_admin),
+                       conn: sqlite3.Connection = Depends(db.get_db)):
+    _check_role(body.role)
+    login = login.strip().lower()
+    with db.tx(conn):
+        if conn.execute("UPDATE volunteers SET role=? WHERE login=?", (body.role, login)).rowcount == 0:
+            raise HTTPException(404, "Nie ma takiego konta.")
+    return {"login": login, "role": body.role}
 
 
 @router.post("/volunteers/{login}/reset-password")
@@ -248,13 +256,7 @@ def delete_volunteer(login: str, _: dict = Depends(auth.require_admin), conn: sq
 def list_codes(booth_id: str | None = None, status: str | None = None, _: dict = Depends(auth.require_admin),
                conn: sqlite3.Connection = Depends(db.get_db)):
     db.expire_codes(conn)
-    where, args = [], []
-    if booth_id:
-        where.append("booth_id=?"); args.append(booth_id)
-    if status:
-        where.append("status=?"); args.append(status.upper())
-    sql = "SELECT * FROM registration_codes" + (" WHERE " + " AND ".join(where) if where else "")
-    rows = conn.execute(sql + " ORDER BY created_at DESC, rowid DESC LIMIT 200", args)
+    rows = db.list_codes(conn, booth_id or None, status.upper() if status else None, limit=200)
     return [{"code": r["code"], "booth_id": r["booth_id"], "status": r["status"], "kind": r["kind"], "created_at": r["created_at"],
              "expires_at": config.expiry_of(r["created_at"]), "used_at": r["used_at"]} for r in rows]
 
@@ -297,6 +299,57 @@ def put_dictionary(body: DictionaryIn, _: dict = Depends(auth.require_admin),
     return {"ok": True}
 
 
+# --- trafienia 10/10 ------------------------------------------------------------
+@router.get("/wins")
+def list_wins(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    rows = conn.execute("SELECT w.seq, w.token, w.genotype, w.booth_id, b.name AS booth_name, w.won_at FROM wins w "
+                        "LEFT JOIN booths b ON b.id=w.booth_id WHERE w.is_test=0 ORDER BY w.seq")
+    wins = [dict(r) for r in rows]
+    return {"count": len(wins), "wins": wins}
+
+
+# --- ustawienia i liczby studentów ----------------------------------------------
+@router.get("/settings")
+def get_settings(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    return {"device_tolerance": db.device_tolerance(conn), "facebook_url": db.get_setting(conn, "facebook_url"),
+            "device_stats": db.device_stats(conn)}
+
+
+@router.put("/settings")
+def put_settings(body: SettingsIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    url = body.facebook_url.strip()
+    if not 1 <= body.device_tolerance <= 50:
+        raise HTTPException(422, "Tolerancja: liczba od 1 do 50.")
+    if url and (not url.startswith("https://") or len(url) <= 8 or any(c.isspace() for c in url)):
+        raise HTTPException(422, "Link do Facebooka musi zaczynać się od https://.")
+    with db.tx(conn):
+        db.set_setting(conn, "device_tolerance", str(body.device_tolerance))
+        db.set_setting(conn, "facebook_url", url)
+    return {"device_tolerance": body.device_tolerance, "facebook_url": url, "device_stats": db.device_stats(conn)}
+
+
+@router.get("/students")
+def get_students(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    return db.get_students(conn)
+
+
+@router.put("/students")
+def put_students(body: StudentsIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    known = {f["code"] for f in db.get_dictionary(conn)["faculties"]}
+    counts = {}
+    for code, n in body.counts.items():
+        if code not in known:
+            raise HTTPException(422, f"Nieznany wydział: {code}.")
+        if n is None:
+            continue
+        if not 1 <= n <= 100000:
+            raise HTTPException(422, f"Liczba studentów wydziału {code}: od 1 do 100000.")
+        counts[code] = n
+    out = {"source": body.source.strip(), "counts": counts}
+    db.set_setting(conn, "faculty_students", json.dumps(out, ensure_ascii=False))
+    return out
+
+
 # --- podsumowania ---------------------------------------------------------------
 @router.get("/summary")
 def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
@@ -321,6 +374,7 @@ def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
     podium = [f for f in stats.faculty_counts(conn, d) if f["count"] > 0][:3]
     return {"scope": "all" if d is None else "day", "date": date, "registered": registered,
             "registered_total": total, "podium": podium,
+            "battle": [r for r in stats.battle(conn, d)["ranking"] if r["registered"] > 0][:3],
             "game": {"players": players, "rolls": rolls, "matches": matches}}
 
 

@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin · Helpers' Generation</title>
+<title>Logowanie · Helpers' Generation</title>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
 <link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="/static/style.css">
 </head>
-<body class="page-admin">
+<body class="page-login">
 <header class="site-header">
   <div class="container header-row">
     <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
@@ -22,31 +22,99 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
     <p class="eyebrow">Helpers' Generation</p>
-    <h1>Panel administratora</h1>
-      <p class="lead">Stoiska, kody, słownik wydziałów, grafiki i narzędzia testowe.</p>
+    <h1 id="login-title">Logowanie</h1>
+    <p class="lead" id="login-lead">Panel dla wolontariuszy i administratorów akcji.</p>
   </div>
 </section>
 <main class="section section-tight">
 <div class="container">
-  <div id="admin-msg" class="msg" hidden></div>
+  <div id="panel-msg" class="msg" hidden></div>
 
   <section id="login-section" class="card narrow" hidden>
     <form id="login-form">
-      <label for="secret">Hasło administratora</label>
-      <input type="password" id="secret" name="secret" autocomplete="current-password" required>
+      <label for="login">Login</label>
+      <input type="text" id="login" name="login" autocapitalize="none" autocomplete="username" spellcheck="false" required>
+      <label for="password">Hasło</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required>
       <div id="turnstile" class="turnstile"></div>
-      <button class="btn btn-primary btn-lg" type="submit"><i class="ti ti-login" aria-hidden="true"></i> Zaloguj</button>
+      <button class="btn btn-primary btn-lg" type="submit" id="login-btn"><i class="ti ti-login" aria-hidden="true"></i> Zaloguj</button>
     </form>
   </section>
 
-  <div id="admin-panel" hidden>
+  <div id="panel" hidden>
+    <div class="login-who">
+      <p>Zalogowano jako <strong id="who-login"></strong> (<span id="who-role"></span>)</p>
+      <button class="btn btn-inverted btn-small" id="logout-btn" type="button"><i class="ti ti-logout" aria-hidden="true"></i> Wyloguj</button>
+    </div>
+
+    <div class="card" id="booth-card">
+      <h2>Stoisko</h2>
+      <p class="hint hint-block" id="booth-hint">Wybierz stoisko, przy którym dziś pracujesz. Kody i liczniki dotyczą wybranego stoiska.</p>
+      <label for="booth-pick">Stoisko</label>
+      <select id="booth-pick"><option value="">Wybierz stoisko</option></select>
+    </div>
+
+  <div id="volunteer-part" hidden>
+    <div class="card">
+      <h2 id="vol-booth-name"></h2>
+      <div class="counters">
+        <div class="counter">Potencjalni Dawcy<strong id="c-potential">0</strong></div>
+        <div class="counter">Dawcy faktyczni<strong id="c-actual">0</strong></div>
+        <div class="counter">Trafienia 10/10<strong id="c-matches">0</strong></div>
+        <div class="counter">Losowania<strong id="c-rolls">0</strong></div>
+      </div>
+
+      <p class="link-row"><a id="booth-screen-link" href="/" target="_blank" rel="noopener"><i class="ti ti-device-tv" aria-hidden="true"></i> Otwórz ekran stoiska</a> (z kodem QR do gry; wymaga zalogowania w tej przeglądarce)</p>
+
+            <label for="code-kind">Typ kodu</label>
+      <select id="code-kind">
+        <option value="potential">Nowy potencjalny Dawca</option>
+        <option value="actual">Dawca faktyczny</option>
+      </select>
+      <div id="actual-fields" hidden>
+        <p class="hint">Dawca faktyczny musi okazać legitymację Dawcy Przeszczepu lub Zasłużonego Dawcy Przeszczepu. Nie zapisujemy numeru ani daty, tylko nieodwracalny skrót, który blokuje drugą rejestrację tej samej legitymacji.</p>
+        <div class="field-row">
+          <div><label for="card-number">Numer legitymacji</label>
+          <input type="text" id="card-number" maxlength="60" autocomplete="off" spellcheck="false"></div>
+          <div><label for="card-date">Data wydania</label>
+          <input type="date" id="card-date"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg btn-block" id="gen-btn" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Wygeneruj kod dla nowego Dawcy</button>
+
+      <div class="promo-gen">
+        <button class="btn btn-inverted btn-lg btn-block" id="promo-btn" type="button"><i class="ti ti-gift" aria-hidden="true"></i> Dodatkowe losy</button>
+        <p class="hint">Kod na 5 dodatkowych prób w grze, bez rejestracji. Wydaj go po obejrzeniu na telefonie gracza posta (udostępniony wynik albo inny materiał promocyjny) z oznaczeniem helpers_wroclaw i dkms_pl. Niczego z posta nie zapisujemy.</p>
+      </div>
+
+      <div id="code-box" class="code-box" hidden>
+        <p class="title3" id="code-kind-label">Kod rejestracyjny</p>
+        <div class="code-big" id="code-big"></div>
+        <img class="qr" id="code-qr" alt="Kod QR prowadzący do wpisania kodu" width="320" height="320">
+        <p>Ważny do: <strong id="code-expires"></strong></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Ostatnie kody</h3>
+      <div class="table-wrap">
+      <table class="table" id="vcodes-table">
+        <thead><tr><th>Kod</th><th>Typ</th><th>Status</th><th>Utworzony</th><th>Ważny do</th><th></th></tr></thead>
+        <tbody id="vcodes-body"></tbody>
+      </table>
+      </div>
+      <p id="vcodes-empty" class="hint" hidden>Brak kodów.</p>
+    </div>
+
+  </div>
+  <div id="admin-part" hidden>
     <div class="row">
-      <button class="btn btn-inverted" id="logout-btn" type="button"><i class="ti ti-logout" aria-hidden="true"></i> Wyloguj</button>
       <a class="btn btn-inverted" id="export-csv" href="/api/admin/export-csv"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV</a>
     </div>
     <nav class="admin-nav" aria-label="Sekcje panelu">
@@ -54,8 +122,11 @@
       <a href="#volunteers-section">Wolontariusze</a>
       <a href="#codes-section">Kody</a>
       <a href="#dictionary-section">Słownik</a>
+      <a href="#students-section">Liczby studentów</a>
+      <a href="#wins-section">Trafienia 10/10</a>
+      <a href="#partners-section">Partnerzy</a>
+      <a href="#settings-section">Ustawienia</a>
       <a href="#preview-section">Grafiki</a>
-      <a href="#raffle-section"><i class="ti ti-gift" aria-hidden="true"></i> Losowanie</a>
       <a href="#tests-section"><i class="ti ti-flask" aria-hidden="true"></i> Testy</a>
     </nav>
 
@@ -95,11 +166,11 @@
     </section>
 
     <section id="volunteers-section" class="card">
-      <h2>Konta wolontariuszy</h2>
-      <p class="hint">Wolontariusz loguje się na /wolontariusz swoim loginem i hasłem, a stoisko wybiera przy logowaniu. Reset hasła i usunięcie konta wylogowują go.</p>
+      <h2>Konta i rangi</h2>
+      <p class="hint">Wolontariusz loguje się na stronie /login swoim loginem i hasłem, a stoisko wybiera po zalogowaniu. Administrator ma dostęp do wszystkich sekcji. Zmiana rangi działa od razu, a reset hasła i usunięcie konta wylogowują użytkownika.</p>
       <div class="table-wrap">
       <table class="table" id="vol-table">
-        <thead><tr><th>Login</th><th>Utworzone</th><th>Akcje</th></tr></thead>
+        <thead><tr><th>Login</th><th>Ranga</th><th>Utworzone</th><th>Akcje</th></tr></thead>
         <tbody id="vol-body"></tbody>
       </table>
       </div>
@@ -113,6 +184,8 @@
           <div><label for="vol-password">Hasło</label>
           <input type="text" id="vol-password" autocomplete="off" spellcheck="false" placeholder="puste = wygeneruj" minlength="8"></div>
         </div>
+        <label for="vol-role">Ranga</label>
+        <select id="vol-role"><option value="volunteer">Wolontariusz</option><option value="admin">Administrator</option></select>
         <button class="btn btn-primary" type="submit"><i class="ti ti-user-plus" aria-hidden="true"></i> Utwórz konto</button>
       </form>
       <div id="vol-out" class="test-block" hidden>
@@ -144,7 +217,7 @@
       </form>
       <div class="table-wrap">
       <table class="table" id="codes-table">
-        <thead><tr><th>Kod</th><th>Stoisko</th><th>Status</th><th>Utworzony</th><th></th></tr></thead>
+        <thead><tr><th>Kod</th><th>Stoisko</th><th>Typ</th><th>Status</th><th>Utworzony</th><th></th></tr></thead>
         <tbody id="codes-body"></tbody>
       </table>
       </div>
@@ -158,6 +231,66 @@
       <div id="dict-msg" class="msg" hidden></div>
     </section>
 
+    <section id="students-section" class="card">
+      <h2>Liczby studentów</h2>
+      <p class="hint">Liczby służą do przeliczenia rejestracji na 1000 studentów w Bitwie Wydziałów. Wydział bez wpisanej liczby (puste pole) jest pokazywany poza rankingiem. Źródło danych jest wyświetlane publicznie na stronie Bitwy.</p>
+      <form id="students-form">
+        <div class="table-wrap">
+        <table class="table" id="students-table">
+          <thead><tr><th>Wydział</th><th>Liczba studentów</th></tr></thead>
+          <tbody id="students-body"></tbody>
+        </table>
+        </div>
+        <label for="students-source">Źródło danych <span class="req">*</span></label>
+        <input type="text" id="students-source" maxlength="500" placeholder="np. nazwa dokumentu i data" autocomplete="off">
+        <button class="btn btn-primary" type="submit"><i class="ti ti-device-floppy" aria-hidden="true"></i> Zapisz liczby studentów</button>
+      </form>
+    </section>
+
+    <section id="wins-section" class="card">
+      <h2>Trafienia 10/10</h2>
+      <p class="status-line" id="wins-count">-</p>
+      <label for="wins-filter">Filtr po tokenie</label>
+      <input type="text" id="wins-filter" placeholder="np. HG-" autocomplete="off" spellcheck="false" autocapitalize="characters">
+      <div class="table-wrap">
+      <table class="table" id="wins-table">
+        <thead><tr><th>Nr</th><th>Token</th><th>Wzór</th><th>Stoisko</th><th>Data i godzina</th></tr></thead>
+        <tbody id="wins-body"></tbody>
+      </table>
+      </div>
+      <p id="wins-empty" class="hint" hidden>Brak trafień.</p>
+      <button class="btn btn-small" id="wins-refresh" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Odśwież</button>
+    </section>
+
+    <section id="partners-section" class="card">
+      <h2>Partnerzy</h2>
+      <p class="hint">Loga partnerów pojawiają się na pasku nad czerwonym pasem w certyfikatach i grafikach. Gdy lista jest pusta, paska nie ma. Pliki PNG, JPG, WebP lub SVG do 1,5 MB (SVG musi mieć width i height).</p>
+      <ul class="partner-grid" id="partners-list"></ul>
+      <p id="partners-empty" class="hint" hidden>Brak partnerów.</p>
+      <form id="partner-form" class="inline-form">
+        <h3>Dodaj partnera</h3>
+        <label for="partner-name">Nazwa</label>
+        <input type="text" id="partner-name" maxlength="80" autocomplete="off" required>
+        <label for="partner-file">Plik z logo</label>
+        <input type="file" id="partner-file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" required>
+        <button class="btn btn-primary" type="submit"><i class="ti ti-upload" aria-hidden="true"></i> Dodaj partnera</button>
+      </form>
+    </section>
+
+    <section id="settings-section" class="card">
+      <h2>Ustawienia</h2>
+      <form id="settings-form">
+        <label for="set-tolerance">Sufit dla identycznych urządzeń (1-50)</label>
+        <input type="number" id="set-tolerance" min="1" max="50" step="1" required>
+        <p class="hint">Limit 5 prób dziennie na stanowisku trzyma klucz rozszerzony, który odróżnia egzemplarze telefonów. Ta wartość to sufit dla identycznych urządzeń (ten sam klucz podstawowy): razem mogą wykorzystać najwyżej 5 razy tyle prób, ile wynosi wartość. Przy 1 limit to twarde 5 prób na klucz podstawowy.</p>
+        <p class="hint" id="device-stats">Dziś: brak danych.</p>
+        <label for="set-facebook">Adres Facebooka Samorządu (post z podsumowaniem)</label>
+        <input type="url" id="set-facebook" placeholder="https://www.facebook.com/..." autocomplete="off" spellcheck="false">
+        <p class="hint">Musi zaczynać się od https://. Pusty adres = gracze zobaczą instrukcję bez linku.</p>
+        <button class="btn btn-primary" type="submit"><i class="ti ti-device-floppy" aria-hidden="true"></i> Zapisz ustawienia</button>
+      </form>
+    </section>
+
     <section id="preview-section" class="card">
       <h2><i class="ti ti-photo" aria-hidden="true"></i> Podgląd grafik</h2>
       <p class="hint">Obrazy powstają w tej przeglądarce (canvas); nic nie jest zapisywane na serwerze.</p>
@@ -166,6 +299,7 @@
         <h3>Certyfikat gracza</h3>
         <label for="pv-player-nick">Ksywka</label>
         <input type="text" id="pv-player-nick" maxlength="60" autocomplete="off" value="Testowa Ksywka">
+        <p class="hint">Podgląd używa przykładowego tokenu i wzoru.</p>
         <button class="btn btn-primary" id="pv-player-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Pokaż certyfikat gracza</button>
         <div id="pv-player-out" class="download" hidden></div>
       </div>
@@ -178,8 +312,22 @@
           <div><label for="pv-donor-faculty">Wydział</label>
           <select id="pv-donor-faculty"></select></div>
         </div>
+        <label for="pv-donor-kind">Typ</label>
+        <select id="pv-donor-kind"><option value="potential">Potencjalny Dawca</option><option value="actual">Dawca faktyczny</option></select>
         <button class="btn btn-primary" id="pv-donor-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Pokaż certyfikat dawcy</button>
         <div id="pv-donor-out" class="download" hidden></div>
+      </div>
+
+      <div class="test-block">
+        <h3>Wynik gry</h3>
+        <div class="field-row">
+          <div><label for="pv-result-nick">Ksywka</label>
+          <input type="text" id="pv-result-nick" maxlength="60" autocomplete="off" value="Testowa Ksywka"></div>
+          <div><label for="pv-result-best">Najlepszy wynik (0-10)</label>
+          <input type="number" id="pv-result-best" min="0" max="10" value="7"></div>
+        </div>
+        <button class="btn btn-primary" id="pv-result-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Pokaż wynik gry</button>
+        <div id="pv-result-out" class="download" hidden></div>
       </div>
 
       <div class="test-block" id="social-section">
@@ -197,34 +345,6 @@
         <button class="btn btn-primary" id="social-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Generuj grafikę</button>
         <div id="social-output" class="download" hidden></div>
       </div>
-    </section>
-
-    <section id="raffle-section" class="card">
-      <h2>Losowanie finałowe</h2>
-      <p>Losuje jeden genotyp spośród wszystkich prawdziwych trafień 10/10 (trafienia z narzędzi testowych się nie liczą). Zwycięzca potwierdza się certyfikatem, na którym widać wylosowany wzór i godzinę trafienia. Ten sam wzór nie zostanie wylosowany dwa razy, więc gdy zwycięzca się nie zgłosi, można losować ponownie.</p>
-      <p class="status-line" id="raffle-count">-</p>
-      <button class="btn btn-primary" id="raffle-draw" type="button"><i class="ti ti-gift" aria-hidden="true"></i> Losuj genotyp</button>
-      <button class="btn btn-small" id="raffle-refresh" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Odśwież</button>
-      <div id="raffle-msg" class="msg" hidden></div>
-      <div id="raffle-pick" class="raffle-pick" hidden></div>
-      <div id="raffle-draws" class="raffle-draws" hidden>
-        <h3>Dotychczasowe losowania</h3>
-        <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Losowanie</th><th>Wzór</th><th>Trafienie</th><th>Stoisko</th></tr></thead>
-          <tbody id="raffle-draws-body"></tbody>
-        </table>
-        </div>
-      </div>
-      <details class="raffle-entries">
-        <summary>Wszystkie trafienia biorące udział w losowaniu</summary>
-        <div class="table-wrap">
-        <table class="table">
-          <thead><tr><th>Trafienie</th><th>Wzór</th><th>Stoisko</th></tr></thead>
-          <tbody id="raffle-entries-body"></tbody>
-        </table>
-        </div>
-      </details>
     </section>
 
     <section id="tests-section" class="card card-test">
@@ -286,6 +406,7 @@
       </div>
     </section>
   </div>
+  </div>
 </div>
 </main>
 <footer class="site-footer">
@@ -299,10 +420,10 @@
       </div>
       <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a><a href="/regulamin">Regulamin</a><a href="/polityka-prywatnosci">Polityka prywatności</a><a href="/login" aria-current="page">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>
-<script type="module" src="/static/admin.js"></script>
+<script type="module" src="/static/login.js"></script>
 </body>
 </html>

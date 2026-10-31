@@ -1,24 +1,14 @@
-"""Wolontariusz: logowanie kontem (login + hasło) na wybrane stoisko, generowanie i anulowanie kodów."""
+"""Wolontariusz: licznik i lista kodów wybranego stoiska, generowanie i anulowanie kodów."""
 from __future__ import annotations
 
-import secrets
 import sqlite3
 
-from argon2.exceptions import InvalidHashError, VerifyMismatchError
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import auth, captcha, cards, config, db
+from .. import auth, cards, config, db
 
 router = APIRouter(prefix="/api/volunteer")
-CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-
-
-class AuthIn(BaseModel):
-    login: str = Field(max_length=64)
-    password: str = Field(max_length=256)
-    booth_id: str = Field(max_length=40)
-    cf_turnstile: str | None = Field(None, max_length=4096)
 
 
 class GenerateIn(BaseModel):
@@ -33,42 +23,11 @@ def _code_view(row: sqlite3.Row) -> dict:
             "expires_at": config.expiry_of(row["created_at"])}
 
 
-@router.post("/auth")
-def volunteer_auth(body: AuthIn, response: Response, conn: sqlite3.Connection = Depends(db.get_db)):
-    captcha.require(body.cf_turnstile)
-    login = body.login.strip().lower()
-    key = "vol:" + login[:64]
-    auth.throttle.check(key)
-    account = conn.execute("SELECT * FROM volunteers WHERE login=?", (login,)).fetchone()
-    ok = False
-    if account is not None:
-        try:
-            ok = db.hasher.verify(account["password_hash"], body.password)
-        except (VerifyMismatchError, InvalidHashError):
-            ok = False
-    if not ok:
-        auth.throttle.fail(key)
-        raise HTTPException(401, "Błędny login lub hasło.")
-    booth = conn.execute("SELECT * FROM booths WHERE id=?", (body.booth_id.strip().lower(),)).fetchone()
-    if booth is None:
-        raise HTTPException(404, "Wybierz stoisko z listy.")
-    auth.throttle.reset(key)
-    auth.set_staff_cookie(response, {"role": "volunteer", "booth": booth["id"], "login": login,
-                                     "ph": auth.hash_tag(account["password_hash"])})
-    return {"booth": {"id": booth["id"], "name": booth["name"]}}
-
-
-@router.post("/logout")
-def logout(response: Response):
-    auth.clear_staff_cookie(response)
-    return {"ok": True}
-
-
 @router.get("/me")
 def me(booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer),
        conn: sqlite3.Connection = Depends(db.get_db)):
-    if staff["role"] == "admin" and not booth_id:
-        # Admin otwiera panel wolontariusza bez wybranego stoiska — frontend pokaże listę.
+    if staff["role"] == "admin" and not (booth_id or staff["booth"]):
+        # Admin bez wybranego stoiska: pusty widok, frontend pokaże wybór.
         return {"role": "admin", "booth": None, "registered_count": 0, "registered_potential": 0, "registered_actual": 0, "matches_count": 0,
                 "rolls_count": 0, "codes": []}
     bid = auth.resolve_booth(staff, booth_id)
@@ -76,8 +35,7 @@ def me(booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer
     if booth is None:
         raise HTTPException(404, "Nie ma takiego stoiska.")
     db.expire_codes(conn)
-    codes = conn.execute("SELECT * FROM registration_codes WHERE booth_id=? ORDER BY created_at DESC, rowid DESC LIMIT 20",
-                         (bid,)).fetchall()
+    codes = db.list_codes(conn, booth_id=bid)
     counts = {r["kind"]: r["n"] for r in conn.execute(
         "SELECT kind, COUNT(*) n FROM donors_stats WHERE booth_id=? GROUP BY kind", (bid,))}
     potential, actual = counts.get("potential", 0), counts.get("actual", 0)
@@ -91,7 +49,7 @@ def me(booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer
 def generate_code(body: GenerateIn, staff: dict = Depends(auth.require_volunteer),
                   conn: sqlite3.Connection = Depends(db.get_db)):
     bid = auth.resolve_booth(staff, body.booth_id)
-    if body.kind not in ("potential", "actual"):
+    if body.kind not in ("potential", "actual", "promo"):
         raise HTTPException(422, "Niepoprawny typ kodu.")
     chash = None
     if body.kind == "actual":
@@ -109,14 +67,14 @@ def generate_code(body: GenerateIn, staff: dict = Depends(auth.require_volunteer
                 raise HTTPException(409, "Ta legitymacja jest już zarejestrowana w systemie.")
             if conn.execute("SELECT 1 FROM registration_codes WHERE card_hash=? AND status='ACTIVE'", (chash,)).fetchone():
                 raise HTTPException(409, "Dla tej legitymacji jest już aktywny kod.")
-        for _ in range(20):
-            code = f"{bid.upper()}-" + "".join(secrets.choice(CODE_ALPHABET) for _ in range(4))
-            if conn.execute("SELECT 1 FROM registration_codes WHERE code=?", (code,)).fetchone() is None:
-                conn.execute("INSERT INTO registration_codes(code,booth_id,status,created_at,kind,card_hash) "
-                             "VALUES(?,?,'ACTIVE',?,?,?)", (code, bid, ts, body.kind, chash))
-                break
-        else:
+        code = db.unique_code(conn, bid)
+        if code is None:
             raise HTTPException(503, "Nie udało się wygenerować kodu. Spróbuj ponownie.")
+        if body.kind == "promo":
+            conn.execute("INSERT INTO promo_codes(code,booth_id,status,created_at) VALUES(?,?,'ACTIVE',?)", (code, bid, ts))
+        else:
+            conn.execute("INSERT INTO registration_codes(code,booth_id,status,created_at,kind,card_hash) "
+                         "VALUES(?,?,'ACTIVE',?,?,?)", (code, bid, ts, body.kind, chash))
     return {"code": code, "kind": body.kind, "expires_at": config.expiry_of(ts), "confirm_path": f"/potwierdz?kod={code}"}
 
 
@@ -130,12 +88,15 @@ def cancel(conn: sqlite3.Connection, code: str, staff: dict) -> dict:
     """Anulowanie kodu ACTIVE (status EXPIRED). Wolontariusz tylko na swoim stoisku."""
     with db.tx(conn):
         db.expire_codes(conn)
-        row = conn.execute("SELECT * FROM registration_codes WHERE code=?", (code,)).fetchone()
-        if row is None:
+        found = db.find_code(conn, code)
+        if found is None:
             raise HTTPException(404, "Nie ma takiego kodu.")
+        table, row = found
+        if staff["role"] == "volunteer" and not staff["booth"]:
+            raise HTTPException(409, "Wybierz stoisko.")
         if staff["role"] == "volunteer" and row["booth_id"] != staff["booth"]:
             raise HTTPException(403, "To kod z innego stoiska.")
         if row["status"] != "ACTIVE":
             raise HTTPException(409, "Kod nie jest już aktywny.")
-        conn.execute("UPDATE registration_codes SET status='EXPIRED' WHERE code=?", (code,))
+        conn.execute(f"UPDATE {table} SET status='EXPIRED' WHERE code=?", (code,))
     return {"ok": True}

@@ -1,6 +1,7 @@
 """Gra: stan stoiska, sesja gracza, przepustka ze skanu QR, losowanie genotypu."""
 from __future__ import annotations
 
+import hmac
 import sqlite3
 from datetime import timedelta
 
@@ -12,6 +13,9 @@ from .. import auth, captcha, config, db, game, qrtoken, testing
 
 router = APIRouter()
 SCAN_AGAIN = "Zeskanuj ponownie kod QR ze stoiska."
+BOOTH_LIMIT = "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
+WON_FIELDS = ("won_token", "won_seq", "won_booth_name", "won_genotype", "won_at")
+CONSENT_REQUIRED = "Zaakceptuj regulamin i politykę prywatności."
 
 
 class _LimitReached(Exception):
@@ -29,20 +33,40 @@ class RollIn(BaseModel):
 class EnterIn(BaseModel):
     booth_id: str = Field(max_length=40)
     t: str = Field(max_length=64)
+    device: str = Field(pattern=r"^[0-9a-f]{64}$")
+    device_ext: str | None = Field(None, pattern=r"^[0-9a-f]{64}$")
+    consent: bool = False
+
+
+def booth_pool(conn: sqlite3.Connection, device_key: str, ext_key: str | None, booth_id: str, sid: str, date: str) -> int:
+    """Próby, które zostały sesji na stanowisku dziś. Limit 5 trzyma klucz rozszerzony (``ext_key``: wszystkie sesje
+    tego samego egzemplarza dzielą 5 prób), a klucz podstawowy daje sufit 5 * tolerancja dla identycznych urządzeń."""
+    ext_key = ext_key or device_key
+    rows = conn.execute("SELECT session_id, ext_key, attempts FROM booth_plays WHERE device_key=? AND booth_id=? AND date=?",
+                        (device_key, booth_id, date)).fetchall()
+    mine = sum(r["attempts"] for r in rows if r["session_id"] == sid)
+    total = sum(r["attempts"] for r in rows)
+    ext_total = sum(r["attempts"] for r in rows if r["ext_key"] == ext_key)
+    return max(0, min(config.DAILY_ATTEMPTS - max(mine, ext_total),
+                      config.DAILY_ATTEMPTS * db.device_tolerance(conn) - total))
 
 
 def game_state(conn: sqlite3.Connection, sid: str) -> dict:
-    """Stan gracza: próby (dzienne + bonusowe), najlepszy wynik dnia, ważna przepustka."""
-    s = conn.execute("SELECT has_won, bonus_attempts, pass_booth, pass_until, won_genotype, won_at FROM game_sessions WHERE session_id=?",
-                     (sid,)).fetchone()
-    a = conn.execute("SELECT attempts, best FROM game_attempts WHERE session_id=? AND date=?",
-                     (sid, config.today())).fetchone()
-    used = a["attempts"] if a else 0
+    """Stan gracza: próby (pula stanowiska + bonus), najlepszy wynik dnia, ważna przepustka, ostatnie trafienie."""
+    s = conn.execute("SELECT has_won, bonus_attempts, pass_booth, pass_until, device_key, device_ext_key, won_genotype, won_at, won_token "
+                     "FROM game_sessions WHERE session_id=?", (sid,)).fetchone()
+    a = conn.execute("SELECT best FROM game_attempts WHERE session_id=? AND date=?", (sid, config.today())).fetchone()
     pass_ok = bool(s["pass_booth"] and s["pass_until"] and s["pass_until"] > config.now_iso())
-    return {"attempts_left": max(0, config.DAILY_ATTEMPTS - used) + s["bonus_attempts"],
+    booth_left = config.DAILY_ATTEMPTS
+    if pass_ok and s["device_key"]:
+        booth_left = booth_pool(conn, s["device_key"], s["device_ext_key"], s["pass_booth"], sid, config.today())
+    win = conn.execute("SELECT w.seq, b.name FROM wins w LEFT JOIN booths b ON b.id=w.booth_id WHERE w.token=?",
+                       (s["won_token"],)).fetchone() if s["won_token"] else None
+    return {"attempts_left": booth_left + s["bonus_attempts"], "booth_left": booth_left,
             "bonus_attempts": s["bonus_attempts"], "has_won": bool(s["has_won"]),
             "best_today": a["best"] if a else 0, "pass_booth": s["pass_booth"] if pass_ok else None,
-            "won_genotype": s["won_genotype"], "won_at": s["won_at"]}
+            "won_genotype": s["won_genotype"], "won_at": s["won_at"], "won_token": s["won_token"],
+            "won_seq": win["seq"] if win else None, "won_booth_name": win["name"] if win else None}
 
 
 def attempts_left(conn: sqlite3.Connection, sid: str) -> int:
@@ -87,59 +111,74 @@ def me(sid: str = Depends(auth.game_session), conn: sqlite3.Connection = Depends
 
 @router.post("/api/game/enter")
 def enter(body: EnterIn, sid: str = Depends(auth.game_session), conn: sqlite3.Connection = Depends(db.get_db)):
-    """Przepustka na stoisko po zeskanowaniu aktualnego kodu QR; kolejne skanowanie ją odnawia."""
+    """Przepustka na stoisko po zeskanowaniu aktualnego kodu QR; kolejne skanowanie ją odnawia.
+    Zapisuje zgodę i pseudonimowy klucz urządzenia: HMAC hasha z przeglądarki solą dobową (surowego hasha nie trzymamy)."""
+    if not body.consent:
+        raise HTTPException(422, CONSENT_REQUIRED)
     if conn.execute("SELECT 1 FROM booths WHERE id=?", (body.booth_id,)).fetchone() is None:
         raise HTTPException(404, "Nie ma takiego stoiska.")
     if not qrtoken.valid(body.booth_id, body.t):
         raise HTTPException(403, "Ten kod QR wygasł. " + SCAN_AGAIN)
     until = config.iso(config.now() + timedelta(minutes=config.PASS_MINUTES))
-    conn.execute("UPDATE game_sessions SET pass_booth=?, pass_until=? WHERE session_id=?", (body.booth_id, until, sid))
+    salt = db.device_salt(conn).encode()
+    key = hmac.new(salt, body.device.encode(), "sha256").hexdigest()[:32]
+    # klucz rozszerzony: ta sama sol, inny prefiks; brak device_ext = klucz podstawowy
+    ext_key = hmac.new(salt, b"ext:" + (body.device_ext or body.device).encode(), "sha256").hexdigest()[:32]
+    conn.execute("UPDATE game_sessions SET pass_booth=?, pass_until=?, device_key=?, device_ext_key=?, consent_at=? "
+                 "WHERE session_id=?", (body.booth_id, until, key, ext_key, config.now_iso(), sid))
     return {"ok": True, "pass_until": until}
 
 
 @router.post("/api/game/roll")
 def roll(body: RollIn, sid: str = Depends(auth.game_session), conn: sqlite3.Connection = Depends(db.get_db)):
+    db.device_salt(conn)  # nowy dzień: rotacja soli przed liczeniem limitu
     try:
         return _roll(conn, sid, body.booth_id)
     except _LimitReached:
         st = game_state(conn, sid)
-        return JSONResponse({"detail": "Wykorzystano dzisiejsze próby. Wróć jutro!", "attempts_left": 0,
+        return JSONResponse({"detail": BOOTH_LIMIT, "attempts_left": 0, "booth_left": 0,
                              "bonus_attempts": 0, "best_today": st["best_today"]}, status_code=429)
 
 
 def _roll(conn: sqlite3.Connection, sid: str, booth_id: str) -> dict:
     today = config.today()
-    daily = config.DAILY_ATTEMPTS
     with db.tx(conn):
         booth = conn.execute("SELECT * FROM booths WHERE id=?", (booth_id,)).fetchone()
         if booth is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
         sess = conn.execute("SELECT * FROM game_sessions WHERE session_id=?", (sid,)).fetchone()
-        row = conn.execute("SELECT attempts, best FROM game_attempts WHERE session_id=? AND date=?", (sid, today)).fetchone()
-        used = row["attempts"] if row else 0
-        prev_best = row["best"] if row else 0
-        bonus = sess["bonus_attempts"]
-        if used >= daily and bonus <= 0:
-            raise _LimitReached
-        if sess["pass_booth"] != booth["id"] or not sess["pass_until"] or sess["pass_until"] <= config.now_iso():
+        if (sess["pass_booth"] != booth["id"] or not sess["pass_until"] or sess["pass_until"] <= config.now_iso()
+                or not sess["device_key"]):
             raise HTTPException(403, SCAN_AGAIN)
-        # Najpierw pula dzienna, potem bonus (w tej samej transakcji).
-        if used < daily:
-            conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,1) "
-                         "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+1", (sid, today))
-            used += 1
+        key = sess["device_key"]
+        row = conn.execute("SELECT best FROM game_attempts WHERE session_id=? AND date=?", (sid, today)).fetchone()
+        prev_best = row["best"] if row else 0
+        pool = booth_pool(conn, key, sess["device_ext_key"], booth["id"], sid, today)
+        bonus = sess["bonus_attempts"]
+        if pool <= 0 and bonus <= 0:
+            raise _LimitReached
+        # Najpierw pula stanowiska, potem bonus (w tej samej transakcji). Wiersz dnia zawsze istnieje (do best).
+        from_pool = 1 if pool > 0 else 0
+        conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,?) "
+                     "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+?", (sid, today, from_pool, from_pool))
+        if from_pool:
+            conn.execute("INSERT INTO booth_plays(device_key,booth_id,date,session_id,attempts,ext_key) VALUES(?,?,?,?,1,?) "
+                         "ON CONFLICT(device_key,booth_id,date,session_id) DO UPDATE SET attempts=attempts+1, "
+                         "ext_key=excluded.ext_key", (key, booth["id"], today, sid, sess["device_ext_key"] or key))
+            pool -= 1
         else:
             conn.execute("UPDATE game_sessions SET bonus_attempts=bonus_attempts-1 WHERE session_id=?", (sid,))
             bonus -= 1
         conn.execute("UPDATE booths SET rolls_count=rolls_count+1 WHERE id=?", (booth["id"],))
         has_won = bool(sess["has_won"])
         old = booth["current_genotype"]
-        armed = testing.consume_arm(sid)  # trafienie z narzędzi testowych nie wchodzi do losowania
-        won_at = None
+        armed = testing.consume_arm(sid)  # trafienie z narzędzi testowych ma seq 0 i nie liczy się do numeracji
+        won = dict.fromkeys(WON_FIELDS)
         if armed or (not has_won and game.is_win()):
             db.record_win(conn, booth["id"], sid=sid, is_test=armed)
-            won_at = conn.execute("SELECT won_at FROM game_sessions WHERE session_id=?", (sid,)).fetchone()[0]
             conn.execute("UPDATE game_sessions SET has_won=1 WHERE session_id=?", (sid,))
+            st = game_state(conn, sid)
+            won = {k: st[k] for k in WON_FIELDS}
             matches, player, has_won, win = len(old), old, True, True
         else:
             matches, player = game.roll(old)
@@ -147,5 +186,6 @@ def _roll(conn: sqlite3.Connection, sid: str, booth_id: str) -> dict:
         best = max(prev_best, matches)
         conn.execute("UPDATE game_attempts SET best=? WHERE session_id=? AND date=?", (best, sid, today))
     return {"matches": matches, "win": win, "player_genotype": player, "booth_genotype": old,
-            "attempts_left": max(0, daily - used) + bonus, "bonus_attempts": bonus,
-            "has_won": has_won, "best_today": best, "won_at": won_at}
+            "attempts_left": pool + bonus, "booth_left": pool, "bonus_attempts": bonus,
+            "has_won": has_won, "best_today": best,
+            **won}

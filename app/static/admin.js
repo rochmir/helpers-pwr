@@ -1,66 +1,31 @@
-import { api, $, h, icon, setMessage, formatWarsaw, formatDateTime, formatDateRange, renderGenotype, loadTurnstile, requireToken, getConfig, facultyLabel } from './common.js';
-import { renderSocial, renderPlayerCert, renderDonorCert, showDownload } from './cert.js';
+// Czesc panelu dla administratora. Logowanie i wybor rangi robi login.js, tu tylko sekcje admina.
+import { api, $, h, icon, setMessage, formatWarsaw, formatDateTime, formatDateRange, renderGenotype, getConfig, facultyLabel } from './common.js';
+import { renderSocial, renderPlayerCert, renderDonorCert, renderResultCert, showDownload } from './cert.js';
 
-const msg = $('#admin-msg');
-let ts = null;
+const msg = $('#panel-msg');
 let booths = [];
 let faculties = [];
+const KIND_PL = { potential: 'potencjalny', actual: 'faktyczny', promo: 'dodatkowe losy' };
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
 
 async function guard(fn, target = msg) {
   setMessage(target, '');
   try { return await fn(); } catch (e) {
-    if (e.status === 401 || e.status === 403) { await showLogin(); return undefined; }
+    if (e.status === 401) { location.reload(); return undefined; }
     setMessage(target, e.detail || e.message, 'error');
     return undefined;
   }
 }
 
-async function showLogin() {
-  $('#admin-panel').hidden = true;
-  $('#login-section').hidden = false;
-  if (!ts) { try { ts = await loadTurnstile($('#turnstile')); } catch (e) { setMessage(msg, e.message, 'error'); } }
-}
-
-async function showPanel() {
-  $('#login-section').hidden = true;
-  $('#admin-panel').hidden = false;
-  await Promise.all([loadBooths(), loadVolunteers(), loadCodes(), loadDictionary(), loadDays(), refreshTestStatus(), loadHours(), loadRaffle()]);
+/** Wczytuje wszystkie sekcje admina (wywolywane raz po zalogowaniu administratora). */
+export async function initAdmin() {
+  await Promise.all([loadBooths(), loadVolunteers(), loadCodes(), loadDictionary(), loadDays(), refreshTestStatus(),
+    loadHours(), loadWins(), loadPartners(), loadSettings()]);
 }
 
 async function loadHours() {
   await guard(async () => { $('#booth-hours').value = (await api('GET', '/api/admin/booth-hours')).hours; });
 }
-
-async function init() {
-  try {
-    await api('GET', '/api/admin/me');
-    await showPanel();
-  } catch (e) {
-    if (e.status === 401 || e.status === 403) await showLogin();
-    else setMessage(msg, e.detail, 'error');
-  }
-}
-
-$('#login-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  setMessage(msg, '');
-  try {
-    const cf = requireToken(ts);
-    await api('POST', '/api/admin/login', { secret: $('#secret').value, cf_turnstile: cf ?? null });
-    $('#secret').value = '';
-    await showPanel();
-  } catch (e) {
-    setMessage(msg, e.status === 401 ? 'Błędny sekret administratora.' : (e.detail || e.message), 'error');
-  } finally {
-    if (ts) ts.reset();
-  }
-});
-
-$('#logout-btn').addEventListener('click', async () => {
-  try { await api('POST', '/api/admin/logout'); } catch (e) { /* ignoruj */ }
-  await showLogin();
-});
 
 // ---------- stoiska ----------
 async function loadBooths() {
@@ -173,8 +138,11 @@ async function loadVolunteers() {
     body.textContent = '';
     $('#vol-empty').hidden = list.length > 0;
     for (const v of list) {
+      const roleSel = h('select', { 'data-role-login': v.login, 'aria-label': 'Ranga konta ' + v.login },
+        h('option', { value: 'volunteer' }, 'Wolontariusz'), h('option', { value: 'admin' }, 'Administrator'));
+      roleSel.value = v.role === 'admin' ? 'admin' : 'volunteer';
       body.append(h('tr', {},
-        h('td', { class: 'mono' }, v.login), h('td', {}, formatDateTime(v.created_at)),
+        h('td', { class: 'mono' }, v.login), h('td', {}, roleSel), h('td', {}, formatDateTime(v.created_at)),
         h('td', { class: 'actions' },
           h('button', { class: 'btn btn-small', type: 'button', 'data-vol': 'reset', 'data-login': v.login }, icon('ti-key'), 'Nowe hasło'),
           h('button', { class: 'btn btn-small', type: 'button', 'data-vol': 'delete', 'data-login': v.login }, icon('ti-trash'), 'Usuń'))));
@@ -186,7 +154,7 @@ async function showCredentials(login, password) {
   const cfg = await getConfig();
   const base = ((cfg && cfg.public_url) || location.origin).replace(/\/+$/, '');
   $('#vol-message').value = "Cześć! Masz konto wolontariusza w akcji Helpers' Generation na PWr.\n"
-    + 'Panel: ' + base + '/wolontariusz?login=' + encodeURIComponent(login) + '\n'
+    + 'Panel: ' + base + '/login?login=' + encodeURIComponent(login) + '\n'
     + 'Login: ' + login + '\n'
     + 'Hasło: ' + password + '\n'
     + 'Po zalogowaniu wybierz swoje stoisko.';
@@ -200,11 +168,26 @@ $('#vol-form').addEventListener('submit', async (ev) => {
   await guard(async () => {
     const body = { login: $('#vol-login').value.trim().toLowerCase() };
     if ($('#vol-password').value) body.password = $('#vol-password').value;
+    body.role = $('#vol-role').value;
     const r = await api('POST', '/api/admin/volunteers', body);
     ev.target.reset();
     await showCredentials(r.login, r.password);
     setMessage(msg, 'Konto utworzone.', 'ok');
     await loadVolunteers();
+  });
+});
+
+$('#vol-body').addEventListener('change', async (ev) => {
+  const sel = ev.target.closest && ev.target.closest('select[data-role-login]');
+  if (!sel) return;
+  const login = sel.dataset.roleLogin;
+  await guard(async () => {
+    try {
+      await api('PATCH', '/api/admin/volunteers/' + encodeURIComponent(login), { role: sel.value });
+      setMessage(msg, 'Ranga konta „' + login + '” zmieniona.', 'ok');
+    } finally {
+      await loadVolunteers();
+    }
   });
 });
 
@@ -254,12 +237,12 @@ async function loadCodes() {
     body.textContent = '';
     for (const c of codes) {
       body.append(h('tr', { class: 'code-' + c.status.toLowerCase() },
-        h('td', { class: 'mono' }, c.code), h('td', {}, c.booth_id || ''),
+        h('td', { class: 'mono' }, c.code), h('td', {}, c.booth_id || ''), h('td', {}, KIND_PL[c.kind] || c.kind),
         h('td', {}, h('span', { class: 'status-tag tag-' + c.status.toLowerCase() }, STATUS_PL[c.status] || c.status)), h('td', {}, formatDateTime(c.created_at)),
         h('td', {}, c.status === 'ACTIVE'
           ? h('button', { class: 'btn btn-small', type: 'button', 'data-cancel': c.code }, icon('ti-x'), 'Anuluj') : '')));
     }
-    if (!codes.length) body.append(h('tr', {}, h('td', { colspan: 5 }, 'Brak kodów.')));
+    if (!codes.length) body.append(h('tr', {}, h('td', { colspan: 6 }, 'Brak kodów.')));
   });
 }
 
@@ -283,6 +266,7 @@ async function loadDictionary() {
     sel.textContent = '';
     faculties = d.faculties || [];
     for (const f of faculties) sel.append(h('option', { value: f.code }, facultyLabel(f)));
+    await loadStudents();
   });
 }
 
@@ -319,14 +303,54 @@ $('#social-btn').addEventListener('click', async () => {
     const fmt = $('#social-format').value;
     const canvas = await renderSocial(summary, fmt);
     const tag = summary.scope === 'day' ? summary.date : 'cala-akcja';
-    showDownload(canvas, $('#social-output'), 'podsumowanie-' + tag + '-' + fmt.replace(':', 'x') + '.png');
+    await showDownload(canvas, $('#social-output'), 'podsumowanie-' + tag + '-' + fmt.replace(':', 'x') + '.png');
   });
 });
 
 
-// ---------- losowanie finalowe ----------
-const raffleMsg = $('#raffle-msg');
-let raffleBooths = {};
+// ---------- liczby studentow (Bitwa Wydzialow) ----------
+async function loadStudents() {
+  const d = await api('GET', '/api/admin/students');
+  const counts = d.counts || {};
+  $('#students-source').value = d.source || '';
+  const body = $('#students-body');
+  body.textContent = '';
+  for (const f of faculties) {
+    if (f.code === 'INNE') continue;
+    const input = h('input', { type: 'number', min: '1', max: '100000', step: '1', 'data-code': f.code, 'aria-label': 'Liczba studentów: ' + facultyLabel(f) });
+    if (counts[f.code] !== null && counts[f.code] !== undefined) input.value = counts[f.code];
+    body.append(h('tr', {}, h('td', {}, facultyLabel(f)), h('td', {}, input)));
+  }
+}
+
+$('#students-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  await guard(async () => {
+    const counts = {};
+    for (const input of document.querySelectorAll('#students-body input[data-code]')) {
+      counts[input.dataset.code] = input.value.trim() === '' ? null : Number(input.value);
+    }
+    await api('PUT', '/api/admin/students', { source: $('#students-source').value.trim(), counts });
+    setMessage(msg, 'Liczby studentów zapisane.', 'ok');
+    await loadStudents();
+  });
+});
+
+// ---------- trafienia 10/10 ----------
+let allWins = [];
+
+function renderWins() {
+  const q = $('#wins-filter').value.trim().toUpperCase();
+  const rows = allWins.filter((w) => !q || String(w.token).toUpperCase().includes(q));
+  const body = $('#wins-body');
+  body.textContent = '';
+  for (const w of rows) {
+    body.append(h('tr', {}, h('td', {}, w.seq), h('td', { class: 'mono' }, w.token), h('td', {}, genotypeCell(w.genotype)),
+      h('td', {}, w.booth_name || w.booth_id), h('td', {}, formatWarsaw(w.won_at))));
+  }
+  $('#wins-empty').hidden = rows.length > 0;
+  $('#wins-empty').textContent = allWins.length ? 'Brak trafień pasujących do filtra.' : 'Brak trafień.';
+}
 
 function genotypeCell(g) {
   const el = h('div', { class: 'genotype genotype-mini', 'aria-label': 'Genotyp' });
@@ -334,63 +358,113 @@ function genotypeCell(g) {
   return el;
 }
 
-function boothLabel(id) { return raffleBooths[id] || id; }
-
-async function loadRaffle() {
+async function loadWins() {
   await guard(async () => {
-    const r = await api('GET', '/api/admin/raffle');
-    raffleBooths = Object.fromEntries(r.entries.map((e) => [e.booth_id, e.booth_name || e.booth_id]));
-    const left = r.entries_count - r.draws.length;
-    $('#raffle-count').textContent = 'Trafień 10/10 w losowaniu: ' + r.entries_count
-      + (r.draws.length ? ' (wylosowano: ' + r.draws.length + ', do wylosowania: ' + Math.max(0, left) + ')' : '');
-    $('#raffle-draw').disabled = left <= 0;
-    const draws = $('#raffle-draws-body');
-    draws.textContent = '';
-    for (const d of r.draws) {
-      draws.append(h('tr', {}, h('td', {}, formatWarsaw(d.drawn_at)), h('td', {}, genotypeCell(d.genotype)),
-        h('td', {}, formatWarsaw(d.matched_at)), h('td', {}, boothLabel(d.booth_id))));
+    const r = await api('GET', '/api/admin/wins');
+    allWins = r.wins || [];
+    $('#wins-count').textContent = 'Prawdziwych trafień 10/10: ' + r.count;
+    renderWins();
+  });
+}
+$('#wins-filter').addEventListener('input', renderWins);
+$('#wins-refresh').addEventListener('click', loadWins);
+
+// ---------- partnerzy ----------
+async function loadPartners() {
+  await guard(async () => {
+    const list = await api('GET', '/api/partners');
+    const ul = $('#partners-list');
+    ul.textContent = '';
+    $('#partners-empty').hidden = list.length > 0;
+    for (const p of list) {
+      ul.append(h('li', { class: 'partner-item' },
+        h('img', { src: p.url, alt: p.name }), h('div', {}, p.name),
+        h('button', { class: 'btn btn-small', type: 'button', 'data-partner': p.id }, icon('ti-trash'), 'Usuń')));
     }
-    $('#raffle-draws').hidden = r.draws.length === 0;
-    const body = $('#raffle-entries-body');
-    body.textContent = '';
-    for (const e of r.entries) {
-      body.append(h('tr', {}, h('td', {}, formatWarsaw(e.matched_at)), h('td', {}, genotypeCell(e.genotype)),
-        h('td', {}, e.booth_name || e.booth_id)));
-    }
-  }, raffleMsg);
+  });
 }
 
-$('#raffle-refresh').addEventListener('click', loadRaffle);
-$('#raffle-draw').addEventListener('click', async () => {
-  if (!confirm('Wylosować genotyp spośród wszystkich trafień 10/10? Wynik zostanie zapisany i nie można go cofnąć.')) return;
+function readBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = () => reject(new Error('Nie udało się odczytać pliku.'));
+    fr.readAsDataURL(file);
+  });
+}
+
+$('#partner-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
   await guard(async () => {
-    const d = await api('POST', '/api/admin/raffle/draw');
-    const box = $('#raffle-pick');
-    box.hidden = false;
-    box.textContent = '';
-    box.append(
-      h('h3', {}, 'Wylosowany genotyp'),
-      h('div', { class: 'genotype', 'aria-label': 'Wylosowany genotyp' }),
-      h('p', {}, 'Trafiony: ' + formatWarsaw(d.matched_at) + ', stoisko: ' + (d.booth_name || d.booth_id)
-        + '. Losowanie: ' + formatWarsaw(d.drawn_at) + '. Zostało do wylosowania: ' + d.remaining + '.'),
-    );
-    renderGenotype(box.querySelector('.genotype'), d.genotype);
-    await loadRaffle();
-  }, raffleMsg);
+    const file = $('#partner-file').files[0];
+    if (!file) throw new Error('Wybierz plik z logo.');
+    if (file.size > 1.5 * 1024 * 1024) throw new Error('Plik jest za duży (maksymalnie 1,5 MB).');
+    const data = await readBase64(file);
+    await api('POST', '/api/admin/partners', { name: $('#partner-name').value.trim(), filename: file.name, data_base64: data });
+    ev.target.reset();
+    setMessage(msg, 'Partner dodany.', 'ok');
+    await loadPartners();
+  });
+});
+
+$('#partners-list').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest && ev.target.closest('button[data-partner]');
+  if (!btn) return;
+  if (!confirm('Usunąć tego partnera z grafik?')) return;
+  await guard(async () => {
+    await api('DELETE', '/api/admin/partners/' + encodeURIComponent(btn.dataset.partner));
+    await loadPartners();
+  });
+});
+
+// ---------- ustawienia ----------
+function showDeviceStats(d) {
+  if (!d) return;
+  $('#device-stats').textContent = 'Dziś (' + d.date + '): ' + d.base_keys + ' różnych kluczy podstawowych, ' + d.ext_keys +
+    ' różnych kluczy rozszerzonych. Im bliżej siebie te liczby, tym rzadsze kolizje identycznych modeli.';
+}
+
+async function loadSettings() {
+  await guard(async () => {
+    const st = await api('GET', '/api/admin/settings');
+    $('#set-tolerance').value = st.device_tolerance;
+    $('#set-facebook').value = st.facebook_url || '';
+    showDeviceStats(st.device_stats);
+  });
+}
+
+$('#settings-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  await guard(async () => {
+    const url = $('#set-facebook').value.trim();
+    if (url && !url.startsWith('https://')) throw new Error('Adres Facebooka musi zaczynać się od https://.');
+    const st = await api('PUT', '/api/admin/settings', { device_tolerance: Number($('#set-tolerance').value), facebook_url: url });
+    $('#set-tolerance').value = st.device_tolerance;
+    $('#set-facebook').value = st.facebook_url || '';
+    showDeviceStats(st.device_stats);
+    setMessage(msg, 'Ustawienia zapisane.', 'ok');
+  });
 });
 
 // ---------- podglad grafik (tylko lokalnie, bez zapisu na serwerze) ----------
 $('#pv-player-btn').addEventListener('click', async () => {
-  const canvas = await renderPlayerCert($('#pv-player-nick').value, '0123012301', new Date().toISOString());
-  showDownload(canvas, $('#pv-player-out'), 'podglad-certyfikat-gracza.png');
+  const canvas = await renderPlayerCert({ nick: $('#pv-player-nick').value, genotype: '0123012301', wonAt: new Date().toISOString(),
+    token: 'HG-TEST-0001', seq: 1, boothName: 'Stoisko testowe' });
+  await showDownload(canvas, $('#pv-player-out'), 'podglad-certyfikat-gracza.png');
 });
 
 $('#pv-donor-btn').addEventListener('click', async () => {
   const sel = $('#pv-donor-faculty');
   const fac = faculties.find((f) => f.code === sel.value);
   const facultyName = fac && fac.code !== 'INNE' ? fac.name : '';
-  const canvas = await renderDonorCert({ name: $('#pv-donor-name').value, facultyName });
-  showDownload(canvas, $('#pv-donor-out'), 'podglad-certyfikat-dawcy.png');
+  const canvas = await renderDonorCert({ name: $('#pv-donor-name').value, facultyName, kind: $('#pv-donor-kind').value });
+  await showDownload(canvas, $('#pv-donor-out'), 'podglad-certyfikat-dawcy.png');
+});
+
+$('#pv-result-btn').addEventListener('click', async () => {
+  const best = Math.max(0, Math.min(10, Number($('#pv-result-best').value) || 0));
+  const canvas = await renderResultCert({ nick: $('#pv-result-nick').value, best, boothName: 'Stoisko testowe', date: new Date().toISOString() });
+  await showDownload(canvas, $('#pv-result-out'), 'podglad-wynik-gry.png');
 });
 
 // ---------- testy ----------
@@ -428,7 +502,7 @@ function testResult(el, text, kind) {
 
 async function runTest(el, fn) {
   try { await fn(); } catch (e) {
-    if (e.status === 401 || e.status === 403) { await showLogin(); return; }
+    if (e.status === 401) { location.reload(); return; }
     testResult(el, e.detail || e.message, 'error');
   }
 }
@@ -441,7 +515,7 @@ async function refreshTestStatus() {
       + ' · Uzbrojone 10/10: ' + (st.armed ? 'tak' : 'nie')
       + ' · Pozostałe próby: ' + (st.attempts_left === null ? '-' : st.attempts_left);
   } catch (e) {
-    if (e.status === 401 || e.status === 403) { await showLogin(); return; }
+    if (e.status === 401) { location.reload(); return; }
     el.textContent = 'Błąd: ' + (e.detail || e.message);
   }
 }
@@ -498,5 +572,3 @@ $('#t-wipe').addEventListener('click', () => runTest($('#t-wipe-result'), async 
   testResult($('#t-wipe-result'), 'Dane testowe wyczyszczone. Stoiska dostały nowe genotypy.', 'ok');
   await Promise.all([loadBooths(), loadCodes(), loadDays(), refreshTestStatus()]);
 }));
-
-init();

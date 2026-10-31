@@ -1,5 +1,6 @@
-import { api, $, h, formatDateRange, setMessage, storageGet, storageSet, storageRemove, loadTurnstile, requireToken, sleep, shapeEl } from './common.js';
-import { renderPlayerCert, showDownload } from './cert.js';
+import { api, $, h, formatDateRange, setMessage, storageGet, storageSet, storageRemove, loadTurnstile, requireToken, sleep, shapeEl, getConfig } from './common.js';
+import { renderPlayerCert, renderResultCert, showDownload } from './cert.js';
+import { deviceHashes, deviceHashSupported } from './fingerprint.js';
 import { spinReels, buildReels, showReels, prefersReducedMotion, confetti } from './reels.js';
 
 const params = new URLSearchParams(location.search);
@@ -15,7 +16,13 @@ let busy = false;
 let boothGenotype = '';
 let attemptsLeft = null;
 let bestLocal = null; // najlepszy rzut z tej wizyty: { matches, player, booth }
-let won = null; // { genotype, at } trafienia 10/10 tej sesji (do certyfikatu)
+let won = null; // { genotype, at, token, seq, booth } trafienia 10/10 tej sesji (do certyfikatu)
+let bestOverall = 0; // najlepszy wynik dnia (serwer + rzuty z tej wizyty)
+let needSession = false; // true, gdy trzeba utworzyc sesje (Turnstile)
+let pendingMe = null; // stan sesji (lub null), gdy czekamy na zgode w oknie startowym
+let winShown = false; // ekran wygranej jest widoczny: okno konca nie otwiera sie samo
+
+const consentOk = () => storageGet('hp_consent') === '1';
 
 function show(id, on) { $('#' + id).hidden = !on; }
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -71,6 +78,7 @@ function setAttempts(n, bonus) {
   $('#roll-btn').disabled = over;
   machine.classList.toggle('is-over', over);
   $('#end-note').hidden = !over;
+  $('#end-open-btn').hidden = !over;
 }
 
 function renderTarget(genotype) {
@@ -94,10 +102,29 @@ function setScore(n, tick) {
 }
 
 function showScan(text) {
-  show('start-section', false);
   show('play-section', false);
   if (text) $('#scan-text').textContent = text;
   show('scan-section', true);
+}
+
+/** Nagrody i wynik do odebrania zaleznie od najlepszego wyniku dnia. */
+function updateRewards() {
+  show('gift-note', bestOverall >= 6);
+  show('result-cert-section', bestOverall >= 1);
+}
+
+/** Sekcja trafienia 10/10: token, numer i link do Facebooka (tylko gdy adres jest ustawiony). */
+async function renderWin() {
+  $('#win-token').textContent = (won && won.token) || '-';
+  $('#win-seq').textContent = won && won.seq > 0 ? 'Trafienie nr ' + won.seq : '';
+  try {
+    const cfg = await getConfig();
+    const url = cfg && typeof cfg.facebook_url === 'string' ? cfg.facebook_url.trim() : '';
+    if (url.startsWith('https://')) {
+      $('#fb-link').href = url;
+      show('fb-line', true);
+    }
+  } catch (e) { /* bez linku */ }
 }
 
 /** Ekran konca prob: najlepszy wynik dnia zamiast ostatniego rzutu. */
@@ -113,17 +140,23 @@ function showEnd(best) {
   } else {
     machine.hidden = true; // po przeladowaniu znamy tylko liczbe
   }
-  const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec na dziś.';
-  setResult(title, 'To już koniec na dziś. Wróć jutro po kolejne ' + MAX_TRIES + ' prób!', 'end');
+  bestOverall = Math.max(bestOverall, best);
+  updateRewards();
+  const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec prób na tym stanowisku.';
+  setResult(title, 'Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro.', 'end');
   show('bonus-hint', !storageGet('hp_bonus'));
+  // Przy wygranej gracz najpierw widzi ekran wygranej (token, Facebook); okno otwiera przyciskiem.
+  if (!winShown) openEndDialog();
 }
 
 function enterPlay(me) {
-  show('start-section', false);
   show('scan-section', false);
+  bestOverall = Math.max(bestOverall, me.best_today || 0);
   if (me.has_won) {
-    if (me.won_genotype) won = { genotype: me.won_genotype, at: me.won_at };
+    if (me.won_genotype) won = { genotype: me.won_genotype, at: me.won_at, token: me.won_token, seq: me.won_seq, booth: me.won_booth_name };
+    winShown = true;
     show('win-section', true);
+    renderWin();
   }
   if (me.attempts_left > 0 && me.pass_booth !== boothId) {
     showScan();
@@ -134,14 +167,16 @@ function enterPlay(me) {
   buildReels(playerEl);
   setScore(0, false);
   setAttempts(me.attempts_left, me.bonus_attempts || 0);
+  updateRewards();
   if (me.attempts_left <= 0) showEnd(me.best_today || 0);
 }
 
-/** Zapisuje przepustke na stoisko (token z kodu QR) i usuwa token z paska adresu. */
+/** Zapisuje przepustke na stoisko (token z kodu QR + skrot urzadzenia + zgoda) i usuwa token z paska adresu. */
 async function useQrToken() {
   if (!qrToken) return null;
   try {
-    await api('POST', '/api/game/enter', { booth_id: boothId, t: qrToken });
+    const { base, ext } = await deviceHashes();
+    await api('POST', '/api/game/enter', { booth_id: boothId, t: qrToken, device: base, device_ext: ext, consent: true });
     return null;
   } catch (e) {
     return e.status === 403 ? (e.detail || 'Ten kod QR wygasł. Zeskanuj ponownie kod ze stoiska.') : (e.detail || e.message);
@@ -150,26 +185,123 @@ async function useQrToken() {
   }
 }
 
+/** Wejscie do gry po zgodzie: przepustka z kodu QR, potem stan sesji. me0 = stan sesji znany wczesniej. */
+async function proceed(me0) {
+  const problem = await useQrToken();
+  const me = qrToken ? await api('GET', '/api/game/me') : me0;
+  enterPlay(me);
+  if (problem && me.attempts_left > 0 && me.pass_booth !== boothId) showScan(problem);
+}
+
+/** Wiersz listy stanowisk: "budynek - nazwa, terminy". */
+function boothLine(b) {
+  const label = (b.building ? b.building + ' - ' : '') + b.name;
+  const range = formatDateRange(b.date_from, b.date_to);
+  return label + (range ? ', ' + range : '');
+}
+
+/** Wspolne wypelnienie listy stanowisk i godzin (lista na /graj i okno konca). */
+function fillBoothList(listEl, hoursEl, booths, hours) {
+  listEl.textContent = '';
+  for (const b of booths) listEl.append(h('li', {}, boothLine(b)));
+  if (hours && booths.length) {
+    hoursEl.textContent = 'Godziny: ' + hours;
+    hoursEl.hidden = false;
+  } else {
+    hoursEl.hidden = true;
+  }
+}
+
 /** /graj bez stoiska: lista stanowisk z terminami zamiast bledu. */
 async function showBoothList() {
   show('booths-section', true);
   try {
     const d = await api('GET', '/api/booths/public');
-    const list = $('#booth-list');
-    for (const b of d.booths) {
-      const label = (b.building ? b.building + ' - ' : '') + b.name;
-      const range = formatDateRange(b.date_from, b.date_to);
-      list.append(h('li', {}, label + (range ? ', ' + range : '')));
-    }
+    fillBoothList($('#booth-list'), $('#booth-hours'), d.booths, d.hours);
     $('#booth-empty').hidden = d.booths.length > 0;
-    if (d.hours && d.booths.length) {
-      $('#booth-hours').textContent = 'Godziny: ' + d.hours;
-      $('#booth-hours').hidden = false;
-    }
   } catch (e) {
     $('#booth-empty').hidden = false;
   }
 }
+
+// ---------- okna: startowe i koncowe ----------
+const introDlg = $('#intro-dialog');
+const endDlg = $('#end-dialog');
+const startMsg = $('#start-msg');
+let introMode = null; // 'consent' (obowiazkowe, bez zamykania) albo 'preview' (same zasady)
+
+/** Okno startowe. consent: zasady + zgoda + Turnstile, nie da sie go zamknac bez akceptacji; preview: sam podglad. */
+function openIntro(mode) {
+  if (introDlg.open || typeof introDlg.showModal !== 'function') return;
+  introMode = mode;
+  $('#consent-block').hidden = mode !== 'consent';
+  $('#intro-ok').hidden = mode === 'consent';
+  setMessage(startMsg, '');
+  introDlg.showModal();
+  introDlg.scrollTop = 0;
+}
+
+// Esc i ponowne otwarcie: w trybie zgody okno zostaje (Chrome po drugim Esc zamyka mimo cancel).
+introDlg.addEventListener('cancel', (ev) => { if (introMode === 'consent') ev.preventDefault(); });
+introDlg.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && introMode === 'consent') ev.preventDefault(); });
+introDlg.addEventListener('close', () => {
+  if (introMode === 'consent' && typeof introDlg.showModal === 'function') introDlg.showModal();
+});
+
+/** Okno startowe przed gra: withSession = trzeba jeszcze utworzyc sesje (widget Turnstile w oknie). */
+async function showStart(withSession) {
+  needSession = withSession;
+  openIntro('consent');
+  if (withSession && !ts) {
+    try { ts = await loadTurnstile($('#turnstile')); } catch (err) { setMessage(startMsg, err.message, 'error'); }
+  }
+}
+
+/** Okno konca prob: wynik, inne stanowiska (bledy API nie blokuja reszty), certyfikat, wskazowka o kodzie. */
+async function openEndDialog() {
+  if (endDlg.open || typeof endDlg.showModal !== 'function') return;
+  const hasCert = !!won || bestOverall > 0;
+  $('#end-title').textContent = 'Koniec prób na tym stanowisku';
+  $('#end-best').textContent = bestOverall > 0 ? 'Twój najlepszy wynik dziś: ' + bestOverall + '/10.' : '';
+  $('#end-best').hidden = !(bestOverall > 0);
+  $('#end-cert').hidden = !hasCert;
+  $('#end-cert-title').textContent = won ? 'Twój certyfikat 10/10' : 'Odbierz swój wynik';
+  endDlg.showModal();
+  endDlg.scrollTop = 0;
+  const list = $('#end-booth-list');
+  const hoursEl = $('#end-booth-hours');
+  const empty = $('#end-booth-empty');
+  list.textContent = '';
+  hoursEl.hidden = true;
+  empty.hidden = true;
+  let booths = [];
+  let hours = '';
+  try {
+    const d = await api('GET', '/api/booths/public');
+    const here = $('#game-booth').textContent;
+    booths = (d.booths || []).filter((b) => b.name !== here);
+    hours = d.hours || '';
+  } catch (e) { /* blad listy nie blokuje reszty okna */ }
+  fillBoothList(list, hoursEl, booths, hours);
+  empty.hidden = booths.length > 0;
+}
+
+/** Grafika z wynikiem: certyfikat 10/10 gdy sesja ma trafienie, inaczej grafika z najlepszym wynikiem. */
+async function buildResultCanvas(nick, preferWin) {
+  if (preferWin && won) {
+    return renderPlayerCert({ nick, genotype: won.genotype, wonAt: won.at, token: won.token, seq: won.seq, boothName: won.booth || $('#game-booth').textContent });
+  }
+  return renderResultCert({ nick, best: bestOverall, boothName: $('#game-booth').textContent, date: new Date().toISOString() });
+}
+
+$('#rules-btn').addEventListener('click', () => openIntro('preview'));
+$('#intro-ok').addEventListener('click', () => { introMode = null; introDlg.close(); });
+$('#end-open-btn').addEventListener('click', openEndDialog);
+$('#end-close').addEventListener('click', () => endDlg.close());
+$('#end-cert-btn').addEventListener('click', async () => {
+  const canvas = await buildResultCanvas($('#end-nick').value, true);
+  await showDownload(canvas, $('#end-cert-output'), won ? 'certyfikat-hla.png' : 'wynik-hla.png');
+});
 
 async function init() {
   if (!boothId) {
@@ -187,39 +319,64 @@ async function init() {
       : e.detail, 'error');
     return;
   }
+  if (!deviceHashSupported()) {
+    setMessage(msg, 'Ta przeglądarka nie pozwala obliczyć identyfikatora urządzenia, a bez niego nie można grać (wymagane jest bezpieczne połączenie HTTPS). Otwórz grę w aktualnej przeglądarce, np. Chrome lub Safari.', 'error');
+    return;
+  }
+  storageRemove('hp_intro'); // dawny znacznik okna startowego, zgoda to teraz hp_consent
+  let me = null;
   try {
-    let me = await api('GET', '/api/game/me');
-    const problem = await useQrToken();
-    if (qrToken) me = await api('GET', '/api/game/me');
-    enterPlay(me);
-    if (problem && me.attempts_left > 0 && me.pass_booth !== boothId) showScan(problem);
+    me = await api('GET', '/api/game/me');
   } catch (e) {
-    if (e.status === 401) {
-      storageRemove('hp_game');
-      show('start-section', true);
-      try { ts = await loadTurnstile($('#turnstile')); } catch (err) { setMessage(msg, err.message, 'error'); }
-    } else {
-      setMessage(msg, e.detail, 'error');
+    if (e.status !== 401) {
+      setMessage(msg, e.detail || e.message, 'error');
+      return;
     }
+    storageRemove('hp_game');
+  }
+  if (!me || !consentOk()) {
+    pendingMe = me;
+    await showStart(!me);
+    return;
+  }
+  try {
+    await proceed(me);
+  } catch (e) {
+    setMessage(msg, e.detail || e.message, 'error');
   }
 }
 
 $('#start-btn').addEventListener('click', async () => {
   if (busy) return;
   busy = true;
-  setMessage(msg, '');
+  const btn = $('#start-btn');
+  btn.disabled = true;
+  setMessage(startMsg, '');
+  let me = pendingMe;
   try {
-    const cf = requireToken(ts);
-    const s = await api('POST', '/api/game/session', { cf_turnstile: cf ?? null });
-    if (s.token) storageSet('hp_game', s.token);
-    const problem = await useQrToken();
-    const me = qrToken ? await api('GET', '/api/game/me') : s;
-    enterPlay(me);
-    if (problem && me.attempts_left > 0 && me.pass_booth !== boothId) showScan(problem);
+    if (needSession) {
+      const cf = requireToken(ts); // przy wlaczonej captchy rzuca blad, gdy brak tokenu
+      const s = await api('POST', '/api/game/session', { cf_turnstile: cf ?? null });
+      if (s.token) storageSet('hp_game', s.token);
+      me = s;
+      needSession = false;
+    }
+    storageSet('hp_consent', '1');
+  } catch (e) {
+    setMessage(startMsg, e.detail || e.message, 'error');
+    if (ts) ts.reset();
+    btn.disabled = false;
+    busy = false;
+    return;
+  }
+  introMode = null;
+  introDlg.close();
+  btn.disabled = false;
+  try {
+    await proceed(me);
   } catch (e) {
     setMessage(msg, e.detail || e.message, 'error');
   } finally {
-    if (ts) ts.reset();
     busy = false;
   }
 });
@@ -276,14 +433,18 @@ async function roll() {
       bestLocal = { matches: r.matches, player: r.player_genotype, booth: r.booth_genotype };
     }
     machine.classList.remove('is-spinning', 'is-tense');
+    bestOverall = Math.max(bestOverall, r.best_today || 0, bestLocal.matches);
+    updateRewards();
     if (r.win) {
-      won = { genotype: r.player_genotype, at: r.won_at }; // do certyfikatu (serwer jest źródłem czasu)
+      won = { genotype: r.player_genotype, at: r.won_at, token: r.won_token, seq: r.won_seq, booth: r.won_booth_name }; // do certyfikatu (serwer jest zrodlem czasu)
       machine.classList.add('is-win');
       show('win-banner', true);
       setResult('Genotyp 10/10!', 'Jesteś bliźniakiem genetycznym!', 'win');
       confetti();
       await sleep(reduced ? 0 : 1800);
+      winShown = true;
       show('win-section', true);
+      renderWin();
       $('#win-section').scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
     } else if (left <= 0) {
       // Ostatni rzut nie jest wynikiem dnia: pokazujemy najlepszy.
@@ -320,8 +481,14 @@ $('#roll-btn').addEventListener('click', roll);
 $('#lever').addEventListener('click', roll);
 
 $('#cert-btn').addEventListener('click', async () => {
-  const canvas = await renderPlayerCert($('#nick').value, won && won.genotype, won && won.at);
-  showDownload(canvas, $('#cert-output'), 'certyfikat-hla.png');
+  const w = won || {};
+  const canvas = await renderPlayerCert({ nick: $('#nick').value, genotype: w.genotype, wonAt: w.at, token: w.token, seq: w.seq, boothName: w.booth || $('#game-booth').textContent });
+  await showDownload(canvas, $('#cert-output'), 'certyfikat-hla.png');
+});
+
+$('#result-btn').addEventListener('click', async () => {
+  const canvas = await buildResultCanvas($('#result-nick').value, false);
+  await showDownload(canvas, $('#result-output'), 'wynik-hla.png');
 });
 
 init();

@@ -40,7 +40,7 @@ def conn(client):
 
 @pytest.fixture
 def admin(client):
-    r = client.post("/api/admin/login", json={"secret": "test-admin-secret"})
+    r = client.post("/api/auth/login", json={"login": "admin", "password": "test-admin-secret"})
     assert r.status_code == 200
     return client
 

@@ -1,4 +1,4 @@
-"""Sesje: gracz (podpisany token, cookie lub nagłówek) i personel (admin / wolontariusz).
+"""Sesje: gracz (podpisany token, cookie lub nagłówek) i personel (konto z rolą admin / wolontariusz).
 
 Żadnych adresów IP — throttle logowania jest per login, w pamięci procesu.
 """
@@ -10,17 +10,19 @@ import sqlite3
 import threading
 import time
 
+from argon2.exceptions import InvalidHashError, VerifyMismatchError
 from fastapi import Depends, HTTPException, Request, Response, status
 from itsdangerous import BadSignature, Signer, URLSafeTimedSerializer
 
 from . import config
-from .db import get_db
+from .db import get_db, hasher
 
 GAME_COOKIE = "hp_game"
 STAFF_COOKIE = "hp_staff"
 GAME_MAX_AGE = 30 * 24 * 3600
 ADMIN_MAX_AGE = 12 * 3600
 VOLUNTEER_MAX_AGE = 14 * 3600
+ADMIN_LOGIN = "admin"      # awaryjne konto: hasło = ADMIN_SECRET, bez wiersza w bazie; login zastrzeżony
 
 
 # --- sesja gry ------------------------------------------------------------------
@@ -122,8 +124,9 @@ def _staff_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(config.secret_key(), salt="staff")
 
 
-def set_staff_cookie(response: Response, payload: dict) -> None:
-    max_age = ADMIN_MAX_AGE if payload["role"] == "admin" else VOLUNTEER_MAX_AGE
+def set_staff_cookie(response: Response, role: str, payload: dict) -> None:
+    """Cookie ``{login, ph, booth}``; rola nie jest w cookie (czytamy ją z bazy przy każdym żądaniu)."""
+    max_age = ADMIN_MAX_AGE if role == "admin" else VOLUNTEER_MAX_AGE
     response.set_cookie(STAFF_COOKIE, _staff_serializer().dumps(payload), max_age=max_age, httponly=True,
                         samesite="strict", secure=config.cookie_secure(), path="/")
 
@@ -133,12 +136,33 @@ def clear_staff_cookie(response: Response) -> None:
 
 
 def hash_tag(password_hash: str) -> str:
-    """Końcówka hasha hasła w cookie: reset hasła unieważnia stare sesje wolontariusza."""
+    """Końcówka hasha hasła w cookie: reset hasła unieważnia stare sesje."""
     return password_hash[-8:]
 
 
+def _admin_tag() -> str:
+    """Odpowiednik ``hash_tag`` dla konta awaryjnego: zmiana ``ADMIN_SECRET`` unieważnia jego sesje."""
+    return hmac.new(config.secret_key().encode(), b"admin:" + config.admin_secret().encode(), "sha256").hexdigest()[:8]
+
+
+def verify_login(conn: sqlite3.Connection, login: str, password: str) -> dict | None:
+    """Sprawdza login i hasło (konto z bazy albo awaryjne ``admin`` + ``ADMIN_SECRET``).
+    Zwraca ``{login, role, ph}`` albo None."""
+    if login == ADMIN_LOGIN:
+        return {"login": login, "role": "admin", "ph": _admin_tag()} if check_admin_secret(password) else None
+    row = conn.execute("SELECT password_hash, role FROM volunteers WHERE login=?", (login,)).fetchone()
+    if row is None:
+        return None
+    try:
+        hasher.verify(row["password_hash"], password)
+    except (VerifyMismatchError, InvalidHashError):
+        return None
+    return {"login": login, "role": row["role"], "ph": hash_tag(row["password_hash"])}
+
+
 def current_staff(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict:
-    """Zweryfikowany personel: ``{role:'admin'}`` albo ``{role:'volunteer', booth:id, login}``. 401 gdy brak."""
+    """Zweryfikowany personel: ``{role, login, booth, ph}`` (``booth`` None, gdy nie wybrano). 401 gdy brak.
+    Rola pochodzi z bazy, więc degradacja i reset hasła działają od razu."""
     unauth = HTTPException(status.HTTP_401_UNAUTHORIZED, "Zaloguj się.")
     token = request.cookies.get(STAFF_COOKIE)
     if not token:
@@ -147,20 +171,24 @@ def current_staff(request: Request, conn: sqlite3.Connection = Depends(get_db)) 
         data, ts = _staff_serializer().loads(token, max_age=VOLUNTEER_MAX_AGE, return_timestamp=True)
     except BadSignature:
         raise unauth
-    role = data.get("role")
-    if role == "admin":
-        if (config.now() - ts).total_seconds() > ADMIN_MAX_AGE:
+    login = data.get("login") if isinstance(data, dict) else None
+    if not login:
+        raise unauth
+    if login == ADMIN_LOGIN:
+        if not config.admin_secret() or not hmac.compare_digest(_admin_tag(), str(data.get("ph", ""))):
             raise unauth
-        return {"role": "admin"}
-    if role == "volunteer":
-        login = data.get("login")
-        row = conn.execute("SELECT password_hash FROM volunteers WHERE login=?", (login,)).fetchone() if login else None
+        role = "admin"
+    else:
+        row = conn.execute("SELECT password_hash, role FROM volunteers WHERE login=?", (login,)).fetchone()
         if row is None or not hmac.compare_digest(hash_tag(row["password_hash"]), str(data.get("ph", ""))):
             raise unauth  # konto usunięte albo hasło zmienione
-        if conn.execute("SELECT 1 FROM booths WHERE id=?", (data.get("booth"),)).fetchone() is None:
-            raise unauth
-        return {"role": "volunteer", "booth": data["booth"], "login": login}
-    raise unauth
+        role = row["role"]
+    if role == "admin" and (config.now() - ts).total_seconds() > ADMIN_MAX_AGE:
+        raise unauth
+    booth = data.get("booth")
+    if booth and conn.execute("SELECT 1 FROM booths WHERE id=?", (booth,)).fetchone() is None:
+        booth = None
+    return {"role": role, "login": login, "booth": booth or None, "ph": str(data.get("ph", ""))}
 
 
 def optional_staff(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> dict | None:
@@ -183,11 +211,14 @@ def require_volunteer(staff: dict = Depends(current_staff)) -> dict:
 
 
 def resolve_booth(staff: dict, booth_id: str | None) -> str:
-    """Stoisko, na którym wolno działać: wolontariusz tylko swoje, admin podaje ``booth_id``."""
+    """Stoisko, na którym wolno działać: wolontariusz tylko wybrane, admin podaje ``booth_id`` albo używa wybranego."""
     if staff["role"] == "volunteer":
+        if not staff["booth"]:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Wybierz stoisko.")
         if booth_id and booth_id != staff["booth"]:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "To nie jest Twoje stoisko.")
         return staff["booth"]
-    if not booth_id:
+    bid = booth_id or staff["booth"]
+    if not bid:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Podaj booth_id.")
-    return booth_id
+    return bid

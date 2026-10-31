@@ -161,4 +161,4 @@ def test_wipe(admin, booth, client, monkeypatch):
     assert admin.get("/api/admin/dictionary").json() == dict_before
     assert not testing.is_armed("x")
     # konto wolontariusza nadal działa
-    assert admin.post("/api/volunteer/auth", json={"login": "tester", "password": "tajne-haslo1", "booth_id": booth}).status_code == 200
+    assert admin.post("/api/auth/login", json={"login": "tester", "password": "tajne-haslo1"}).status_code == 200

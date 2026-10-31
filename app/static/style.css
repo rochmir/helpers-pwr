@@ -99,6 +99,9 @@ ul.dots li::before { content: ''; position: absolute; left: .2rem; top: 1rem; wi
 .row { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; margin-bottom: 2.4rem; }
 .grid-3 { display: grid; gap: 2.4rem; grid-template-columns: 1fr; }
 @media (min-width: 768px) { .grid-3 { grid-template-columns: repeat(3, 1fr); } }
+.grid-4 { display: grid; gap: 2.4rem; grid-template-columns: 1fr; }
+@media (min-width: 768px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1200px) { .grid-4 { grid-template-columns: repeat(4, 1fr); } }
 .link-row { margin-top: 2.4rem; font-size: 1.4rem; color: var(--grey-dark); }
 
 /* ---------- naglowek ---------- */
@@ -400,6 +403,7 @@ progress.bar::-moz-progress-bar { background: var(--primary); border-radius: 9re
 .code-big { margin: .4rem 0 1.6rem; font: var(--fw-bold) clamp(3.2rem, 13vw, 7.2rem)/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; color: var(--primary); word-break: break-all; }
 .qr { display: block; margin: 0 auto 1.2rem; background: var(--white); padding: 1rem; border-radius: var(--radius-card); max-width: 100%; height: auto; }
 #code-qr { width: 28rem; }
+.promo-gen { margin-top: 1.6rem; }
 
 /* ---------- admin ---------- */
 .admin-nav { display: flex; gap: 0; flex-wrap: wrap; margin: 0 0 2.4rem; border-bottom: .2rem solid var(--grey-bg); }
@@ -545,3 +549,69 @@ progress.bar::-moz-progress-bar { background: var(--primary); border-radius: 9re
 .booth-list li { padding: 1.2rem 0; border-bottom: .2rem solid var(--grey-bg); font-size: 1.8rem; }
 .booth-list li:last-child { border-bottom: 0; }
 .kind-actual { color: var(--tertiary); font-weight: var(--fw-medium); }
+
+/* ---------- iteracja 4: zgoda, token trafienia, bitwa, panel ---------- */
+.check-row { display: flex; gap: 1.2rem; align-items: flex-start; margin: 2rem 0 .6rem; }
+.check-row label { margin: 0; font-weight: 400; font-size: 1.5rem; line-height: 2.2rem; }
+.check-row input[type="checkbox"] {
+  flex: none; width: 2.6rem; height: 2.6rem; padding: 0; margin: 0; cursor: pointer;
+  background-color: var(--white); background-repeat: no-repeat; background-position: center; background-size: 1.6rem;
+}
+.check-row input[type="checkbox"]:checked {
+  border-color: var(--primary); background-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='12' viewBox='0 0 16 12'%3E%3Cpath d='M1.5 6.5l4 4 9-9' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3C/svg%3E");
+}
+.check-row input[type="checkbox"]:focus-visible { outline: .3rem solid var(--tertiary); outline-offset: .2rem; }
+.check-row.is-invalid input[type="checkbox"] { border-color: var(--indication); }
+.win-token-box { margin: 2rem 0; }
+.win-token-box .code-big { font-size: clamp(2rem, 7.4vw, 5.2rem); word-break: normal; white-space: nowrap; letter-spacing: .02em; }
+.win-seq { margin: 0; font-weight: var(--fw-medium); color: var(--black-variant); }
+.steps-compact { grid-template-columns: 1fr; gap: 1.6rem; margin-bottom: 2.4rem; }
+@media (min-width: 768px) { .steps-compact { grid-template-columns: 1fr; gap: 1.6rem; } }
+.fact-gift { padding: 1.4rem 1.8rem; background: var(--secondary-dualtone); border-radius: .4rem; color: var(--black-variant); }
+.fact-gift i.ti { color: var(--secondary); }
+.method { font-size: 1.6rem; color: var(--grey-dark); }
+.method dt { font-weight: var(--fw-bold); color: var(--black); margin-top: 1.2rem; }
+.method dd { margin: .2rem 0 0; }
+.bar-sub { grid-column: 1 / -1; font-size: 1.3rem; line-height: 1.8rem; color: var(--grey-dark); }
+.rank { display: inline-block; min-width: 3.2rem; color: var(--primary); font-weight: var(--fw-bold); }
+.unranked-list { list-style: none; padding: 0; margin: 1.2rem 0 0; }
+.unranked-list li { display: flex; justify-content: space-between; gap: 1.2rem; padding: 1rem 0; border-bottom: .2rem solid var(--grey-bg); }
+.unranked-list li:last-child { border-bottom: 0; }
+.login-who { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; justify-content: space-between; margin-bottom: 2.4rem; }
+.login-who p { margin: 0; }
+.partner-grid { display: grid; gap: 1.6rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); list-style: none; padding: 0; margin: 0 0 2.4rem; }
+.partner-item { border: .2rem solid var(--grey-light); border-radius: var(--radius-card); padding: 1.2rem; text-align: center; font-size: 1.3rem; background: var(--white); }
+.partner-item img { display: block; max-width: 100%; max-height: 7rem; margin: 0 auto 1rem; object-fit: contain; }
+.share-row { display: flex; flex-wrap: wrap; gap: 1.2rem; justify-content: center; align-items: center; }
+.share-row .btn { margin-top: 0; }
+.download .share-row { margin-top: 0; }
+.section-hidden { display: none; }
+.hint-block { margin: 0 0 1.6rem; }
+@media (max-width: 575px) { .subnav a { padding-inline: 1.2rem; font-size: 1.5rem; } }
+.card .hint + .btn, .card .privacy + .btn { margin-top: 2rem; }
+
+/* ---------- okna dialogowe gry (startowe i koncowe) ---------- */
+.play-tools { margin: 0 0 1.2rem; text-align: right; }
+.dlg { width: min(56rem, calc(100vw - 3.2rem)); max-height: calc(100dvh - 3.2rem); padding: 0; border: .2rem solid var(--grey-light); border-radius: var(--radius-card); background: var(--white); color: var(--black); overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--shadow-hover); }
+.dlg::backdrop { background: rgba(40, 40, 50, .65); }
+.dlg-body { padding: 2.2rem; }
+.dlg-body > :last-child { margin-bottom: 0; }
+.dlg-body h2 { font-size: 2.7rem; line-height: 3.6rem; }
+.dlg-body h3 { font-size: 2.1rem; line-height: 3rem; font-weight: var(--fw-bold); margin-top: 2rem; }
+.dlg-body .lead { margin-bottom: 1.2rem; }
+.dlg-body .booth-list { margin-bottom: 1.2rem; }
+.dlg-body .booth-list li { font-size: 1.6rem; }
+.dlg-body .btn-block { margin-top: 1.6rem; }
+.dlg-cert { margin: 2rem 0; padding-top: .2rem; }
+.dlg-cert h3 { margin-top: 0; }
+.dlg .download-img { max-height: 50vh; }
+body:has(dialog[open]) { overflow: hidden; }
+@media (min-width: 768px) { .dlg-body { padding: 3.4rem; } }
+.dlg-cert .privacy + .btn { margin-top: 2rem; }
+
+/* okno startowe: zgoda przyciskiem */
+.consent-block { margin-top: 2rem; padding-top: 1.6rem; border-top: .2rem solid var(--grey-light); }
+.consent-block .consent-text { font-size: 1.5rem; line-height: 2.2rem; margin: 0 0 .6rem; }
+.consent-block .msg { margin: 1.4rem 0 0; }
+.consent-block .btn-block { margin-top: 1.6rem; }

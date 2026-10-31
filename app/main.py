@@ -1,19 +1,22 @@
 """Aplikacja FastAPI: routery, nagłówki bezpieczeństwa, strony statyczne."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
+from html import escape
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import captcha, config, db
-from .routes import admin, admin_test, donor, game, misc, raffle, stats, volunteer
+from .routes import admin, admin_test, donor, game, login, misc, partners, stats, volunteer
 
 log = logging.getLogger("helpersi")
 STATIC_DIR = Path(__file__).with_name("static")
@@ -39,14 +42,30 @@ ASSET_VERSION = _asset_version()
 VERSIONED_PREFIX = f"/static/v/{ASSET_VERSION}/"
 
 
+async def _rotate_salt_hourly():
+    """Sól dobowa rotuje także bez ruchu: klucz urządzenia znika następnego dnia, nawet po zakończeniu akcji."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            await asyncio.to_thread(db.rotate_device_salt)
+        except Exception:
+            log.exception("Rotacja soli dobowej nie powiodła się.")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
     if not captcha.enabled():
         log.warning("Turnstile wyłączony (brak TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY).")
     if not config.admin_secret():
-        log.warning("Brak ADMIN_SECRET — logowanie admina jest niemożliwe.")
+        log.warning("Brak ADMIN_SECRET — konto awaryjne admin jest niedostępne.")
+    for name in ("LEGAL_OWNER", "LEGAL_CONTACT"):
+        if not os.environ.get(name, "").strip():
+            log.warning("Brak %s, strony prawne pokażą „[do uzupełnienia]”.", name)
+    db.rotate_device_salt()
+    rotation = asyncio.create_task(_rotate_salt_hourly())
     yield
+    rotation.cancel()
 
 
 app = FastAPI(title="helpersi-pwr", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -82,12 +101,18 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": f"Niepoprawne dane{field}."}, status_code=422)
 
 
-for module in (misc, game, volunteer, donor, stats, admin, raffle, admin_test):
+for module in (misc, game, login, volunteer, donor, stats, partners, admin, admin_test):
     app.include_router(module.router)
 
 # --- strony ---------------------------------------------------------------------
-PAGES = {"/": "index.html", "/graj": "graj.html", "/wolontariusz": "wolontariusz.html",
-         "/potwierdz": "potwierdz.html", "/statystyki": "statystyki.html", "/admin": "admin.html"}
+PAGES = {"/": "index.html", "/graj": "graj.html", "/login": "login.html", "/potwierdz": "potwierdz.html",
+         "/statystyki": "statystyki.html", "/bitwa": "bitwa.html", "/regulamin": "regulamin.html",
+         "/polityka-prywatnosci": "polityka-prywatnosci.html"}
+# Ikony wstrzykiwane przed </head>; href zostaje przepisane na wersjonowany prefiks niżej.
+FAVICON_LINKS = ('<link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">'
+                 '<link rel="icon" href="/static/brand/favicon-32.png" sizes="32x32" type="image/png">'
+                 '<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">')
+PLACEHOLDER = "[do uzupełnienia]"
 
 
 def _page(filename: str):
@@ -96,7 +121,10 @@ def _page(filename: str):
         if not path.is_file():
             raise HTTPException(404, "Nie znaleziono strony.")
         html = path.read_text(encoding="utf-8")
+        html = html.replace("</head>", FAVICON_LINKS + "</head>")
         html = html.replace('src="/static/', f'src="{VERSIONED_PREFIX}').replace('href="/static/', f'href="{VERSIONED_PREFIX}')
+        html = html.replace("{{OWNER}}", escape(config.legal_owner() or PLACEHOLDER))
+        html = html.replace("{{CONTACT}}", escape(config.legal_contact() or PLACEHOLDER))
         return HTMLResponse(html)
     return handler
 
@@ -104,7 +132,20 @@ def _page(filename: str):
 for url, filename in PAGES.items():
     app.add_api_route(url, _page(filename), methods=["GET"], include_in_schema=False)
 
+
+@app.get("/admin", include_in_schema=False)
+@app.get("/wolontariusz", include_in_schema=False)
+def old_panels():
+    return RedirectResponse("/login", status_code=302)
+
+
 _stoisko = _page("stoisko.html")
+
+
+# Przeglądarki i systemy często pytają o /favicon.ico wprost.
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC_DIR / "brand" / "favicon-32.png", media_type="image/png")
 
 
 @app.get("/stoisko/{booth_id}", include_in_schema=False)

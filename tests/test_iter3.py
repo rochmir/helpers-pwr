@@ -93,6 +93,7 @@ def test_daily_pool_used_before_bonus_and_bonus_survives_midnight(admin, booth, 
     assert d["bonus_attempts"] == 9 and d["attempts_left"] == 9
     # kolejny dzień: znowu 5 dziennych + 9 bonusu (bonus nie wygasa)
     monkeypatch.setattr(config, "today", lambda: "2099-01-01")
+    enter(p, booth)  # nowy dzień, nowa sól: klucz urządzenia powstaje od nowa
     me = p.get("/api/game/me").json()
     assert me["attempts_left"] == 14 and me["bonus_attempts"] == 9 and me["best_today"] == 0
     # wyczerpanie wszystkiego
@@ -171,12 +172,13 @@ def test_expired_qr_token_rejected_at_enter(client, booth, monkeypatch):
     assert r.status_code == 403 and "Zeskanuj ponownie" in r.json()["detail"]
 
 
-def test_exhausted_player_gets_429_not_403(client, booth, monkeypatch):
+def test_expired_pass_gives_403_even_when_exhausted(client, booth, monkeypatch):
     new_session(client, booth)
     for _ in range(5):
         roll(client, booth)
-    set_clock(monkeypatch, config.now() + timedelta(minutes=config.PASS_MINUTES + 5))
     assert roll(client, booth).status_code == 429
+    set_clock(monkeypatch, config.now() + timedelta(minutes=config.PASS_MINUTES + 5))
+    assert roll(client, booth).status_code == 403  # przepustka sprawdzana przed limitem
 
 
 def test_booth_state_play_path_only_for_staff(admin, booth, other_clients):
@@ -206,6 +208,7 @@ def test_old_pin_cookie_session_no_longer_valid(booth, other_clients):
     v = other_clients()
     v.cookies.set(auth.STAFF_COOKIE, auth._staff_serializer().dumps({"role": "volunteer", "booth": "c13", "ph": "abcdefgh"}))
     assert v.get("/api/volunteer/me").status_code == 401
+    assert v.get("/api/auth/me").status_code == 401
 
 
 # --- konta wolontariuszy --------------------------------------------------------
@@ -216,7 +219,7 @@ def test_volunteer_account_lifecycle(admin, booth, other_clients):
     assert d["login"] == "ania-c13" and len(d["password"]) == 12
     assert not set(d["password"]) & set("0O1lI")
     lst = admin.get("/api/admin/volunteers").json()
-    assert [x["login"] for x in lst] == ["ania-c13", "tester"] and all(set(x) == {"login", "created_at"} for x in lst)
+    assert [x["login"] for x in lst] == ["ania-c13", "tester"] and all(set(x) == {"login", "role", "created_at"} for x in lst)
     assert d["password"] not in str(lst)
     v = volunteer(other_clients, login="ania-c13", password=d["password"])
     assert v.get("/api/volunteer/me").status_code == 200
@@ -239,7 +242,7 @@ def test_reset_password_invalidates_session(admin, booth, other_clients):
     assert r.status_code == 200 and len(r.json()["password"]) == 12
     assert v.get("/api/volunteer/me").status_code == 401
     other = other_clients()
-    assert other.post("/api/volunteer/auth", json={"login": "tester", "password": "tajne-haslo1", "booth_id": booth}).status_code == 401
+    assert other.post("/api/auth/login", json={"login": "tester", "password": "tajne-haslo1"}).status_code == 401
     assert volunteer(other_clients, password=r.json()["password"]).get("/api/volunteer/me").status_code == 200
     assert admin.post("/api/admin/volunteers/tester/reset-password", json={"password": "x"}).status_code == 422
     assert admin.post("/api/admin/volunteers/nikt/reset-password", json={}).status_code == 404

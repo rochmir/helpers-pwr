@@ -179,7 +179,8 @@ export function getConfig() {
 
 let tsScriptPromise = null;
 function loadTurnstileScript() {
-  if (window.turnstile) return Promise.resolve();
+  // id="turnstile" na stronie tworzy window.turnstile (element DOM), wiec sprawdzamy, czy jest tam API
+  if (window.turnstile && typeof window.turnstile.render === 'function') return Promise.resolve();
   if (!tsScriptPromise) {
     tsScriptPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');

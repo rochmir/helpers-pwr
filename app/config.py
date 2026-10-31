@@ -11,9 +11,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Warsaw")
-DAILY_ATTEMPTS = 5
+DAILY_ATTEMPTS = 5         # prób dziennie na każdym stanowisku
+DEVICE_TOLERANCE = 10      # domyślny sufit dla identycznych urządzeń (settings.device_tolerance, 1..50)
+CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; kody rejestracyjne i tokeny trafień
 REGISTER_BONUS = 10        # dodatkowe próby za rejestrację dawcy (nie wygasają o północy)
 REGISTER_BONUS_ACTUAL = 20   # dawca faktyczny (legitymacja)
+PROMO_BONUS = 5             # dodatkowe próby za kod „Dodatkowe losy” (promocja w mediach)
 PASS_MINUTES = 30          # ważność przepustki na stoisko po zeskanowaniu kodu QR
 
 
@@ -33,6 +36,14 @@ def admin_secret() -> str:
 
 def public_url() -> str:
     return os.environ.get("PUBLIC_URL", "https://helpers-pwr.rupary.pl").strip().rstrip("/")
+
+
+def legal_owner() -> str:
+    return os.environ.get("LEGAL_OWNER", "").strip()
+
+
+def legal_contact() -> str:
+    return os.environ.get("LEGAL_CONTACT", "").strip()
 
 
 def code_ttl_minutes() -> int:

@@ -274,3 +274,102 @@ CREATE TABLE IF NOT EXISTS); produkcyjna baza migruje się bez utraty danych.
       spośród jeszcze niewylosowanych (ponowne losowanie, gdy zwycięzca się nie zgłosi); 409 „Brak trafień do wylosowania.”
     - Admin: sekcja „Losowanie finałowe” (przycisk z potwierdzeniem, wynik jako kształty, historia losowań, lista wszystkich trafień).
     - `reset-my-game` zeruje też `won_genotype/won_at` sesji; `wipe` czyści `raffle_draws`.
+
+---
+## Iteracja 4 (nadpisuje wcześniejsze punkty; 2026-10-31)
+Ogólne: migracje idempotentne w `db._migrate`, baza prod zachowuje dane. Bez długich myślników w UI. Ikony tylko Tabler.
+Bez wymyślonych treści (mity o dawstwie, statystyki, adresy). Bez inline JS. Zmiany wizualne renderować i oglądać.
+Punkt 1 „Twardych zasad” zostaje poza jednym: dochodzi pseudonimowy, dobowy klucz urządzenia (pkt 2) oraz strony prawne.
+
+1. **Koniec losowania finałowego; każde 10/10 ma własny token.** Usunąć `routes/raffle.py`, sekcję admina, teksty o losowaniu,
+   `test_raffle.py`, tabelę `raffle_draws` (`DROP TABLE IF EXISTS`). Nowa tabela
+   `wins(token TEXT PK, seq INTEGER NOT NULL, genotype TEXT NOT NULL, booth_id TEXT NOT NULL, won_at TEXT NOT NULL, session_id TEXT NULL, is_test INTEGER NOT NULL DEFAULT 0)`.
+   Token `HG-XXXX-XXXX` z alfabetu `volunteer.CODE_ALPHABET` (`secrets`, retry na kolizji). `seq` = kolejny numer prawdziwych
+   trafień (w tej samej transakcji, `MAX(seq)+1` dla `is_test=0`), testowe mają `seq=0`. `db.record_win` tworzy wpis zawsze
+   (także `force-win`). `game_sessions.won_token`. Migracja dopisuje `wins` dla istniejących `genotype_history.matched_at`
+   (kolejność wg `matched_at`, z `is_test`, z sesją po `won_genotype`). `roll` dla wygranej i `game_state` zwracają
+   `won_token, won_seq, won_booth_name, won_genotype, won_at`. `GET /api/admin/wins` → `{count, wins:[{seq,token,genotype,booth_id,booth_name,won_at}]}`
+   (bez testowych, po `seq`). Admin: sekcja „Trafienia 10/10” (tabela, filtr po tokenie po stronie klienta).
+
+2. **Limit: 5 prób dziennie na każdym stanowisku, liczony po hashu urządzenia.** Działa między przeglądarkami.
+   - `static/fingerprint.js`: `deviceHash()` liczy SHA-256 (`crypto.subtle`) po stronie przeglądarki z sygnałów wspólnych dla
+     przeglądarek jednego urządzenia: rodzina systemu + major iOS (z UA), `min/max(screen.width,height)`, `colorDepth`,
+     `devicePixelRatio` (2 miejsca), `hardwareConcurrency`, `maxTouchPoints`, strefa czasowa. Bez canvasa, WebGL, audio, języka,
+     pamięci (różnią się między przeglądarkami). Surowe wartości nie opuszczają przeglądarki.
+   - Serwer: `POST /api/game/enter {booth_id,t,device,consent}`; `device` regex `^[0-9a-f]{64}$` (inaczej 422), `consent` musi być
+     `true` (inaczej 422 „Zaakceptuj regulamin i politykę prywatności.”). Sesja zapisuje `consent_at` i
+     `device_key = HMAC-SHA256(sól_dobowa, device)` (hex, 32 znaki). Surowego hasha nie zapisujemy.
+   - **Sól dobowa:** `settings.device_salt` = JSON `{date,salt}`, nowa losowa przy pierwszym użyciu danego dnia (Europe/Warsaw); wtedy też
+     `DELETE FROM booth_plays WHERE date<dziś` i `UPDATE game_sessions SET device_key=NULL`. Stara sól znika, więc klucza nie da się powiązać
+     między dniami. Dlatego hash nie blokuje drugiej wygranej w innej przeglądarce (OK: każde 10/10 ma własny token).
+   - Tabela `booth_plays(device_key, booth_id, date, session_id, attempts, PK(device_key,booth_id,date,session_id))`.
+   - **Tolerancja kolizji** `settings.device_tolerance` (int 1..10, domyślnie 3): identyczne modele telefonów dają ten sam hash. Na klucz+stoisko+dzień:
+     `pozostało = max(0, min(5 - moje_próby, 5*tolerancja - suma_prób_klucza))`. Przy 1 to twardy limit 5 na hash.
+   - `_roll`: najpierw przepustka i `device_key` (brak = 403 „Zeskanuj ponownie...”), potem limit: pula stanowiska, potem bonus (bonus sesyjny bez zmian).
+     429: „Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro.” `game_attempts` zostaje do `best` i podsumowań
+     (zawsze upsert wiersza dnia; `attempts` rośnie przy każdym rzucie z puli dziennej).
+   - `game_state`: gdy ważna przepustka, `attempts_left` = pula tego stanowiska + bonus; bez przepustki 5 + bonus. Dodatkowo `booth_left`.
+   - `reset-my-game`: kasuje też `booth_plays` sesji i `won_token`; `wipe`: `booth_plays`, `wins`.
+
+3. **Nagrody.** 6-10/10: drobny upominek na stanowisku (pokazanie wyniku wolontariuszowi, do wyczerpania zapasów). 10/10: certyfikat i komentarz
+   obalający mit o dawstwie szpiku pod postem podsumowującym rejestracje z danego dnia na Facebooku Samorządu, z certyfikatem w załączniku.
+   Link do Facebooka z `settings.facebook_url` (publicznie w `/api/config`); pusty = sam tekst, bez linku. `GET/PUT /api/admin/settings {device_tolerance, facebook_url}`
+   (URL musi zaczynać się od `https://`).
+
+4. **Bitwa Wydziałów** (`/bitwa`, osobno od `/statystyki`). `settings.faculty_students` = JSON `{source, counts:{kod:int}}`, seed z `app/seed_students.json` przy
+   pierwszym starcie. `stats.battle(conn, date=None)` → `ranking:[{rank,code,name,registered,students,per_1000}]` (`per_1000 = round(total/students*1000,2)`, malejąco, remis: więcej
+   rejestracji, potem kolejność słownika) i `unranked:[{code,name,registered}]` (bez liczby studentów oraz `INNE`). `GET /api/stats/battle` → `{ranking, unranked, source}`.
+   `GET/PUT /api/admin/students {source, counts:{kod:int|null}}` (kody ze słownika, 1..100000, source do 500 zn.). Admin: formularz wydział + pole liczby + pole źródła.
+   `/bitwa` pokazuje ranking wg przelicznika, liczby wejściowe, jawne źródło danych i metodę („rejestracje na 1000 studentów”). `/statystyki`: same liczby, bez rankingu bitwy.
+   `admin/summary` dostaje `battle` (top 3 rankingu w zakresie); grafika social pokazuje „Bitwa Wydziałów” wg przelicznika, a gdy pusto, `podium`.
+
+5. **`/login`: jeden panel dla wszystkich.** `login.html` + `login.js`; po zalogowaniu ta sama strona pokazuje funkcje wg rangi (sekcje z `admin.html` i `wolontariusz.html`
+   scalone, tamte pliki usunięte; `admin.js`/`wolontariusz.js` eksportują `initAdmin()`/`initVolunteer(me)` bez własnego logowania). `/admin` i `/wolontariusz` → 302 na `/login`.
+   - `volunteers.role` (`volunteer`|`admin`, domyślnie `volunteer`). Awaryjne konto: login `admin` + hasło `ADMIN_SECRET` (bez wiersza w bazie; login `admin` zastrzeżony).
+   - `POST /api/auth/login {login,password,cf_turnstile}` → `{login,role,booth:null}`, `POST /api/auth/logout`, `GET /api/auth/me` → `{login,role,booth:{id,name}|null}`,
+     `POST /api/auth/booth {booth_id}` ustawia stoisko w cookie. Zastępują `/api/volunteer/auth|logout`, `/api/admin/login|logout|me`. Throttle per login bez zmian.
+   - Rola czytana z bazy przy każdym żądaniu (degradacja działa od razu, reset hasła wylogowuje). Wolontariusz bez stoiska: 409 „Wybierz stoisko.” przy akcjach na stoisku.
+   - Admin: przy koncie wybór rangi, `PATCH /api/admin/volunteers/{login} {role}`; listy zwracają `role`.
+
+6. **Certyfikaty i grafiki: jeden wygląd.** W `cert.js` wspólna `drawFrame` (tło z łagodnym wzorem, nagłówek, pasek partnerów, czerwony pas) używana przez certyfikat gracza 10/10,
+   dawcy, dawcy faktycznego, nowy wynik gry i grafiki social. Wzór: kształty gry jako powtarzalny kafel, alfa ok. 0,05, nie może obniżać czytelności tekstu. Tytuł/akcent/treść w tym samym układzie, treść
+   wyśrodkowana w pionie (bez stałych `y`). 10/10: token, „Trafienie nr N”, data i godzina, stanowisko, wzór. Bez wzmianki o losowaniu.
+   **Partnerzy:** tabela `partners(id PK AUTOINCREMENT, name, filename)`, pliki w `$DATA_DIR/partners/`, serwowane `GET /partners/{plik}`. `GET /api/partners` publiczne → `[{id,name,url}]`.
+   `POST /api/admin/partners {name, filename, data_base64}` (JSON, do 1,5 MB, png/jpg/webp/svg sprawdzane po sygnaturze; svg bez `<script`, `on*=`, `foreignObject`, `href` zewnętrznych, musi mieć `width`+`height`) ,
+   `DELETE /api/admin/partners/{id}`. Admin: lista + formularz. Na grafikach pasek nad czerwonym pasem, tylko gdy są partnerzy; loga skalowane, by się zmieściły.
+
+7. **Udostępnij.** `showDownload` obok „Pobierz” dodaje „Udostępnij” (`navigator.share` z plikiem PNG, gdy `navigator.canShare({files})`, inaczej brak przycisku; blob gotowy przed kliknięciem; `AbortError` ignorowany).
+   Podpowiedź: „Udostępnij otwiera menu telefonu, wybierz np. Instagram lub Facebook. Obraz nie zapisuje się w galerii.”
+
+8. **Wynik dla każdego gracza.** Po pierwszym rzucie dostępny przycisk „Odbierz swój wynik”: `renderResultCert({nick, best, boothName, date})` (9:16, ten sam `drawFrame`), zachęca do gry, pokazuje adres `/graj`, bez zmyślonych danych.
+   Przy `best >= 6` ekran informuje o upominku na stanowisku; przy 10/10 instrukcja z pkt 3.
+
+9. **Prawo.** Strony `/polityka-prywatnosci`, `/regulamin` (statyczny HTML). Znaczniki `{{OWNER}}`, `{{CONTACT}}` podstawiane w `_page` z env `LEGAL_OWNER`, `LEGAL_CONTACT` (`html.escape`), puste = „[do uzupełnienia]” + ostrzeżenie w logu.
+   Linki w stopce każdej strony. `/graj`: przed pierwszym wejściem obowiązkowy checkbox „Akceptuję regulamin i politykę prywatności oraz zgadzam się na obliczenie identyfikatora urządzenia” (pamiętany w `localStorage.hp_consent`).
+   Pisać „pseudonimowy”, nigdy „anonimowy” o kluczu urządzenia.
+
+10. **Menu:** Graj, Wpisz kod ze stoiska, Bitwa Wydziałów, Statystyki. Stopka dodatkowo: Regulamin, Polityka prywatności, Logowanie. README i `.env.example` zaktualizować (role, prywatność, nowe env).
+
+---
+## Iteracja 5 (nadpisuje pkt 2 i 9 iteracji 4)
+1. **Dwa klucze urządzenia.** `fingerprint.js` eksportuje `deviceHashes()` → `{base, ext}`. `base` bez zmian (sygnały z iteracji 4). `ext` = SHA-256 z `base` + sygnałów różnicujących egzemplarze
+   tego samego modelu: wersja iOS major+minor z UA, `navigator.language`, `userAgentData.getHighEntropyValues(['model','platformVersion'])` (gdy dostępne), media queries (`prefers-reduced-motion`, `prefers-contrast`,
+   `prefers-reduced-transparency`, `inverted-colors`, `forced-colors`, `color-gamut`, `dynamic-range`; BEZ `prefers-color-scheme`, zmienia się o zachodzie słońca), wsparcie najnowszych emoji (wersja czcionki systemu, szerokość w canvas `measureText`, tylko tak/nie na próbnych znakach), wykrycie czcionek
+   (lista ok. 30 nazw: Samsung, Xiaomi, Huawei, Windows, macOS, iOS; porównanie `measureText` z czcionką zapasową, bez pikseli), lista głosów `speechSynthesis.getVoices()` (posortowane nazwy, czekaj na `voiceschanged` maks. 400 ms), `navigator.storage.estimate().quota`
+   zaokrąglone do potęgi 2, WebGL `UNMASKED_RENDERER_WEBGL` i `MAX_TEXTURE_SIZE`. Każdy sygnał w `try/catch`, brak = pusty. Całość nie może trwać dłużej niż 800 ms. Bez pikseli canvas i audio. Surowe wartości nie opuszczają przeglądarki.
+2. **Serwer.** `POST /api/game/enter` przyjmuje dodatkowo `device_ext` (ten sam regex, opcjonalne, brak = `device`). `game_sessions.device_ext_key`, `booth_plays.ext_key TEXT NOT NULL DEFAULT ''` (obie sole tą samą solą dobową, HMAC z innym prefiksem; rotacja zeruje też `device_ext_key`).
+   `booth_pool`: `max(0, min(5 - max(moje_próby, suma_prób_ext_key), 5*tolerancja - suma_prób_device_key))`. `device_tolerance` domyślnie 10, zakres 1..50: to teraz sufit dla identycznych urządzeń, limit 5 trzyma `ext`. Przy 1: twardy limit 5 na klucz podstawowy jak dotąd.
+   `GET /api/admin/settings` zwraca też `device_stats: {date, base_keys, ext_keys}` (liczby różnych kluczy dziś w `booth_plays`), panel pokazuje je w Ustawieniach, żeby ocenić kolizje na prawdziwych telefonach.
+3. **Zgoda w oknie startowym.** Bez checkboxa i bez osobnej sekcji startu. Okno startowe (HLA, zasady) pokazuje się przed grą, gdy brak `hp_consent` albo brak sesji; zawiera widget Turnstile, zdanie „Naciskając przycisk, akceptujesz regulamin i politykę prywatności oraz zgadzasz się na obliczenie identyfikatora urządzenia.” z linkami
+   i przycisk „Zaakceptuj i zagraj”, który zapisuje zgodę, tworzy sesję i wchodzi do gry. Okna nie da się zamknąć bez akceptacji (Esc zablokowany). „Zasady” otwiera je w trybie podglądu: bez zdania o zgodzie, przycisk „Zamknij”. `hp_intro` znika, wystarcza `hp_consent`.
+4. **Strony prawne:** polityka pkt a: dwa klucze, rozszerzona lista parametrów (czcionki, głosy syntezy mowy, język, ustawienia dostępności, pojemność pamięci, układ graficzny, model), zgoda przyciskiem zamiast checkboxa. Regulamin: „Zgoda zaznaczona przed pierwszą grą” → akceptacja przyciskiem w oknie startowym.
+
+---
+## Iteracja 6: kod „Dodatkowe losy” (promocja w mediach)
+Gracz pokazuje wolontariuszowi post (udostępniony wynik albo inny materiał promocyjny z oznaczeniem helpers_wroclaw i dkms_pl). Wolontariusz ocenia to sam, nic o poście nie zapisujemy (ani linku, ani konta).
+- Nowa tabela `promo_codes(code PK, booth_id NOT NULL REFERENCES booths(id), status CHECK IN ('ACTIVE','USED','EXPIRED'), created_at, used_at NULL)`, bo `registration_codes.kind` ma CHECK, którego SQLite nie pozwala zmienić. Ten sam format kodu i TTL co kody rejestracyjne, unikalność względem obu tabel, `expire_codes` wygasza obie.
+- `POST /api/volunteer/generate-code {kind:'promo'}` tworzy kod (bez karty, bez statystyk). Lista kodów w `/api/volunteer/me` i `/api/admin/codes` obejmuje też promo z `kind:'promo'`; anulowanie działa dla obu. `config.PROMO_BONUS = 5`.
+- `/potwierdz` (ten sam jeden formularz na kod): `check-code` zwraca `kind:'promo'`, wtedy strona ukrywa wydział, rok i certyfikat dawcy. `POST /api/donor/redeem-promo {code, cf_turnstile}` w jednej transakcji zużywa kod i dodaje `bonus_attempts` (sesja albo nowa, jak `register`); błędy jak `register` (404, 410). Odpowiedź: `bonus_attempts_granted, attempts_left, token, booth_name, play_path`. Nie dotyka `donors_stats`, Bitwy ani liczników rejestracji. `register` z kodem promo = 404. `wipe` czyści `promo_codes`.
+- Panel: przycisk „Dodatkowe losy” obok generowania kodu rejestracyjnego, z krótką instrukcją co sprawdzić; widoczny kod i QR jak dotąd.
+- Gra: w zasadach i w oknie końcowym informacja: udostępnij wynik lub inny materiał, oznacz helpers_wroclaw i dkms_pl, pokaż post wolontariuszowi, dostaniesz kod na 5 dodatkowych prób. Regulamin: ten sam zapis w zasadach gry. Polityka: bez zapisu postu i konta.
+

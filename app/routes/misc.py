@@ -18,9 +18,9 @@ def healthz():
 
 
 @router.get("/api/config")
-def get_config():
+def get_config(conn: sqlite3.Connection = Depends(db.get_db)):
     return {"turnstile_site_key": captcha.site_key() if captcha.enabled() else None,
-            "public_url": config.public_url()}
+            "public_url": config.public_url(), "facebook_url": db.get_setting(conn, "facebook_url") or None}
 
 
 @router.get("/api/qr.svg")

@@ -1,50 +1,27 @@
-import { api, $, h, icon, setMessage, formatTime, formatDateTime, qrUrl, loadTurnstile, requireToken } from './common.js';
+// Czesc panelu dla wolontariusza (kody i liczniki stoiska). Logowanie i wybor stoiska robi login.js.
+import { api, $, h, icon, setMessage, formatTime, formatDateTime, qrUrl } from './common.js';
 
-const prefillLogin = new URLSearchParams(location.search).get('login');
-
-const msg = $('#vol-msg');
-let ts = null;
-let isAdmin = false;
-let refreshTimer = null;
+const msg = $('#panel-msg');
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
+const KIND_PL = { potential: 'potencjalny', actual: 'faktyczny', promo: 'dodatkowe losy' };
+const CODE_LABEL = { potential: 'Kod rejestracyjny', actual: 'Kod dawcy faktycznego', promo: 'Kod Dodatkowe losy' };
+let refreshTimer = null;
+let ctx = { role: 'volunteer', boothId: '' };
+let wired = false;
 
 function show(id, on) { $('#' + id).hidden = !on; }
 
-async function loadBoothChoices() {
-  const sel = $('#booth-id');
-  if (sel.options.length > 1) return;
-  try {
-    for (const b of await api('GET', '/api/booths')) sel.append(h('option', { value: b.id }, b.name));
-  } catch (e) {
-    setMessage(msg, 'Nie udało się pobrać listy stoisk: ' + (e.detail || e.message), 'error');
-  }
-}
-
-async function showLogin() {
-  clearTimeout(refreshTimer);
-  show('panel-section', false);
-  show('login-section', true);
-  if (prefillLogin && !$('#login').value) {
-    $('#login').value = prefillLogin.trim().toLowerCase();
-    $('#password').focus();
-  }
-  loadBoothChoices();
-  if (!ts) {
-    try { ts = await loadTurnstile($('#turnstile')); } catch (e) { setMessage(msg, e.message, 'error'); }
-  }
-}
-
 function renderCodes(codes) {
-  const body = $('#codes-body');
+  const body = $('#vcodes-body');
   body.textContent = '';
-  $('#codes-empty').hidden = codes.length > 0;
+  $('#vcodes-empty').hidden = codes.length > 0;
   for (const c of codes) {
     const cancel = c.status === 'ACTIVE'
       ? h('button', { class: 'btn btn-small', type: 'button', 'data-cancel': c.code }, icon('ti-x'), 'Anuluj')
       : '';
     body.append(h('tr', { class: 'code-' + c.status.toLowerCase() },
       h('td', { class: 'mono' }, c.code),
-      h('td', {}, c.kind === 'actual' ? 'faktyczny' : 'potencjalny'),
+      h('td', {}, KIND_PL[c.kind] || c.kind),
       h('td', {}, h('span', { class: 'status-tag tag-' + c.status.toLowerCase() }, STATUS_PL[c.status] || c.status)),
       h('td', {}, formatDateTime(c.created_at)),
       h('td', {}, formatTime(c.expires_at)),
@@ -52,115 +29,92 @@ function renderCodes(codes) {
   }
 }
 
-async function loadAdminBooths(current) {
-  const sel = $('#admin-booth');
-  if (sel.options.length) return;
-  const booths = await api('GET', '/api/admin/booths');
-  for (const b of booths) sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
-  if (current) sel.value = current;
-}
-
-const meUrl = (boothId) => '/api/volunteer/me' + (boothId ? '?booth_id=' + encodeURIComponent(boothId) : '');
+const meUrl = () => '/api/volunteer/me' + (ctx.role === 'admin' && ctx.boothId ? '?booth_id=' + encodeURIComponent(ctx.boothId) : '');
 
 async function refresh() {
   clearTimeout(refreshTimer);
+  if (!ctx.boothId) return;
   try {
-    const sel = $('#admin-booth');
-    let me = await api('GET', meUrl(isAdmin ? sel.value : ''));
-    isAdmin = me.role === 'admin';
-    if (isAdmin) {
-      await loadAdminBooths(me.booth && me.booth.id);
-      // Admin bez wybranego stoiska: od razu pokaz pierwsze z listy.
-      if (!me.booth && sel.value) me = await api('GET', meUrl(sel.value));
-    }
-    show('login-section', false);
-    show('panel-section', true);
-    $('#vol-booth-name').textContent = me.booth ? me.booth.name : 'Administrator';
+    const me = await api('GET', meUrl());
+    $('#vol-booth-name').textContent = me.booth ? me.booth.name : '';
     $('#booth-screen-link').href = me.booth ? '/stoisko/' + encodeURIComponent(me.booth.id) : '/';
     $('#c-potential').textContent = me.registered_potential ?? 0;
     $('#c-actual').textContent = me.registered_actual ?? 0;
     $('#c-matches').textContent = me.matches_count ?? 0;
     $('#c-rolls').textContent = me.rolls_count ?? 0;
-    $('#admin-booth-pick').hidden = !isAdmin;
     renderCodes(me.codes || []);
     refreshTimer = setTimeout(refresh, 15000);
   } catch (e) {
-    if (e.status === 401 || e.status === 403) await showLogin();
-    else {
-      setMessage(msg, e.detail, 'error');
-      refreshTimer = setTimeout(refresh, 15000);
-    }
+    if (e.status === 401) { location.reload(); return; }
+    setMessage(msg, e.detail || e.message, 'error');
+    refreshTimer = setTimeout(refresh, 15000);
   }
 }
 
-$('#login-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  setMessage(msg, '');
-  try {
-    const cf = requireToken(ts);
-    await api('POST', '/api/volunteer/auth', {
-      login: $('#login').value.trim().toLowerCase(),
-      password: $('#password').value,
-      booth_id: $('#booth-id').value,
-      cf_turnstile: cf ?? null,
-    });
-    $('#password').value = '';
-    await refresh();
-  } catch (e) {
-    setMessage(msg, e.status === 401 ? 'Błędny login lub hasło.' : (e.detail || e.message), 'error');
-  } finally {
-    if (ts) ts.reset();
-  }
-});
+function wire() {
+  if (wired) return;
+  wired = true;
 
-$('#gen-btn').addEventListener('click', async () => {
-  const btn = $('#gen-btn');
-  btn.disabled = true;
-  setMessage(msg, '');
-  try {
-    const body = isAdmin ? { booth_id: $('#admin-booth').value } : {};
-    body.kind = $('#code-kind').value;
-    if (body.kind === 'actual') {
-      body.card_number = $('#card-number').value;
-      body.card_date = $('#card-date').value;
-      if (!body.card_number.trim() || !body.card_date) throw Object.assign(new Error('Podaj numer legitymacji i datę jej wydania.'), { detail: 'Podaj numer legitymacji i datę jej wydania.' });
+  // kind: 'potential' | 'actual' (z formularza) albo 'promo' (przycisk Dodatkowe losy)
+  async function generate(kind) {
+    const buttons = [$('#gen-btn'), $('#promo-btn')];
+    for (const x of buttons) x.disabled = true;
+    setMessage(msg, '');
+    try {
+      const body = ctx.role === 'admin' ? { booth_id: ctx.boothId } : {};
+      body.kind = kind;
+      if (kind === 'actual') {
+        body.card_number = $('#card-number').value;
+        body.card_date = $('#card-date').value;
+        if (!body.card_number.trim() || !body.card_date) throw Object.assign(new Error('Podaj numer legitymacji i datę jej wydania.'), { detail: 'Podaj numer legitymacji i datę jej wydania.' });
+      }
+      const r = await api('POST', '/api/volunteer/generate-code', body);
+      $('#code-big').textContent = r.code;
+      $('#code-qr').src = qrUrl(r.confirm_path);
+      $('#code-expires').textContent = formatTime(r.expires_at);
+      $('#code-kind-label').textContent = CODE_LABEL[r.kind] || 'Kod rejestracyjny';
+      if (r.kind === 'actual') { $('#card-number').value = ''; $('#card-date').value = ''; }
+      show('code-box', true);
+      await refresh();
+    } catch (e) {
+      setMessage(msg, e.detail || e.message, 'error');
+    } finally {
+      for (const x of buttons) x.disabled = false;
     }
-    const r = await api('POST', '/api/volunteer/generate-code', body);
-    $('#code-big').textContent = r.code;
-    $('#code-qr').src = qrUrl(r.confirm_path);
-    $('#code-expires').textContent = formatTime(r.expires_at);
-    $('#code-kind-label').textContent = r.kind === 'actual' ? 'Kod dawcy faktycznego' : 'Kod rejestracyjny';
-    if (r.kind === 'actual') { $('#card-number').value = ''; $('#card-date').value = ''; }
-    show('code-box', true);
-    await refresh();
-  } catch (e) {
-    setMessage(msg, e.detail, 'error');
-  } finally {
-    btn.disabled = false;
   }
-});
 
-$('#codes-body').addEventListener('click', async (ev) => {
-  const btn = ev.target.closest && ev.target.closest('[data-cancel]');
-  if (!btn) return;
-  try {
-    await api('POST', '/api/volunteer/codes/' + encodeURIComponent(btn.getAttribute('data-cancel')) + '/cancel');
-    await refresh();
-  } catch (e) {
-    setMessage(msg, e.detail, 'error');
+  $('#gen-btn').addEventListener('click', () => generate($('#code-kind').value));
+  $('#promo-btn').addEventListener('click', () => generate('promo'));
+
+  $('#vcodes-body').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest && ev.target.closest('[data-cancel]');
+    if (!btn) return;
+    try {
+      await api('POST', '/api/volunteer/codes/' + encodeURIComponent(btn.getAttribute('data-cancel')) + '/cancel');
+      await refresh();
+    } catch (e) {
+      setMessage(msg, e.detail, 'error');
+    }
+  });
+
+  $('#code-kind').addEventListener('change', () => { $('#actual-fields').hidden = $('#code-kind').value !== 'actual'; });
+}
+
+/** Uruchamia (lub przelacza na inne stoisko) czesc wolontariusza. me = { role, booth: {id,name}|null }. */
+export function initVolunteer(me) {
+  wire();
+  const boothId = me && me.booth ? me.booth.id : '';
+  if (boothId !== ctx.boothId) show('code-box', false);
+  ctx = { role: me ? me.role : 'volunteer', boothId };
+  if (!boothId) {
+    clearTimeout(refreshTimer);
+    return Promise.resolve();
   }
-});
+  return refresh();
+}
 
-$('#logout-btn').addEventListener('click', async () => {
-  try { await api('POST', '/api/volunteer/logout'); } catch (e) { /* ignoruj */ }
+export function stopVolunteer() {
+  clearTimeout(refreshTimer);
   show('code-box', false);
-  isAdmin = false;
-  $('#admin-booth').textContent = '';
-  await showLogin();
-});
-
-$('#code-kind').addEventListener('change', () => { $('#actual-fields').hidden = $('#code-kind').value !== 'actual'; });
-
-$('#admin-booth').addEventListener('change', () => { show('code-box', false); refresh(); });
-
-refresh();
+  ctx = { role: 'volunteer', boothId: '' };
+}

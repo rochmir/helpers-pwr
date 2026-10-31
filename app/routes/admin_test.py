@@ -1,4 +1,4 @@
-"""Narzędzia testowe admina (/api/admin/test/*): wymuszenie trafienia, uzbrojenie losowania, dane sztuczne, wipe."""
+"""Narzędzia testowe admina (/api/admin/test/*): wymuszenie trafienia, uzbrojenie rzutu, dane sztuczne, wipe."""
 from __future__ import annotations
 
 import random
@@ -34,7 +34,7 @@ def force_win(body: ForceWinIn, _: dict = Depends(auth.require_admin), conn: sql
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (body.booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
-        old, new = db.record_win(conn, body.booth_id, is_test=True)
+        old, new, _ = db.record_win(conn, body.booth_id, is_test=True)
     return {"old_genotype": old, "new_genotype": new}
 
 
@@ -53,7 +53,9 @@ def reset_my_game(sid: str | None = Depends(auth.optional_game_session), _: dict
         raise HTTPException(400, "Najpierw otwórz /graj w tej przeglądarce.")
     with db.tx(conn):
         conn.execute("DELETE FROM game_attempts WHERE session_id=? AND date=?", (sid, config.today()))
-        conn.execute("UPDATE game_sessions SET has_won=0, bonus_attempts=0, won_genotype=NULL, won_at=NULL WHERE session_id=?", (sid,))
+        conn.execute("DELETE FROM booth_plays WHERE session_id=?", (sid,))
+        conn.execute("UPDATE game_sessions SET has_won=0, bonus_attempts=0, won_genotype=NULL, won_at=NULL, "
+                     "won_token=NULL WHERE session_id=?", (sid,))
     return {"ok": True, "attempts_left": _attempts_left(conn, sid)}
 
 
@@ -83,8 +85,8 @@ def wipe(body: WipeIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Conn
     if body.confirm != WIPE_CONFIRM:
         raise HTTPException(400, f"Aby usunąć dane, wpisz „{WIPE_CONFIRM}”.")
     with db.tx(conn):
-        for table in ("raffle_draws", "donors_stats", "registration_codes", "game_sessions", "game_attempts", "genotype_history",
-                      "actual_donor_cards"):
+        for table in ("donors_stats", "registration_codes", "promo_codes", "game_sessions", "game_attempts", "booth_plays",
+                      "genotype_history", "actual_donor_cards", "wins"):
             conn.execute(f"DELETE FROM {table}")
         conn.execute("UPDATE booths SET matches_count=0, rolls_count=0")
         for r in conn.execute("SELECT id FROM booths").fetchall():

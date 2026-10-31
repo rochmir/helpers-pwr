@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polityka prywatności · Helpers' Generation</title>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="page-legal">
+<header class="site-header">
+  <div class="container header-row">
+    <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
+      <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
+      <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+      <span class="brand-sep" aria-hidden="true"></span>
+      <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+    </a>
+    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
+  </div>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a></div></nav>
+</header>
+<section class="hero hero-small">
+  <div class="container">
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Polityka prywatności</h1><p class="lead">Prosto o tym, jakie dane przetwarzamy w grze HLA Match Maker i po co.</p>
+    <p class="lead">Ostatnia aktualizacja: 31 października 2026</p>
+  </div>
+</section>
+<main class="section section-tight">
+<div class="container">
+  <section class="card">
+    <h2>1. Kto jest administratorem</h2>
+    <p>Administratorem danych jest {{OWNER}}, właściciel domeny i serwera tej strony. Kontakt: {{CONTACT}}.</p>
+    <p>To strona akcji studenckiej, nie oficjalna strona Fundacji DKMS. DKMS nie jest administratorem danych zbieranych na tej stronie. Rejestracja w bazie Dawców odbywa się na stoisku, na zasadach Fundacji DKMS.</p>
+  </section>
+
+  <section class="card">
+    <h2>2. Co przetwarzamy</h2>
+    <p>Podstawy prawne to RODO art. 6 ust. 1 lit. a (zgoda) oraz lit. f (nasz uzasadniony interes: prowadzenie gry i statystyk akcji).</p>
+    <h3>a) Identyfikator urządzenia</h3>
+    <ul>
+      <li><strong>Jak działa:</strong> przeglądarka liczy na telefonie dwa skróty. Pierwszy powstaje z parametrów wspólnych dla przeglądarek jednego urządzenia: system, rozmiar i głębia kolorów ekranu, liczba rdzeni, ekran dotykowy, strefa czasowa. Drugi dodaje parametry odróżniające egzemplarze tego samego modelu: wersję systemu, język, model telefonu i wersję platformy (gdy przeglądarka je udostępnia), ustawienia dostępności (ograniczenie animacji, kontrast, przezroczystość, odwrócenie i wymuszenie kolorów), gamę kolorów i zakres dynamiki ekranu, obsługę nowszych emoji, listę zainstalowanych czcionek (z krótkiej listy znanych nazw), listę głosów syntezy mowy, pojemność pamięci przeglądarki (zaokrągloną do potęgi dwójki) oraz układ graficzny i maksymalny rozmiar tekstury. Nie czytamy pikseli canvas ani dźwięku. Surowe wartości nie opuszczają telefonu. Serwer zamienia oba skróty kluczem dobowym na dwa pseudonimowe klucze. Surowych skrótów nie zapisuje.</li>
+      <li><strong>Cel:</strong> limit 5 prób dziennie na stanowisko. Klucz rozszerzony pilnuje limitu dla jednego egzemplarza telefonu, klucz podstawowy pozwala nie blokować osób z identycznym modelem.</li>
+      <li><strong>Podstawa:</strong> zgoda wyrażona przyciskiem „Zaakceptuj i zagraj” w oknie startowym przed grą, także na dostęp do informacji w urządzeniu: art. 399 ustawy Prawo komunikacji elektronicznej (Dz.U. 2024 poz. 1221).</li>
+      <li><strong>Okres:</strong> oba klucze i liczniki prób są kasowane następnego dnia razem z kluczem dobowym.</li>
+      <li><strong>Ważne:</strong> to dane pseudonimowe, nie anonimowe. Traktujemy je jako dane osobowe.</li>
+      <li><strong>Cofnięcie zgody:</strong> wyczyść dane strony w przeglądarce albo napisz na {{CONTACT}}. Skutek: nie zagrasz dalej.</li>
+    </ul>
+    <h3>b) Sesja gry</h3>
+    <p>Losowy identyfikator sesji, moment wyrażenia zgody, liczba prób, najlepszy wynik dnia i bonus prób. Cel: prowadzenie gry. Podstawa: zgoda i uzasadniony interes.</p>
+    <h3>c) Trafienia 10/10</h3>
+    <p>Token w formacie HG-XXXX-XXXX, numer kolejny, wzór, data i stanowisko. Token jest na certyfikacie. Kto opublikuje certyfikat, ujawnia token sam.</p>
+    <h3>d) Statystyki po wpisaniu kodu ze stoiska</h3>
+    <p>Wydział, rok studiów, data i stoisko. Bez kodu i bez godziny, więc wpisu nie da się powiązać z osobą. Osobno trzymamy listę wydanych kodów (kod, stoisko, status, czas), bez powiązania z tym wpisem.</p>
+    <h3>Kod „Dodatkowe losy”</h3>
+    <p>Posta pokazujesz wolontariuszowi na swoim telefonie. Nie zapisujemy ani posta, ani linku, ani nazwy Twojego konta w mediach społecznościowych. Zapisujemy tylko kod (stoisko, status, czas) i dodatkowe próby w Twojej sesji gry. Kod nie trafia do statystyk rejestracji.</p>
+    <h3>e) Legitymacja dawcy faktycznego</h3>
+    <p>Zapisujemy tylko skrót HMAC numeru i daty. Służy wyłącznie do blokady podwójnej rejestracji.</p>
+    <h3>f) Konta personelu</h3>
+    <p>Login (pseudonim), hash hasła i ranga. Cel: obsługa stoisk i panelu. Okres: do końca akcji.</p>
+    <h3>Jak długo</h3>
+    <p>Dane z punktów b, c, d i e przechowujemy do 6 miesięcy po zakończeniu akcji. Dane z punktu f do końca akcji. Dane z punktu a krócej, jak opisano wyżej.</p>
+  </section>
+
+  <section class="card">
+    <h2>3. Czego nie zbieramy</h2>
+    <ul>
+      <li>Imię, ksywka i nazwisko na certyfikatach zostają tylko w Twojej przeglądarce. Serwer ich nie zapisuje.</li>
+      <li>Serwer aplikacji nie zapisuje adresów IP.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>4. Cloudflare</h2>
+    <p>Ruch do strony przechodzi przez Cloudflare (tunel). Używamy też Turnstile, czyli ochrony przed botami. Cloudflare technicznie widzi adres IP i dane żądania. Do weryfikacji Turnstile nie wysyłamy adresu IP.</p>
+    <p>Odbiorca: Cloudflare, Inc. Dane mogą trafić do USA, na zasadach Data Privacy Framework lub standardowych klauzul umownych, zgodnie z umową powierzenia Cloudflare. Nie weryfikowaliśmy sami certyfikacji Cloudflare.</p>
+  </section>
+
+  <section class="card">
+    <h2>5. Facebook i udostępnianie</h2>
+    <p>Komentarz z certyfikatem pod postem na Facebooku to Twoje dobrowolne działanie na platformie Meta. Dzieje się poza tą stroną i na zasadach tej platformy.</p>
+    <p>Przycisk „Udostępnij” przekazuje obraz do aplikacji, którą wybierzesz na telefonie. Wybiera ją użytkownik, nie nasz serwer.</p>
+  </section>
+
+  <section class="card">
+    <h2>6. Cookies i pamięć przeglądarki</h2>
+    <ul>
+      <li><strong>hp_game</strong> (cookie): sesja gry, 30 dni.</li>
+      <li><strong>hp_staff</strong> (cookie): logowanie personelu, do 14 godzin.</li>
+      <li><strong>hp_game</strong> i <strong>hp_consent</strong> (localStorage): dane gry i zapamiętana zgoda.</li>
+      <li>Cookies Turnstile, jeśli Cloudflare je ustawi.</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>7. Twoje prawa</h2>
+    <p>Masz prawo do dostępu do danych, sprostowania, usunięcia, ograniczenia przetwarzania, sprzeciwu i cofnięcia zgody. Możesz złożyć skargę do Prezesa UODO. Napisz na {{CONTACT}}.</p>
+    <p>Nie profilujemy użytkowników i nie podejmujemy zautomatyzowanych decyzji o skutkach prawnych. Limit prób to tylko mechanizm gry.</p>
+    <p>Uwaga praktyczna: bez nazwiska zwykle nie zidentyfikujemy osoby w naszych danych. Możesz podać token z certyfikatu, wtedy znajdziemy wpis (art. 11 RODO).</p>
+  </section>
+
+  <section class="card">
+    <h2>8. Limit nie jest doskonały</h2>
+    <p>Identyfikator urządzenia nie służy do rozpoznawania osób. Dwa takie same telefony mogą dać ten sam skrót, więc limit bywa dla nich wspólny.</p>
+  </section>
+
+
+</div>
+</main>
+<footer class="site-footer">
+  <div class="footer-main"><div class="container">
+    <div>
+      <div class="footer-logos">
+        <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
+        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
+        <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
+      </div>
+      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+    </div>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a><a href="/regulamin">Regulamin</a><a href="/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
+  </div></div>
+  <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
+</footer>
+</body>
+</html>

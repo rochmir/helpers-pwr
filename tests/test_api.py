@@ -19,14 +19,22 @@ def new_session(c, booth=None):
     return r.json()
 
 
-def enter(c, booth, t=None):
+DEVICE = "ab" * 32
+
+
+def enter(c, booth, t=None, device=DEVICE, consent=True, device_ext=None):
     from app import qrtoken
-    return c.post("/api/game/enter", json={"booth_id": booth, "t": t or qrtoken.current(booth)})
+    body = {"booth_id": booth, "t": t or qrtoken.current(booth), "device": device, "consent": consent}
+    if device_ext is not None:
+        body["device_ext"] = device_ext
+    return c.post("/api/game/enter", json=body)
 
 
 def volunteer(other_clients, booth="c13", login="tester", password="tajne-haslo1"):
     v = other_clients()
-    r = v.post("/api/volunteer/auth", json={"login": login, "password": password, "booth_id": booth})
+    r = v.post("/api/auth/login", json={"login": login, "password": password})
+    assert r.status_code == 200, r.text
+    r = v.post("/api/auth/booth", json={"booth_id": booth})
     assert r.status_code == 200, r.text
     return v
 
@@ -72,10 +80,13 @@ def test_roll_limit_then_daily_reset(client, booth, monkeypatch):
     for i in range(5):
         assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200
     r = client.post("/api/game/roll", json={"booth_id": booth})
-    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and r.json()["detail"]
+    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and "Limit prób na tym stanowisku" in r.json()["detail"]
     assert client.get(f"/api/booth/{booth}/state").json()["rolls_count"] == 5
     monkeypatch.setattr(config, "today", lambda: "2099-01-01")
     assert client.get("/api/game/me").json()["attempts_left"] == 5
+    # sól dobowa się zmieniła, więc klucz urządzenia znikł: trzeba ponownie zeskanować kod ze stoiska
+    assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 403
+    assert enter(client, booth).status_code == 200
     assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200
 
 
@@ -116,24 +127,34 @@ def test_header_token_fallback(client, booth):
 # --- wolontariusz ---------------------------------------------------------------
 def test_volunteer_auth(booth, other_clients):
     v = other_clients()
-    ok = {"login": "tester", "password": "tajne-haslo1", "booth_id": "c13"}
-    assert v.post("/api/volunteer/auth", json={**ok, "password": "zle-haslo-1"}).status_code == 401
-    assert v.post("/api/volunteer/auth", json={**ok, "login": "nikt"}).status_code == 401
-    assert v.post("/api/volunteer/auth", json={**ok, "booth_id": "zzz"}).status_code == 404
+    ok = {"login": "tester", "password": "tajne-haslo1"}
+    assert v.post("/api/auth/login", json={**ok, "password": "zle-haslo-1"}).status_code == 401
+    assert v.post("/api/auth/login", json={**ok, "login": "nikt"}).status_code == 401
+    assert v.get("/api/auth/me").status_code == 401
     assert v.get("/api/volunteer/me").status_code == 401
-    r = v.post("/api/volunteer/auth", json={**ok, "login": " Tester "})  # login bez rozróżniania wielkości liter
-    assert r.status_code == 200 and r.json() == {"booth": {"id": "c13", "name": "Budynek C-13"}}
+    r = v.post("/api/auth/login", json={**ok, "login": " Tester "})  # login bez rozróżniania wielkości liter
+    assert r.status_code == 200 and r.json() == {"login": "tester", "role": "volunteer", "booth": None}
+    assert v.get("/api/auth/me").json() == {"login": "tester", "role": "volunteer", "booth": None}
+    # bez stoiska akcje na stoisku dają 409
+    assert v.get("/api/volunteer/me").status_code == 409
+    assert v.post("/api/volunteer/generate-code", json={}).status_code == 409
+    assert v.post("/api/auth/booth", json={"booth_id": "zzz"}).status_code == 404
+    r = v.post("/api/auth/booth", json={"booth_id": "c13"})
+    assert r.status_code == 200 and r.json()["booth"] == {"id": "c13", "name": "Budynek C-13"}
+    assert v.get("/api/auth/me").json()["booth"] == {"id": "c13", "name": "Budynek C-13"}
     me = v.get("/api/volunteer/me").json()
     assert me["role"] == "volunteer" and me["booth"]["id"] == "c13" and me["codes"] == []
+    v.post("/api/auth/logout", json={})
+    assert v.get("/api/auth/me").status_code == 401
 
 
 def test_volunteer_throttle(booth, other_clients):
     v = other_clients()
-    bad = {"login": "tester", "password": "zle-haslo-1", "booth_id": "c13"}
+    bad = {"login": "tester", "password": "zle-haslo-1"}
     for _ in range(10):
-        assert v.post("/api/volunteer/auth", json=bad).status_code == 401
+        assert v.post("/api/auth/login", json=bad).status_code == 401
     # po 10 błędach nawet dobre hasło jest blokowane (per login)
-    assert v.post("/api/volunteer/auth", json={**bad, "password": "tajne-haslo1"}).status_code == 429
+    assert v.post("/api/auth/login", json={**bad, "password": "tajne-haslo1"}).status_code == 429
 
 
 def test_volunteer_permissions(admin, booth, other_clients):
@@ -142,7 +163,7 @@ def test_volunteer_permissions(admin, booth, other_clients):
     assert v.post("/api/volunteer/generate-code", json={"booth_id": "w4"}).status_code == 403
     code = make_code(v)
     assert CODE_RE.match(code)
-    for path in ("/api/admin/booths", "/api/admin/me", "/api/admin/codes", "/api/admin/dictionary",
+    for path in ("/api/admin/booths", "/api/admin/wins", "/api/admin/settings", "/api/admin/students", "/api/admin/codes", "/api/admin/dictionary",
                  "/api/admin/summary", "/api/admin/days", "/api/admin/export-csv", "/api/admin/volunteers"):
         assert v.get(path).status_code == 403, path
     assert v.put("/api/admin/dictionary", json={"faculties": []}).status_code == 403
@@ -157,12 +178,17 @@ def test_volunteer_permissions(admin, booth, other_clients):
 
 
 def test_admin_login(client):
-    assert client.post("/api/admin/login", json={"secret": "zly"}).status_code == 401
-    assert client.get("/api/admin/me").status_code == 401
-    assert client.post("/api/admin/login", json={"secret": "test-admin-secret"}).json() == {"role": "admin"}
-    assert client.get("/api/admin/me").json() == {"role": "admin"}
-    client.post("/api/admin/logout", json={})
-    assert client.get("/api/admin/me").status_code == 401
+    assert client.post("/api/auth/login", json={"login": "admin", "password": "zly"}).status_code == 401
+    assert client.get("/api/auth/me").status_code == 401
+    r = client.post("/api/auth/login", json={"login": "admin", "password": "test-admin-secret"})
+    assert r.json() == {"login": "admin", "role": "admin", "booth": None}
+    assert client.get("/api/auth/me").json() == {"login": "admin", "role": "admin", "booth": None}
+    assert client.get("/api/admin/booths").status_code == 200
+    client.post("/api/auth/logout", json={})
+    assert client.get("/api/auth/me").status_code == 401
+    # stare punkty logowania nie istnieją
+    assert client.post("/api/admin/login", json={"secret": "test-admin-secret"}).status_code == 404
+    assert client.post("/api/volunteer/auth", json={}).status_code == 404
 
 
 def test_code_generation_format(admin, booth):
@@ -346,7 +372,7 @@ def test_headers(client):
     assert r.headers["pragma"] == "no-cache"
     assert "challenges.cloudflare.com" in r.headers["content-security-policy"]
     assert r.headers["x-content-type-options"] == "nosniff" and r.headers["referrer-policy"] == "same-origin"
-    assert r.json() == {"turnstile_site_key": None, "public_url": "https://helpers-pwr.rupary.pl"}
+    assert r.json() == {"turnstile_site_key": None, "public_url": "https://helpers-pwr.rupary.pl", "facebook_url": None}
     h = client.get("/healthz")
     assert h.json() == {"ok": True} and "content-security-policy" in h.headers and h.headers["cache-control"] == "no-cache"
 

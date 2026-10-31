@@ -1,10 +1,10 @@
-// Certyfikaty i grafika social media rysowane na canvasie w tozsamosci DKMS / Helpers' Generation:
-// biale tlo, czerwony (#E2001A) akcent, logotypy DKMS i PWr (SVG z /static/brand/), font Inter (lokalny).
-// Funkcje drawPlayerCert / drawDonorCert / drawSocial mozna podmienic; reszta (fonty, canvas, PNG, <img>) zostaje.
+// Certyfikaty i grafiki rysowane na canvasie w tozsamosci DKMS / Helpers' Generation.
+// Wszystkie grafiki (gracz 10/10, dawca, dawca faktyczny, wynik gry, social) korzystaja z jednej ramki drawFrame
+// (tlo z lagodnym wzorem, naglowek z logotypami, pasek partnerow, czerwony pas) i jednego ukladu tresci:
+// lista blokow (tytul, akcent, tekst...) ustawiana pionowo na srodku obszaru miedzy naglowkiem a paskiem.
 // Prywatnosc: imiona/ksywki sa uzywane wylacznie w canvasie, nigdy nie trafiaja na serwer.
-// Na certyfikacie gracza widac wzor i czas trafienia (dane z serwera, anonimowe) - to dowod w losowaniu finalowym.
 
-import { h, icon, facultyLabel, formatWarsaw } from './common.js';
+import { h, icon, facultyLabel, formatWarsaw, getConfig } from './common.js';
 
 export const FONT_FAMILY = "'Inter', system-ui, sans-serif";
 
@@ -126,18 +126,34 @@ function fitFont(ctx, text, maxWidth, startPx, weight = '800') {
   return px + 4;
 }
 
-function setup(canvas) {
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = C.black;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'alphabetic';
-  return ctx;
+
+// ---------- partnerzy ----------
+
+/** Pobiera liste partnerow (/api/partners) i ich obrazy. Blad lub brak = pusta lista (pasek sie nie rysuje). */
+async function loadPartners() {
+  let list = [];
+  try {
+    const res = await fetch('/api/partners', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+    if (res.ok) list = await res.json();
+  } catch (e) { list = []; }
+  if (!Array.isArray(list)) return [];
+  const loaded = await Promise.all(list.map(async (p) => {
+    try {
+      const img = new Image();
+      img.src = p.url;
+      await img.decode();
+      const w = img.naturalWidth || img.width;
+      const hh = img.naturalHeight || img.height;
+      if (!w || !hh) return null;
+      return { img, ratio: w / hh };
+    } catch (e) { return null; }
+  }));
+  return loaded.filter(Boolean);
 }
 
-// Kolory ksztaltow jak w grze (style.css: --shape-0..3).
-const SHAPE_COLORS = ['#2c5a82', '#e2001a', '#30783e', '#ffb500'];
+// ---------- ramka wspolna dla wszystkich grafik ----------
+
+const SHAPE_COLORS = ['#2c5a82', '#e2001a', '#30783e', '#ffb500']; // jak w grze (style.css: --shape-0..3)
 
 /** Wypelniony ksztalt genotypu (0 trojkat, 1 kolo, 2 kwadrat, 3 gwiazdka) wpisany w kolo o promieniu r. */
 function drawShape(ctx, idx, cx, cy, r) {
@@ -166,11 +182,134 @@ function drawShape(ctx, idx, cx, cy, r) {
   ctx.fill();
 }
 
-/** Rzad ksztaltow genotypu w bialych komorkach z szara ramka, wysrodkowany; zwraca y pod rzedem. */
-function drawGenotypeRow(ctx, genotype, W, top, maxW) {
+/** Lagodny wzor tla: kafel z ksztaltami gry powtarzany na calym obrazie, alfa 0,06 (nie obniza czytelnosci tekstu). */
+function drawPattern(ctx, W, H) {
+  const step = 132;
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  for (let row = 0, y = 40; y < H + step; row++, y += step) {
+    for (let col = 0, x = (row % 2) * (step / 2); x < W + step; col++, x += step) {
+      drawShape(ctx, (col + row * 2) % 4, x, y, 24);
+    }
+  }
+  ctx.restore();
+}
+
+/** Naglowek: czerwony akcent + logotypy DKMS (lewo), PWr (srodek) i Samorzadu Studenckiego (prawo). Zwraca y pod naglowkiem. */
+function drawHeader(ctx, W, logos) {
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, HEADER_H + 2);
+  ctx.fillStyle = C.red;
+  ctx.fillRect(0, 0, W, 22);
+  drawLogo(ctx, logos.dkms, 64, 76, 72, 'left');
+  const dkmsEnd = 64 + (logos.dkms ? 72 * logos.dkms.ratio : 0);
+  const ssStart = W - 64 - (logos.ss ? 64 * logos.ss.ratio : 0);
+  if (logos.ss) drawLogo(ctx, logos.ss, W - 64, 80, 64, 'right');
+  if (logos.pwr) drawLogo(ctx, logos.pwr, (dkmsEnd + ssStart) / 2 - (64 * logos.pwr.ratio) / 2, 80, 64);
+  ctx.fillStyle = C.light;
+  ctx.fillRect(64, HEADER_H, W - 128, 2);
+  return HEADER_H + 2;
+}
+
+const HEADER_H = 190;
+
+/** Wordmark tekstowy "Helpers' Generation" (gdy brak pliku logo). Wysrodkowany w x. */
+function drawWordmark(ctx, x, y, px) {
+  const a = "Helpers' ";
+  const b = 'Generation';
+  ctx.save();
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '600 ' + px + 'px ' + FONT_FAMILY;
+  const wa = ctx.measureText(a).width;
+  ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
+  const wb = ctx.measureText(b).width;
+  const x0 = x - (wa + wb) / 2;
+  ctx.font = '600 ' + px + 'px ' + FONT_FAMILY;
+  ctx.fillText(a, x0, y);
+  ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
+  ctx.fillText(b, x0 + wa, y);
+  ctx.restore();
+}
+
+/** Dolny czerwony pas z bialym logo Helpers' Generation i podpisem. Zwraca y gornej krawedzi pasa. */
+function drawFooterBand(ctx, W, H, bandH, logos, dateText) {
+  const top = H - bandH;
+  ctx.fillStyle = C.red;
+  ctx.fillRect(0, top, W, bandH);
+  const px = Math.round(bandH * 0.26);
+  if (logos && logos.hgWhite) {
+    const logoH = Math.round(bandH * 0.35);
+    drawLogo(ctx, logos.hgWhite, W / 2 - (logoH * logos.hgWhite.ratio) / 2, top + Math.round(bandH * 0.1), logoH);
+  } else {
+    drawWordmark(ctx, W / 2, top + bandH * 0.4 + px * 0.35, px);
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.font = '400 ' + Math.round(px * 0.55) + 'px ' + FONT_FAMILY;
+  ctx.fillText('Politechnika Wrocławska' + (dateText ? '  ·  ' + dateText : ''), W / 2, top + bandH * 0.4 + px * 0.35 + px * 0.95);
+  return top;
+}
+
+/** Pasek partnerow nad czerwonym pasem; loga skalowane tak, by zmiescily sie w szerokosci i wysokosci. Zwraca jego wysokosc. */
+function partnersBarHeight(partners, H) {
+  if (!partners.length) return 0;
+  return H < 1200 ? 120 : 150;
+}
+
+function drawPartnersBar(ctx, W, bottom, barH, partners) {
+  const top = bottom - barH;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, top, W, barH);
+  ctx.fillStyle = C.light;
+  ctx.fillRect(64, top, W - 128, 2);
+  ctx.fillStyle = C.grey;
+  ctx.textAlign = 'center';
+  ctx.font = '600 ' + Math.round(barH * 0.15) + 'px ' + FONT_FAMILY;
+  ctx.fillText('Partnerzy', W / 2, top + barH * 0.27);
+  const gap = 48;
+  const maxW = W - 160;
+  const maxH = Math.round(barH * 0.46);
+  let k = 1;
+  const widthAt = (kk) => partners.reduce((a, p) => a + maxH * kk * p.ratio, 0) + gap * kk * (partners.length - 1);
+  if (widthAt(1) > maxW) k = maxW / widthAt(1);
+  let x = (W - widthAt(k)) / 2;
+  const y0 = top + barH * 0.4;
+  const boxH = barH * 0.52;
+  for (const p of partners) {
+    let hh = maxH * k;
+    let ww = hh * p.ratio;
+    if (hh > boxH) { hh = boxH; ww = hh * p.ratio; }
+    ctx.drawImage(p.img, x, y0 + (boxH - hh) / 2, ww, hh);
+    x += maxH * k * p.ratio + gap * k;
+  }
+}
+
+/** Rysuje cala ramke (tlo, wzor, naglowek, pasek partnerow, czerwony pas); zwraca obszar tresci {top, bottom}. */
+export function drawFrame(canvas, { logos, partners = [], bandH = 230, dateText = '' }) {
+  const W = canvas.width;
+  const H = canvas.height;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  drawPattern(ctx, W, H);
+  const top = drawHeader(ctx, W, logos);
+  const bandTop = drawFooterBand(ctx, W, H, bandH, logos, dateText);
+  const barH = partnersBarHeight(partners, H);
+  if (barH) drawPartnersBar(ctx, W, bandTop, barH, partners);
+  ctx.fillStyle = C.black;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  return { top, bottom: bandTop - barH };
+}
+
+// ---------- uklad tresci (bloki) ----------
+
+/** Rzad ksztaltow genotypu w bialych komorkach z szara ramka, wysrodkowany; top = gorna krawedz. */
+function drawGenotypeRow(ctx, genotype, W, top, maxW, cellMax) {
   const n = genotype.length;
   const gap = 10;
-  const cell = Math.min(84, Math.floor((maxW - gap * (n - 1)) / n));
+  const cell = Math.min(cellMax, Math.floor((maxW - gap * (n - 1)) / n));
   const x0 = (W - (n * cell + (n - 1) * gap)) / 2;
   for (let i = 0; i < n; i++) {
     const x = x0 + i * (cell + gap);
@@ -184,194 +323,168 @@ function drawGenotypeRow(ctx, genotype, W, top, maxW) {
     const idx = Number(genotype[i]);
     if (idx >= 0 && idx < SHAPE_COLORS.length) drawShape(ctx, idx, x + cell / 2, top + cell / 2, cell * 0.32);
   }
-  return top + cell;
+  return cell;
 }
 
-function todayPl() {
-  return new Date().toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' });
-}
+const LINE_H = 1.25;
 
-const HEADER_H = 190;
-
-/** Gorny pas: czerwony akcent + logotypy DKMS (lewo), Samorzadu Studenckiego (srodek) i PWr (prawo). Zwraca y pod naglowkiem. */
-function drawHeader(ctx, W, logos) {
-  ctx.fillStyle = C.red;
-  ctx.fillRect(0, 0, W, 22);
-  drawLogo(ctx, logos.dkms, 64, 76, 72, 'left');
-  // kolejnosc: DKMS, PWr, samorzad (HG na dole, w czerwonym pasku)
-  // W=1080: DKMS x=64..302, PWr x=393..691 (srodek luki), samorzad x=783..1016 - luki ok. 92px
-  const dkmsEnd = 64 + (logos.dkms ? 72 * logos.dkms.ratio : 0);
-  const ssStart = W - 64 - (logos.ss ? 64 * logos.ss.ratio : 0);
-  if (logos.ss) drawLogo(ctx, logos.ss, W - 64, 80, 64, 'right');
-  if (logos.pwr) drawLogo(ctx, logos.pwr, (dkmsEnd + ssStart) / 2 - (64 * logos.pwr.ratio) / 2, 80, 64);
-  ctx.fillStyle = C.light;
-  ctx.fillRect(64, HEADER_H, W - 128, 2);
-  return HEADER_H + 2;
-}
-
-/** Wordmark tekstowy "Helpers' Generation" (bez grafiki). Wysrodkowany w x. */
-function drawWordmark(ctx, x, y, px, onRed = false) {
-  const a = "Helpers' ";
-  const b = 'Generation';
-  ctx.save();
-  ctx.textAlign = 'left';
-  ctx.font = '600 ' + px + 'px ' + FONT_FAMILY;
-  const wa = ctx.measureText(a).width;
-  ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
-  const wb = ctx.measureText(b).width;
-  const x0 = x - (wa + wb) / 2;
-  ctx.fillStyle = onRed ? '#ffffff' : C.black;
-  ctx.font = '600 ' + px + 'px ' + FONT_FAMILY;
-  ctx.fillText(a, x0, y);
-  ctx.fillStyle = onRed ? '#ffffff' : C.red;
-  ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
-  ctx.fillText(b, x0 + wa, y);
-  ctx.restore();
-}
-
-/** Dolny czerwony pas z bialym logo Helpers' Generation (gdy brak pliku, wordmark tekstowy); opcjonalnie data
- *  (withDate: true = dzisiejsza, false = brak, tekst = podana). 
- *  Zwraca y gornej krawedzi pasa. */
-function drawFooterBand(ctx, W, H, bandH, logos, withDate = true) {
-  const top = H - bandH;
-  ctx.fillStyle = C.red;
-  ctx.fillRect(0, top, W, bandH);
-  const px = Math.round(bandH * 0.26);
-  if (logos && logos.hgWhite) { // biale logo na czerwonym pasie
-    const logoH = Math.round(bandH * 0.35);
-    drawLogo(ctx, logos.hgWhite, W / 2 - (logoH * logos.hgWhite.ratio) / 2, top + Math.round(bandH * 0.1), logoH);
-  } else {
-    drawWordmark(ctx, W / 2, top + bandH * 0.4 + px * 0.35, px, true);
-  }
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.font = '400 ' + Math.round(px * 0.55) + 'px ' + FONT_FAMILY;
-  ctx.fillText('Politechnika Wrocławska' + (withDate ? '  ·  ' + (typeof withDate === 'string' ? withDate : todayPl()) : ''), W / 2, top + bandH * 0.4 + px * 0.35 + px * 0.95);
-  return top;
-}
-
-/** Krotka czerwona linia pod tytulem. */
-function accentRule(ctx, x, y) {
-  ctx.fillStyle = C.red;
-  ctx.fillRect(x - 60, y, 120, 8);
-}
-
-// ---------- certyfikat gracza ----------
-
-/** genotype/wonAt (z serwera) = wzor i czas trafienia; bez nich (stara sesja) certyfikat jest bez tego bloku. */
-function drawPlayerCert(canvas, nick, genotype, wonAt, logos) {
-  const W = canvas.width;
-  const H = canvas.height;
-  const ctx = setup(canvas);
+/**
+ * Ustawia bloki pionowo (jedna skala s) od startY. Zwraca y konca. dry=true tylko mierzy.
+ * Bloki: {t:'title'|'hero'|'text'|'label'|'fit'|'genotype'|'rule'|'gap', ...}; mt = odstep nad blokiem (px przy s=1).
+ */
+function layoutBlocks(ctx, W, blocks, s, startY, dry) {
   const maxW = W - 160;
-  drawHeader(ctx, W, logos); // konczy sie na y=192
-  const when = formatWarsaw(wonAt);
-  // data w pasie tylko gdy brak czasu trafienia (inaczej bylaby powtorzona)
-  const bandTop = drawFooterBand(ctx, W, H, 230, logos, !when); // pas od y=H-230=1690
-
-  const top = HEADER_H + 2;
-  const gap = 70; // minimalny odstep tresci od naglowka i od pasa
-
-  /** Tresc certyfikatu od y=startY (gorna krawedz); dry=true tylko mierzy. Zwraca y konca tresci. */
-  const body = (startY, dry) => {
-    let y = startY;
-    const tpx = fitFont(ctx, 'Genotyp 10/10!', maxW, 130);
-    ctx.fillStyle = C.red;
-    if (!dry) ctx.fillText('Genotyp 10/10!', W / 2, y + tpx * 0.78);
-    y += tpx * 0.78 + 64;
-    if (!dry) accentRule(ctx, W / 2, y);
-    y += 8 + 48;
-    ctx.fillStyle = C.black;
-    ctx.font = '600 48px ' + FONT_FAMILY;
-    y = drawWrapped(ctx, 'Gratulacje', W / 2, y + 36, maxW, 60, dry) - 24;
-    if (nick) {
-      const px = fitFont(ctx, nick, maxW, 96);
-      ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
-      y = drawWrapped(ctx, nick, W / 2, y + 16 + px * 0.8, maxW, px * 1.2, dry) - px * 0.9;
+  let y = startY;
+  for (const b of blocks) {
+    y += (b.mt || 0) * s;
+    if (b.t === 'gap') continue;
+    if (b.t === 'rule') {
+      if (!dry) { ctx.fillStyle = C.red; ctx.fillRect(W / 2 - 60 * s, y, 120 * s, 8 * s); }
+      y += 8 * s;
+      continue;
     }
-    if (genotype) {
-      y += 36;
-      ctx.fillStyle = C.grey;
-      ctx.font = '600 34px ' + FONT_FAMILY;
-      y = drawWrapped(ctx, 'Twój wzór', W / 2, y + 28, maxW, 44, dry) - 16;
-      if (dry) y += 12 + Math.min(84, Math.floor((maxW - 10 * (genotype.length - 1)) / genotype.length));
-      else y = drawGenotypeRow(ctx, genotype, W, y + 12, maxW);
-      if (when) {
-        ctx.fillStyle = C.black;
-        ctx.font = '600 38px ' + FONT_FAMILY;
-        y = drawWrapped(ctx, 'Wylosowano: ' + when, W / 2, y + 56, maxW, 48, dry) - 12;
+    if (b.t === 'genotype') {
+      const cellMax = Math.round(84 * s);
+      const n = b.value.length;
+      const cell = Math.min(cellMax, Math.floor((maxW - 10 * (n - 1)) / n));
+      if (!dry) drawGenotypeRow(ctx, b.value, W, y, maxW, cellMax);
+      y += cell;
+      continue;
+    }
+    const weight = b.weight || (b.t === 'title' || b.t === 'hero' ? '800' : b.t === 'label' ? '600' : '400');
+    let px = Math.round((b.size || 40) * s);
+    const wMax = b.narrow ? maxW - 80 : maxW;
+    if (b.t === 'hero' || b.t === 'fit' || b.t === 'title') {
+      // pojedyncza linia, o ile sie da: zmniejsz font do minimum (28 px), potem zawijaj
+      const floor = Math.max(28, Math.round(px * 0.55));
+      while (px > floor) {
+        ctx.font = weight + ' ' + px + 'px ' + FONT_FAMILY;
+        if (ctx.measureText(b.text).width <= wMax) break;
+        px -= 2;
       }
     }
-    y += 48;
-    ctx.fillStyle = C.dark;
-    ctx.font = '400 37px ' + FONT_FAMILY;
-    y = drawWrapped(ctx,
-      'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w grze HLA. Szansa na to wynosiła 1 do 300.',
-      W / 2, y + 30, maxW - 80, 54, dry) - 12;
-    y = drawWrapped(ctx,
-      'Prawdziwego bliźniaka genetycznego możesz uratować w rzeczywistości. Zarejestruj się jako potencjalny Dawca szpiku.',
-      W / 2, y + 40, maxW - 80, 54, dry) - 12;
-    return y;
-  };
-
-  // wysrodkowanie pionowe tresci miedzy naglowkiem a pasem (nie wyzej niz gap od naglowka)
-  const used = body(0, true);
-  const startY = top + Math.max(gap, (bandTop - top - used) / 2);
-  body(startY, false);
-  return bandTop;
+    ctx.font = weight + ' ' + px + 'px ' + FONT_FAMILY;
+    const lh = Math.round(px * LINE_H);
+    const lines = wrapLines(ctx, b.text, wMax);
+    if (!dry) {
+      ctx.fillStyle = b.color || (b.t === 'label' ? C.grey : b.t === 'text' ? C.dark : C.black);
+      lines.forEach((l, i) => ctx.fillText(l, W / 2, y + i * lh + (lh - px) / 2 + px * 0.8));
+    }
+    y += lines.length * lh;
+  }
+  return y;
 }
 
-/** nick: tylko do canvasu; genotype + wonAt: wzor i czas trafienia (ISO UTC z serwera). */
-export async function renderPlayerCert(nick, genotype, wonAt) {
+/** Rysuje grafike: ramka + bloki wysrodkowane w pionie (skala maleje, az tresc sie zmiesci). */
+async function drawGraphic(canvas, blocks, { logos, partners, bandH = 230, dateText = '', sMax = 1 }) {
+  const ctx = canvas.getContext('2d');
+  const area = drawFrame(canvas, { logos, partners, bandH, dateText });
+  const avail = area.bottom - area.top;
+  const margin = 56;
+  let s = sMax;
+  let used = layoutBlocks(ctx, canvas.width, blocks, s, 0, true);
+  while (used > avail - 2 * margin && s > 0.4) {
+    s = Math.max(0.4, s - 0.03);
+    used = layoutBlocks(ctx, canvas.width, blocks, s, 0, true);
+  }
+  const startY = area.top + Math.max(margin, (avail - used) / 2);
+  ctx.textAlign = 'center';
+  layoutBlocks(ctx, canvas.width, blocks, s, startY, false);
+  return { top: area.top, bottom: area.bottom, startY, endY: startY + used, scale: s };
+}
+
+async function prepare() {
   await ensureFonts();
-  const logos = await loadLogos();
+  const [logos, partners] = await Promise.all([loadLogos(), loadPartners()]);
+  return { logos, partners };
+}
+
+const DATE_LONG = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Warsaw' };
+function dateLong(d) {
+  const dd = d ? new Date(d) : new Date();
+  return (Number.isNaN(dd.getTime()) ? new Date() : dd).toLocaleDateString('pl-PL', DATE_LONG);
+}
+const fmtNum = (n) => String(n).replace('.', ',');
+
+// ---------- certyfikat gracza 10/10 ----------
+
+/** Dane z serwera: genotype, wonAt (ISO UTC), token, seq, boothName. nick tylko do canvasu. */
+export async function renderPlayerCert({ nick, genotype, wonAt, token, seq, boothName } = {}) {
+  const ctxs = await prepare();
   const canvas = makeCanvas(1080, 1920);
-  drawPlayerCert(canvas, (nick || '').trim(), genotype || '', wonAt || '', logos);
+  const when = formatWarsaw(wonAt);
+  const name = (nick || '').trim();
+  const blocks = [
+    { t: 'title', text: 'Genotyp 10/10!', size: 124 },
+    { t: 'rule', mt: 30 },
+    { t: 'label', text: 'Gratulacje', size: 46, mt: 40, color: C.black },
+  ];
+  if (name) blocks.push({ t: 'hero', text: name, size: 92, color: C.red, mt: 8 });
+  if (token) {
+    blocks.push({ t: 'label', text: 'Token trafienia', size: 34, mt: 44 });
+    blocks.push({ t: 'hero', text: token, size: 92, color: C.red, mt: 4, weight: '800' });
+  }
+  if (seq > 0) blocks.push({ t: 'text', text: 'Trafienie nr ' + seq, size: 46, weight: '600', color: C.black, mt: 6 });
+  if (genotype) {
+    blocks.push({ t: 'label', text: 'Twój wzór', size: 34, mt: 40 });
+    blocks.push({ t: 'genotype', value: genotype, mt: 14 });
+  }
+  if (when) blocks.push({ t: 'text', text: 'Data i godzina: ' + when, size: 38, weight: '600', color: C.black, mt: 36 });
+  if (boothName) blocks.push({ t: 'text', text: 'Stanowisko: ' + boothName, size: 38, mt: 4 });
+  blocks.push({ t: 'text', text: 'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w grze HLA. Szansa na to wynosiła 1 do 300.', size: 36, narrow: true, mt: 44 });
+  blocks.push({ t: 'text', text: 'Prawdziwego bliźniaka genetycznego możesz uratować w rzeczywistości. Zarejestruj się jako potencjalny Dawca szpiku.', size: 36, narrow: true, mt: 20 });
+  await drawGraphic(canvas, blocks, { ...ctxs, dateText: when ? '' : dateLong() });
   return canvas;
 }
 
 // ---------- certyfikat dawcy ----------
 
-function drawDonorCert(canvas, { name, facultyName, kind }, logos) {
-  const W = canvas.width;
-  const H = canvas.height;
-  const ctx = setup(canvas);
-  const maxW = W - 160;
-  drawHeader(ctx, W, logos);
-  drawFooterBand(ctx, W, H, 230, logos);
-
-  ctx.fillStyle = C.black;
-  ctx.font = '800 84px ' + FONT_FAMILY;
-  let y = drawWrapped(ctx, kind === 'actual' ? 'Certyfikat Dawcy Szpiku' : 'Certyfikat Potencjalnego Dawcy Szpiku', W / 2, 470, maxW, 104);
-  accentRule(ctx, W / 2, y - 50);
-  y += 50;
-  if (name) {
-    ctx.fillStyle = C.grey;
-    ctx.font = '400 40px ' + FONT_FAMILY;
-    ctx.fillText('Dla', W / 2, y + 40);
-    const px = fitFont(ctx, name, maxW, 100);
-    ctx.fillStyle = C.red;
-    ctx.font = '800 ' + px + 'px ' + FONT_FAMILY;
-    y = drawWrapped(ctx, name, W / 2, y + 140, maxW, px * 1.2);
+export async function renderDonorCert({ name, facultyName, kind } = {}) {
+  const ctxs = await prepare();
+  const canvas = makeCanvas(1080, 1920);
+  const nm = (name || '').trim();
+  const actual = kind === 'actual';
+  const blocks = [
+    { t: 'title', text: actual ? 'Certyfikat Dawcy Szpiku' : 'Certyfikat Potencjalnego Dawcy Szpiku', size: 92 },
+    { t: 'rule', mt: 30 },
+  ];
+  if (nm) {
+    blocks.push({ t: 'label', text: 'Dla', size: 40, mt: 44 });
+    blocks.push({ t: 'hero', text: nm, size: 100, color: C.red, mt: 6 });
   }
-  if (facultyName) {
-    ctx.fillStyle = C.dark;
-    ctx.font = '600 44px ' + FONT_FAMILY;
-    y = drawWrapped(ctx, facultyName, W / 2, y + 70, maxW, 60);
-  }
-  ctx.fillStyle = C.dark;
-  ctx.font = '400 38px ' + FONT_FAMILY;
-  const thanks = kind === 'actual'
-    ? 'Jesteś Dawcą faktycznym. Dziękujemy za Twój dar i za udział w akcji Helpers\' Generation na Politechnice Wrocławskiej.'
-    : 'Dziękujemy, że dołączasz do grona potencjalnych Dawców szpiku podczas Helpers\' Generation 2026 na Politechnice Wrocławskiej.';
-  drawWrapped(ctx, thanks, W / 2, y + 100, maxW, 56);
+  if (facultyName) blocks.push({ t: 'text', text: facultyName, size: 44, weight: '600', mt: 40 });
+  blocks.push({ t: 'text', size: 38, narrow: true, mt: 56, text: actual
+    ? "Jesteś Dawcą faktycznym. Dziękujemy za Twój dar i za udział w akcji Helpers' Generation na Politechnice Wrocławskiej."
+    : "Dziękujemy, że dołączasz do grona potencjalnych Dawców szpiku podczas Helpers' Generation 2026 na Politechnice Wrocławskiej." });
+  await drawGraphic(canvas, blocks, { ...ctxs, dateText: dateLong() });
+  return canvas;
 }
 
-export async function renderDonorCert({ name, facultyName, kind } = {}) {
-  await ensureFonts();
-  const logos = await loadLogos();
+// ---------- wynik gry ----------
+
+/** Grafika 9:16 z najlepszym wynikiem gracza. nick tylko do canvasu; best 0..10; date = ISO lub Date. */
+export async function renderResultCert({ nick, best, boothName, date } = {}) {
+  const ctxs = await prepare();
+  let host = location.host;
+  try {
+    const cfg = await getConfig();
+    if (cfg && cfg.public_url) host = String(cfg.public_url).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  } catch (e) { /* zostaje host strony */ }
   const canvas = makeCanvas(1080, 1920);
-  drawDonorCert(canvas, { name: (name || '').trim(), facultyName: facultyName || '', kind }, logos);
+  const name = (nick || '').trim();
+  const blocks = [
+    { t: 'title', text: 'Mój wynik w HLA Match Maker', size: 84 },
+    { t: 'rule', mt: 30 },
+  ];
+  if (name) blocks.push({ t: 'hero', text: name, size: 84, color: C.black, mt: 40 });
+  blocks.push({ t: 'hero', text: Number.isFinite(best) ? best + '/10' : '-', size: 300, color: C.red, mt: 20 });
+  blocks.push({ t: 'text', text: 'najlepszy wynik dnia', size: 44, weight: '600', color: C.black, mt: 0 });
+  if (boothName) blocks.push({ t: 'text', text: 'Stanowisko: ' + boothName, size: 38, mt: 36 });
+  blocks.push({ t: 'text', text: dateLong(date), size: 38, mt: 4 });
+  blocks.push({ t: 'text', size: 38, narrow: true, mt: 56,
+    text: 'Wzór stoiska należy do pacjenta czekającego na Dawcę. Zagraj i sprawdź, czy Ty jesteś jego bliźniakiem genetycznym.' });
+  blocks.push({ t: 'fit', text: 'Zagraj: ' + host + '/graj', size: 46, weight: '800', color: C.red, mt: 36 });
+  await drawGraphic(canvas, blocks, { ...ctxs, dateText: '' });
   return canvas;
 }
 
@@ -383,110 +496,87 @@ export const SOCIAL_FORMATS = {
   '1:1': { width: 1080, height: 1080 },
 };
 
-/** Tresc grafiki; dry=true tylko mierzy wysokosc (do wysrodkowania pionowego). Zwraca y konca tresci. */
-function socialBody(ctx, W, s, summary, startY, dry) {
-  const maxW = W - 140;
-  const put = (text, y) => { if (!dry) ctx.fillText(text, W / 2, y); };
-  const sm = summary || {};
-  const fs = (px) => Math.round(px * s);
-  let y = startY;
-
-  const title = sm.scope === 'day' && sm.date
-    ? new Date(sm.date + 'T12:00:00').toLocaleDateString('pl-PL', { day: 'numeric', month: 'long', year: 'numeric' })
-    : 'Podsumowanie akcji';
-  ctx.fillStyle = C.black;
-  ctx.font = '800 ' + fs(64) + 'px ' + FONT_FAMILY;
-  y = drawWrapped(ctx, title, W / 2, y + fs(64), maxW, fs(76), dry);
-  if (!dry) accentRule(ctx, W / 2, y - fs(20));
-
-  ctx.fillStyle = C.red;
-  ctx.font = '800 ' + fs(170) + 'px ' + FONT_FAMILY;
-  y += fs(40) + fs(150);
-  put(Number.isFinite(sm.registered) ? String(sm.registered) : 'Brak danych', y);
-  ctx.fillStyle = C.dark;
-  ctx.font = '600 ' + fs(38) + 'px ' + FONT_FAMILY;
-  y += fs(62);
-  put(sm.scope === 'day' ? 'zarejestrowanych tego dnia' : 'zarejestrowanych Dawców', y);
+function socialBlocks(sm) {
+  const title = sm.scope === 'day' && sm.date ? dateLong(sm.date + 'T12:00:00') : 'Podsumowanie akcji';
+  const blocks = [
+    { t: 'title', text: title, size: 64 },
+    { t: 'rule', mt: 24 },
+    { t: 'hero', text: Number.isFinite(sm.registered) ? String(sm.registered) : 'Brak danych', size: 170, color: C.red, mt: 20 },
+    { t: 'text', text: sm.scope === 'day' ? 'zarejestrowanych tego dnia' : 'zarejestrowanych Dawców', size: 38, weight: '600', color: C.dark, mt: 0 },
+  ];
   if (sm.scope === 'day' && Number.isFinite(sm.registered_total)) {
-    ctx.font = '400 ' + fs(34) + 'px ' + FONT_FAMILY;
-    y += fs(50);
-    put('łącznie w akcji: ' + sm.registered_total, y);
+    blocks.push({ t: 'text', text: 'łącznie w akcji: ' + sm.registered_total, size: 34, mt: 8 });
   }
-
-  y += fs(90);
-  ctx.fillStyle = C.black;
-  ctx.font = '800 ' + fs(46) + 'px ' + FONT_FAMILY;
-  put('Najlepsze wydziały', y);
-  ctx.fillStyle = C.dark;
-  ctx.font = '400 ' + fs(38) + 'px ' + FONT_FAMILY;
+  const battle = Array.isArray(sm.battle) ? sm.battle.slice(0, 3) : [];
   const podium = Array.isArray(sm.podium) ? sm.podium.slice(0, 3) : [];
-  if (!podium.length) {
-    y += fs(62);
-    put('Brak danych', y);
+  blocks.push({ t: 'text', text: battle.length ? 'Bitwa Wydziałów' : 'Najlepsze wydziały', size: 46, weight: '800', color: C.black, mt: 56 });
+  if (battle.length) {
+    battle.forEach((p, i) => {
+      blocks.push({ t: 'fit', text: (p.rank || i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code), size: 38, mt: i ? 18 : 16 });
+      blocks.push({ t: 'text', text: fmtNum(p.per_1000) + ' rejestracji na 1000 studentów', size: 32, color: C.grey, mt: 0 });
+    });
+  } else if (podium.length) {
+    podium.forEach((p, i) => {
+      blocks.push({ t: 'fit', text: (i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code) + ': ' + p.count, size: 38, mt: i ? 12 : 16 });
+    });
+  } else {
+    blocks.push({ t: 'text', text: 'Brak danych', size: 38, mt: 16 });
   }
-  podium.forEach((p, i) => {
-    const line = (i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code) + ': ' + p.count;
-    ctx.font = '400 ' + fitFont(ctx, line, maxW, fs(38), '400') + 'px ' + FONT_FAMILY; // dluga nazwa wydzialu: mniejszy font zamiast zawijania
-    y = drawWrapped(ctx, line, W / 2, y + fs(62), maxW, fs(50), dry) - fs(50); // y = baza ostatniej linii
-  });
-
-  y += fs(90);
-  ctx.fillStyle = C.black;
-  ctx.font = '800 ' + fs(46) + 'px ' + FONT_FAMILY;
-  put('Gra HLA', y);
-  ctx.fillStyle = C.dark;
-  ctx.font = '400 ' + fs(38) + 'px ' + FONT_FAMILY;
+  blocks.push({ t: 'text', text: 'Gra HLA', size: 46, weight: '800', color: C.black, mt: 56 });
   const g = sm.game;
   if (g) {
-    put('Graczy: ' + g.players + '   Losowań: ' + g.rolls, y + fs(62));
-    put('Trafień 10/10: ' + g.matches, y + fs(116));
-    y += fs(116);
+    blocks.push({ t: 'text', text: 'Graczy: ' + g.players + ', losowań: ' + g.rolls, size: 38, mt: 14 });
+    blocks.push({ t: 'text', text: 'Trafień 10/10: ' + g.matches, size: 38, mt: 4 });
   } else {
-    put('Brak danych', y + fs(62));
-    y += fs(62);
+    blocks.push({ t: 'text', text: 'Brak danych', size: 38, mt: 14 });
   }
-  return y;
-}
-
-function drawSocial(canvas, summary, logos) {
-  const W = canvas.width;
-  const H = canvas.height;
-  const ctx = setup(canvas);
-  const top = drawHeader(ctx, W, logos);
-  const bandH = H < 1200 ? 150 : 200;
-  drawFooterBand(ctx, W, H, bandH, logos, false);
-  const avail = H - top - bandH;
-  const margin = 50; // min. odstep tresci od naglowka i od pasa
-  let s = Math.max(0.5, Math.min(1.1, avail / 1000));
-  ctx.textAlign = 'center';
-  let used = socialBody(ctx, W, s, summary, 0, true);
-  while (used > avail - 2 * margin && s > 0.5) { // tresc za wysoka (np. 1:1): zmniejsz skale
-    s = Math.max(0.5, s - 0.03);
-    used = socialBody(ctx, W, s, summary, 0, true);
-  }
-  const startY = top + Math.max(margin, (avail - used) / 2) - 10;
-  socialBody(ctx, W, s, summary, startY, false);
+  return blocks;
 }
 
 export async function renderSocial(summary, format = '9:16') {
-  await ensureFonts();
-  const logos = await loadLogos();
+  const ctxs = await prepare();
   const f = SOCIAL_FORMATS[format] || SOCIAL_FORMATS['9:16'];
   const canvas = makeCanvas(f.width, f.height);
-  drawSocial(canvas, summary, logos);
+  await drawGraphic(canvas, socialBlocks(summary || {}), { ...ctxs, bandH: f.height < 1200 ? 150 : 200, dateText: '' });
   return canvas;
 }
 
-// ---------- pobieranie ----------
+// ---------- pobieranie i udostepnianie ----------
 
-/** Pokazuje PNG jako <img> (przytrzymanie na telefonie) + przycisk Pobierz. */
-export function showDownload(canvas, container, filename = 'certyfikat.png') {
+function canvasBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+}
+
+/** Pokazuje PNG jako <img> (przytrzymanie na telefonie), przycisk Pobierz i (gdy przegladarka umie) Udostepnij. */
+export async function showDownload(canvas, container, filename = 'certyfikat.png') {
   const dataUrl = canvas.toDataURL('image/png');
+  const blob = await canvasBlob(canvas); // gotowy przed kliknieciem, bo navigator.share wymaga gestu uzytkownika
+  let file = null;
+  try {
+    if (blob && typeof File === 'function') file = new File([blob], filename, { type: 'image/png' });
+  } catch (e) { file = null; }
+  const canShare = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
+  const row = h('div', { class: 'share-row' },
+    h('a', { class: 'btn btn-primary download-btn', href: dataUrl, download: filename }, icon('ti-download'), 'Pobierz (PNG)'));
+  if (canShare) {
+    const btn = h('button', { class: 'btn btn-inverted share-btn', type: 'button' }, icon('ti-share'), 'Udostępnij');
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.share({ files: [file] });
+      } catch (e) {
+        if (!e || e.name !== 'AbortError') btn.textContent = 'Nie udało się udostępnić, użyj Pobierz';
+      }
+    });
+    row.append(btn);
+  }
   container.textContent = '';
   container.append(
     h('img', { class: 'download-img', src: dataUrl, alt: 'Wygenerowany obraz do pobrania' }),
-    h('a', { class: 'btn btn-primary download-btn', href: dataUrl, download: filename }, icon('ti-download'), 'Pobierz (PNG)'),
+    row,
     h('p', { class: 'download-hint' }, 'Kliknij przycisk Pobierz lub przytrzymaj palcem na obrazku, aby zapisać go w galerii'),
   );
+  if (canShare) {
+    container.append(h('p', { class: 'download-hint' }, 'Udostępnij otwiera menu telefonu, wybierz np. Instagram lub Facebook. Obraz nie zapisuje się w galerii.'));
+  }
   container.hidden = false;
 }
