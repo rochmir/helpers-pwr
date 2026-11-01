@@ -1,6 +1,7 @@
 # helpersi-pwr — plan implementacji (źródło prawdy dla agentów)
 
 Spec biznesowy: `/srv/infra/dkms_pwr/projekt.md`. Ten plik go **nadpisuje** tam, gdzie się różnią.
+**Uwaga:** iteracja 7 (na końcu) wprowadza w życie regulaminy Konkursu i Pucharu i nadpisuje wcześniejsze punkty o limicie na stanowisko, bonusach, upominkach, Bitwie Wydziałów i karcie legitymacji. Takie punkty poniżej są nieaktualne.
 Docelowy adres: `https://helpers-pwr.rupary.pl` (tunel Cloudflare → `http://localhost:8010`).
 
 ## Twarde zasady (od właściciela)
@@ -373,3 +374,13 @@ Gracz pokazuje wolontariuszowi post (udostępniony wynik albo inny materiał pro
 - Panel: przycisk „Dodatkowe losy” obok generowania kodu rejestracyjnego, z krótką instrukcją co sprawdzić; widoczny kod i QR jak dotąd.
 - Gra: w zasadach i w oknie końcowym informacja: udostępnij wynik lub inny materiał, oznacz helpers_wroclaw i dkms_pl, pokaż post wolontariuszowi, dostaniesz kod na 5 dodatkowych prób. Regulamin: ten sam zapis w zasadach gry. Polityka: bez zapisu postu i konta.
 
+## Iteracja 7: regulaminy Konkursu i Pucharu (2026-11-01; nadpisuje iteracje 3-6)
+Źródłem prawdy są dwa regulaminy (seed: `app/legal/regulamin-konkursu.md`, `app/legal/regulamin-pucharu.md`, kopiowane 1:1).
+
+**Nieaktualne od tej iteracji:** limit prób na stanowisko (iter. 3-5), `REGISTER_BONUS*`, `PROMO_BONUS`, kod „Dodatkowe losy”, `promo_codes`, `/api/donor/redeem-promo`, `bonus_attempts`, `hp_bonus` (iter. 3, 6), upominki za 6-10/10, Bitwa Wydziałów i `/api/stats/battle` (iter. 4), karta legitymacji: `card_hash`, `actual_donor_cards`, `app/cards.py` (iter. 3), rok studiów, `LEGAL_OWNER`, statyczne `regulamin.html` i `polityka-prywatnosci.html`.
+
+- Nazewnictwo: Puchar Dawcy PWr (`/puchar`, `/bitwa` 301), symulator HLA „HLA Match Maker – Sprawdź Parametry”, Sprawdź parametry, Próby, Token Losu, Wskaźnik Zaangażowania (WZ), token rejestracyjny (kod OTP), punkty (LD). API: `/api/stats/cup`, `stats.cup`, `wz`. Pole `registered` w rankingu to LD.
+- Konkurs: 5 prób na dobę na urządzenie (`device_pool` sumuje `booth_plays` ze wszystkich stoisk, ta sama formuła z ext i tolerancją). `wins.session_id` zawsze NULL (§4.3), `game_sessions.won_*` zostają do odtworzenia certyfikatu. `wins.submitted_at` + `GET /api/admin/tokens/{token}`, `POST .../submit` (409 gdy wykorzystany), `POST .../unsubmit`; test-tokeny = nieistniejące. Ekran 10/10: instrukcja §5, po `CONTEST_DEADLINE` „Zgłoszenia do konkursu zostały zamknięte.”. `facebook_url` domyślnie `https://www.facebook.com/samorzadpwr` (seed raz, `facebook_url_seeded`).
+- Puchar: `donors_stats(id, faculty, created_at, device_hash)`; `device_hash = HMAC(SECRET_KEY, "cup:"+device_ext)[:32]`, częściowy UNIQUE. Duplikat = 409 bez zużycia tokenu. Stoisko i typ liczone z `registration_codes` USED (`db.used_counts`). Doby wg Europe/Warsaw (`config.day_bounds`). `CUP_DEADLINE` (domyślnie 2026-12-11 16:30) i `CONTEST_DEADLINE` (16:00) z env; po CUP_DEADLINE `register` i `generate-code` dają 410. WZ = `round(LD/LS*100, 2)`, sort `(-wz, -LD, słownik)`.
+- Dokumenty prawne: tabele `legal_documents`, `legal_document_versions`; `app/legal.py` (seed, render `markdown-it-py` `js-default`, `{{CONTACT}}` po renderze), `routes/legal.py`; strony `/dokumenty`, `/dokumenty/{slug}`, `/regulamin` i `/polityka-prywatnosci` (302); `/api/legal`, `/api/config.legal_updated_at`; admin `/api/admin/legal*`. Zgoda w `hp_consent` trzyma `legal_updated_at`.
+- Migracja (`db._migrate_cup_contest`, idempotentna): DROP `promo_codes`, `actual_donor_cards`, kolumn `bonus_attempts`, `card_hash`; przebudowa `donors_stats` (created_at = południe Warsaw z dawnego `registered_date`); `UPDATE wins SET session_id=NULL`.

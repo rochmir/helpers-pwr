@@ -2,44 +2,26 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import os
 import re
 from contextlib import asynccontextmanager
-from html import escape
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import captcha, config, db
-from .routes import admin, admin_test, donor, game, login, misc, partners, stats, volunteer
+from . import captcha, config, db, pages
+from .pages import STATIC_DIR, VERSIONED_PREFIX
+from .routes import admin, admin_test, donor, game, legal, login, misc, partners, stats, volunteer
 
 log = logging.getLogger("helpersi")
-STATIC_DIR = Path(__file__).with_name("static")
 
 CSP = ("default-src 'self'; script-src 'self' https://challenges.cloudflare.com; "
        "frame-src https://challenges.cloudflare.com; img-src 'self' data: blob:; "
        "style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
-
-
-def _asset_version() -> str:
-    """Skrót zawartości katalogu static — zmienia się przy każdej zmianie plików (cache-busting)."""
-    h = hashlib.sha256()
-    for f in sorted(STATIC_DIR.rglob("*")):
-        if f.is_file():
-            h.update(str(f.relative_to(STATIC_DIR)).encode())
-            h.update(f.read_bytes())
-    return h.hexdigest()[:12]
-
-
-ASSET_VERSION = _asset_version()
-VERSIONED_PREFIX = f"/static/v/{ASSET_VERSION}/"
 
 
 async def _rotate_salt_hourly():
@@ -59,9 +41,8 @@ async def lifespan(_: FastAPI):
         log.warning("Turnstile wyłączony (brak TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY).")
     if not config.admin_secret():
         log.warning("Brak ADMIN_SECRET — konto awaryjne admin jest niedostępne.")
-    for name in ("LEGAL_OWNER", "LEGAL_CONTACT"):
-        if not os.environ.get(name, "").strip():
-            log.warning("Brak %s, strony prawne pokażą „[do uzupełnienia]”.", name)
+    if not config.legal_contact():
+        log.warning("Brak LEGAL_CONTACT, dokumenty prawne pokażą „[do uzupełnienia]” w miejscu kontaktu.")
     db.rotate_device_salt()
     rotation = asyncio.create_task(_rotate_salt_hourly())
     yield
@@ -101,36 +82,28 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": f"Niepoprawne dane{field}."}, status_code=422)
 
 
-for module in (misc, game, login, volunteer, donor, stats, partners, admin, admin_test):
+for module in (misc, game, login, volunteer, donor, stats, partners, admin, admin_test, legal):
     app.include_router(module.router)
+app.include_router(legal.admin_router)
 
 # --- strony ---------------------------------------------------------------------
 PAGES = {"/": "index.html", "/graj": "graj.html", "/login": "login.html", "/potwierdz": "potwierdz.html",
-         "/statystyki": "statystyki.html", "/bitwa": "bitwa.html", "/regulamin": "regulamin.html",
-         "/polityka-prywatnosci": "polityka-prywatnosci.html"}
-# Ikony wstrzykiwane przed </head>; href zostaje przepisane na wersjonowany prefiks niżej.
-FAVICON_LINKS = ('<link rel="icon" href="/static/brand/favicon.svg" type="image/svg+xml">'
-                 '<link rel="icon" href="/static/brand/favicon-32.png" sizes="32x32" type="image/png">'
-                 '<link rel="apple-touch-icon" href="/static/brand/apple-touch-icon.png">')
-PLACEHOLDER = "[do uzupełnienia]"
+         "/statystyki": "statystyki.html", "/puchar": "puchar.html"}
 
 
 def _page(filename: str):
     def handler():
-        path = STATIC_DIR / filename
-        if not path.is_file():
-            raise HTTPException(404, "Nie znaleziono strony.")
-        html = path.read_text(encoding="utf-8")
-        html = html.replace("</head>", FAVICON_LINKS + "</head>")
-        html = html.replace('src="/static/', f'src="{VERSIONED_PREFIX}').replace('href="/static/', f'href="{VERSIONED_PREFIX}')
-        html = html.replace("{{OWNER}}", escape(config.legal_owner() or PLACEHOLDER))
-        html = html.replace("{{CONTACT}}", escape(config.legal_contact() or PLACEHOLDER))
-        return HTMLResponse(html)
+        return pages.render(filename)
     return handler
 
 
 for url, filename in PAGES.items():
     app.add_api_route(url, _page(filename), methods=["GET"], include_in_schema=False)
+
+
+@app.get("/bitwa", include_in_schema=False)
+def old_battle():
+    return RedirectResponse("/puchar", status_code=301)
 
 
 @app.get("/admin", include_in_schema=False)

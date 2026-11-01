@@ -41,14 +41,14 @@ async function showPanel(me) {
   $('#who-role').textContent = ROLE_PL[me.role] || me.role;
   $('#login-title').textContent = me.role === 'admin' ? 'Panel administratora' : 'Panel wolontariusza';
   $('#login-lead').textContent = me.role === 'admin'
-    ? 'Stoiska, konta, liczby studentów, partnerzy, ustawienia, grafiki i narzędzia testowe, a także generowanie kodów.'
-    : 'Wybierz stoisko i wygeneruj kod dla osoby, która zarejestrowała się na stoisku.';
+    ? 'Stoiska, konta, liczby studentów, weryfikacja Tokenu Losu, regulaminy i dokumenty, partnerzy, ustawienia, grafiki i narzędzia testowe, a także generowanie tokenów rejestracyjnych.'
+    : 'Wybierz stoisko i wygeneruj token rejestracyjny dla osoby po weryfikacji na stoisku.';
   await loadBoothChoices();
   const booth = me.booth && me.booth.id ? me.booth : null;
   $('#booth-pick').value = booth ? booth.id : '';
   $('#booth-hint').textContent = booth
-    ? 'Kody i liczniki dotyczą wybranego stoiska. Możesz je zmienić w dowolnej chwili.'
-    : 'Wybierz stoisko, przy którym dziś pracujesz. Dopiero wtedy pojawią się kody i liczniki.';
+    ? 'Tokeny i liczniki dotyczą wybranego stoiska. Możesz je zmienić w dowolnej chwili.'
+    : 'Wybierz stoisko, przy którym dziś pracujesz. Dopiero wtedy pojawią się tokeny i liczniki.';
   $('#volunteer-part').hidden = !booth;
   await initVolunteer({ role: me.role, booth });
   $('#admin-part').hidden = me.role !== 'admin';

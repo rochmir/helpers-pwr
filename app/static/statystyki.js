@@ -1,39 +1,33 @@
 import { api, $, h, facultyLabel } from './common.js';
 
-/** Wykres skumulowany: potencjalni (czerwony) + faktyczni (granatowy). */
+/** Wykres punktow wydzialow (kolejnosc slownika, bez rankingu). */
 function bars(listEl, rows) {
   listEl.textContent = '';
   if (!rows.length) {
     listEl.append(h('li', { class: 'empty' }, 'Brak danych'));
     return;
   }
-  const max = Math.max(...rows.map((r) => r.total), 1);
+  const max = Math.max(...rows.map((r) => r.count), 1);
   for (const r of rows) {
-    const seg = (cls, n) => {
-      const el = h('span', { class: 'seg seg-' + cls });
-      el.style.width = (n / max * 100) + '%';
-      return el;
-    };
-    const track = h('div', { class: 'stack', role: 'img',
-      'aria-label': facultyLabel(r) + ': potencjalni ' + r.potential + ', faktyczni ' + r.actual },
-      seg('potential', r.potential), seg('actual', r.actual));
+    const seg = h('span', { class: 'seg seg-potential' });
+    seg.style.width = (r.count / max * 100) + '%';
+    const track = h('div', { class: 'stack', role: 'img', 'aria-label': facultyLabel(r) + ': ' + r.count + ' pkt' }, seg);
     listEl.append(h('li', { class: 'bar-row' },
-      h('span', { class: 'bar-label' }, facultyLabel(r)), track, h('span', { class: 'bar-count' }, r.total)));
+      h('span', { class: 'bar-label' }, facultyLabel(r)), track, h('span', { class: 'bar-count' }, r.count)));
   }
 }
 
 function facultyTable(rows) {
   const body = $('#faculties-body');
   body.textContent = '';
-  for (const r of rows) {
-    body.append(h('tr', {}, h('td', {}, facultyLabel(r)), h('td', {}, r.potential), h('td', {}, r.actual), h('td', {}, r.total)));
-  }
+  for (const r of rows) body.append(h('tr', {}, h('td', {}, facultyLabel(r)), h('td', {}, r.count)));
 }
 
 async function refresh() {
   try {
     const s = await api('GET', '/api/stats/live');
     $('#total').textContent = s.total;
+    $('#total-kinds').textContent = 'Wpisane tokeny wg typu: nowi dawcy ' + s.total_potential + ', dawcy faktyczni ' + s.total_actual + '.';
     bars($('#faculties-list'), s.faculties || []);
     facultyTable(s.faculties || []);
     const body = $('#booths-body');

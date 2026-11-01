@@ -26,9 +26,10 @@ def test_migration_drops_major(tmp_path, monkeypatch):
         db.init_db()
         conn = db.connect()
         cols = [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")]
-        assert "major" not in cols and {"faculty", "study_year", "registered_date"} <= set(cols)
+        assert cols == ["id", "faculty", "created_at", "device_hash"]
         row = conn.execute("SELECT * FROM donors_stats").fetchone()
-        assert (row["faculty"], row["study_year"], row["registered_date"]) == ("W4N", 2, "2026-10-01")
+        assert (row["faculty"], row["device_hash"]) == ("W4N", None)
+        assert config.warsaw_date(row["created_at"]) == "2026-10-01"  # doba z dawnego registered_date zostaje
         assert db.get_dictionary(conn) == {"_note": "n", "faculties": [{"code": "W4N", "name": "Informatyki"}, {"code": "INNE", "name": "Inne"}]}
         conn.close()
 
@@ -121,8 +122,14 @@ def test_fake_registrations(admin, booth):
     assert r.json() == {"created": 5}
     conn = db.connect()
     assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 35
-    rows = conn.execute("SELECT * FROM donors_stats WHERE registered_date='2020-01-01'").fetchall()
-    assert len(rows) == 5 and all(x["booth_id"] == booth and 1 <= x["study_year"] <= 7 for x in rows)
+    start, end = config.day_bounds("2020-01-01")
+    rows = conn.execute("SELECT * FROM donors_stats WHERE created_at>=? AND created_at<?", (start, end)).fetchall()
+    assert len(rows) == 5 and all(x["device_hash"] is None for x in rows)
+    # każdy punkt ma zużyty token na stoisku (zestawienia per stoisko i typ liczą się z registration_codes)
+    used = conn.execute("SELECT booth_id, kind FROM registration_codes WHERE status='USED' AND used_at>=? AND used_at<?",
+                        (start, end)).fetchall()
+    assert len(used) == 5 and all(x["booth_id"] == booth and x["kind"] in ("potential", "actual") for x in used)
+    assert conn.execute("SELECT COUNT(*) FROM registration_codes WHERE status='USED'").fetchone()[0] == 35
     codes = {f["code"] for f in db.get_dictionary(conn)["faculties"]}
     assert all(x["faculty"] in codes for x in conn.execute("SELECT faculty FROM donors_stats"))
     conn.close()
@@ -153,10 +160,12 @@ def test_wipe(admin, booth, client, monkeypatch):
     st = admin.get(f"/api/booth/{booth}/state").json()
     assert st["matches_count"] == 0 and st["rolls_count"] == 0 and st["genotype"] != before["genotype"]
     conn = db.connect()
-    for t in ("donors_stats", "registration_codes", "game_sessions", "game_attempts"):
+    for t in ("donors_stats", "registration_codes", "game_sessions", "game_attempts", "wins"):
         assert conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == 0, t
     assert [tuple(r) for r in conn.execute("SELECT genotype, booth_id, matched_at FROM genotype_history")] == [(st["genotype"], booth, None)]
     assert conn.execute("SELECT COUNT(*) FROM booths").fetchone()[0] == 1
+    # dokumenty prawne to nie dane testowe
+    assert conn.execute("SELECT COUNT(*) FROM legal_documents").fetchone()[0] == 3
     conn.close()
     assert admin.get("/api/admin/dictionary").json() == dict_before
     assert not testing.is_armed("x")

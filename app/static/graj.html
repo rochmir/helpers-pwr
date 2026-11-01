@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Graj · Helpers' Generation</title>
+<title>Symulator HLA · Helpers' Generation</title>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
 <link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="/static/style.css">
@@ -22,13 +22,13 @@
     </a>
     
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj" class="active" aria-current="page">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj" class="active" aria-current="page">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
     <p class="eyebrow">Helpers' Generation</p>
     <h1>Sprawdź, czy jesteś bliźniakiem genetycznym</h1>
-      <p class="lead">Wzór stoiska należy do pacjenta czekającego na Dawcę. Wylosuj swój genotyp i sprawdź, czy jesteś jego bliźniakiem genetycznym. Na każdym stanowisku masz 5 prób dziennie, a za kod ze stoiska dostajesz dodatkowe próby.</p><p class="booth-line" id="game-booth-wrap" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Stoisko: <strong id="game-booth"></strong></p>
+      <p class="lead">Wzór stoiska należy do pacjenta czekającego na Dawcę. Sprawdź swoje parametry i zobacz, czy jesteś jego bliźniakiem genetycznym. Masz 5 prób na dobę na swoim urządzeniu, łącznie na wszystkich stanowiskach. Udział nie zależy od rejestracji w bazie dawców.</p><p class="booth-line" id="game-booth-wrap" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Stoisko: <strong id="game-booth"></strong></p>
   </div>
 </section>
 <main class="section section-tight">
@@ -46,7 +46,7 @@
   <section id="scan-section" class="card narrow" hidden>
     <span class="iconbox" aria-hidden="true"><i class="ti ti-qrcode"></i></span>
     <h2>Zeskanuj kod QR ponownie</h2>
-    <p id="scan-text">Kod QR na ekranie stoiska zmienia się co minutę. Zeskanuj go jeszcze raz telefonem, żeby wrócić do gry.</p>
+    <p id="scan-text">Kod QR na ekranie stoiska zmienia się co minutę. Zeskanuj go jeszcze raz telefonem, żeby wrócić do symulatora.</p>
   </section>
 
   <section id="play-section" hidden>
@@ -72,10 +72,10 @@
           </div>
           <div class="machine-controls">
             <div class="attempts">
-              <span>Pozostałe próby: <strong id="attempts-left">-</strong> <span class="bonus-note" id="bonus-note" hidden></span></span>
+              <span>Pozostałe próby: <strong id="attempts-left">-</strong></span>
               <span class="pips" id="pips" aria-hidden="true"></span>
             </div>
-            <button class="btn btn-spin" id="roll-btn" type="button"><i class="ti ti-dice-5" aria-hidden="true"></i> Losuj</button>
+            <button class="btn btn-spin" id="roll-btn" type="button"><i class="ti ti-dice-5" aria-hidden="true"></i> Sprawdź parametry</button>
           </div>
         </div>
         <button class="lever" id="lever" type="button" tabindex="-1" aria-hidden="true">
@@ -89,14 +89,6 @@
       <p class="result-text" id="result-text"></p>
     </div>
 
-    <div id="bonus-hint" class="eyecatcher" hidden>
-      <div>
-        <p class="title">Chcesz zagrać jeszcze raz?</p>
-        <p>Zarejestruj się na stoisku. Gdy dostaniesz kod od wolontariusza, wpisz go u nas, a dostaniesz 10 dodatkowych prób.</p>
-      </div>
-      <a class="btn btn-plain btn-lg" href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i> Wpisz kod ze stoiska</a>
-    </div>
-
     <div id="after-roll" class="after-roll" hidden>
       <div class="fact"><i class="ti ti-info-circle" aria-hidden="true"></i>
         <p>W prawdziwym życiu o tym, czy Dawca może pomóc choremu, decyduje zgodność genów HLA. Bada się ją dopiero po rejestracji w bazie Dawców.</p></div>
@@ -107,16 +99,14 @@
         </div>
         <span class="iconbox iconbox-flat" aria-hidden="true"><i class="ti ti-heart-handshake"></i></span>
       </div>
-      <p class="link-row">Masz już kod od wolontariusza? <a href="/potwierdz">Wpisz kod ze stoiska</a> i odbierz 10 dodatkowych prób.</p>
+      <p class="link-row">Masz token rejestracyjny od wolontariusza? <a href="/potwierdz">Wpisz token rejestracyjny</a>, żeby przyznać punkt swojemu wydziałowi w Pucharze Dawcy PWr.</p>
     </div>
-    <div id="gift-note" class="fact fact-gift" hidden><i class="ti ti-gift" aria-hidden="true"></i>
-      <p><strong>Upominek na stanowisku.</strong> Za wynik 6/10 lub lepszy możesz odebrać drobny upominek (do wyczerpania zapasów). Pokaż swój wynik wolontariuszowi.</p></div>
-    <p id="end-note" class="hint center" hidden>Limit prób jest liczony osobno dla każdego stanowiska i odnawia się codziennie.</p>
+    <p id="end-note" class="hint center" hidden>Limit 5 prób na dobę dotyczy jednego urządzenia (łącznie na wszystkich stanowiskach) i odnawia się codziennie.</p>
     <p class="center"><button class="btn btn-primary" id="end-open-btn" type="button" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Co dalej</button></p>
 
     <section id="result-cert-section" class="card" hidden>
       <h2><i class="ti ti-photo" aria-hidden="true"></i> Odbierz swój wynik</h2>
-      <p>Pobierz grafikę z Twoim najlepszym wynikiem i pochwal się nią znajomym. Zachęć ich, żeby też zagrali.</p>
+      <p>Pobierz grafikę z Twoim najlepszym wynikiem i pochwal się nią znajomym. Zachęć ich, żeby też sprawdzili swoje parametry.</p>
       <label for="result-nick">Ksywka lub imię (opcjonalnie)</label>
       <input type="text" id="result-nick" maxlength="60" autocomplete="off">
       <p class="privacy">Ksywki i imienia nie wysyłamy na serwer, służą tylko do wygenerowania grafiki na Twoim telefonie.</p>
@@ -127,18 +117,22 @@
 
   <section id="win-section" class="card" hidden>
     <h2><i class="ti ti-trophy" aria-hidden="true"></i> Genotyp 10/10!</h2>
-    <p>Jesteś bliźniakiem genetycznym! Szansa na to była 1 do 300.</p>
+    <p>Jesteś bliźniakiem genetycznym! W symulatorze szansa na to wynosiła 1 do 300. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.</p>
     <div class="code-box win-token-box">
-      <p class="title3">Twój token trafienia</p>
+      <p class="title3">Twój Token Losu</p>
       <div class="code-big" id="win-token">-</div>
-      <p id="win-seq" class="win-seq"></p>
     </div>
-    <h3>Co dalej</h3>
-    <ol class="steps steps-compact">
-      <li class="step"><p class="step-title"><b>1.</b> Stwórz certyfikat</p><p>Wpisz ksywkę lub imię (możesz pominąć) i zapisz certyfikat na telefonie. Widać na nim token, numer trafienia, godzinę i wzór.</p></li>
-      <li class="step"><p class="step-title"><b>2.</b> Dodaj komentarz na Facebooku</p><p>Pod postem podsumowującym rejestracje z danego dnia na Facebooku Samorządu Studenckiego dodaj komentarz obalający mit o dawstwie szpiku. <span id="fb-line" hidden><a id="fb-link" href="#" target="_blank" rel="noopener noreferrer"><i class="ti ti-brand-facebook" aria-hidden="true"></i> Otwórz Facebooka Samorządu</a></span></p></li>
-      <li class="step"><p class="step-title"><b>3.</b> Dołącz certyfikat</p><p>Certyfikat dodaj do komentarza jako załącznik.</p></li>
-    </ol>
+    <div id="contest-open">
+      <h3>Konkurs na hasło edukacyjne</h3>
+      <p>W konkursie mogą wziąć udział osoby, które ukończyły 18 lat. Udział nie zależy od rejestracji w bazie potencjalnych dawców szpiku.</p>
+      <ol class="steps steps-compact">
+        <li class="step"><p class="step-title"><b>1.</b> Ułóż hasło</p><p>Wymyśl własne hasło (maksymalnie 2 zdania), które celnie i merytorycznie obala popularny mit o dawstwie szpiku, na przykład o wkłuciu w kręgosłup, inwazyjności pobrania czy bólu.</p></li>
+        <li class="step"><p class="step-title"><b>2.</b> Stwórz certyfikat</p><p>Wpisz ksywkę lub imię (możesz pominąć) i zapisz certyfikat na telefonie. Widać na nim Token Losu, wzór, datę i stanowisko.</p></li>
+        <li class="step"><p class="step-title"><b>3.</b> Opublikuj komentarz na Facebooku</p><p>Pod postem podsumowującym dzień akcji na profilu Samorządu Studenckiego PWr (@samorzadpwr) dodaj komentarz z hasłem i certyfikatem w załączniku. <span id="fb-line" hidden><a id="fb-link" href="#" target="_blank" rel="noopener noreferrer"><i class="ti ti-brand-facebook" aria-hidden="true"></i> Otwórz Facebooka Samorządu</a></span></p></li>
+      </ol>
+      <p>Zgłoszenia przyjmujemy do <strong id="contest-deadline">11 grudnia 2026, 16:00</strong>. Wyniki ogłosimy 13 grudnia 2026. Nagrody są wyłącznie za najlepsze hasła. Szczegóły w <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulaminie konkursu</a>.</p>
+    </div>
+    <p id="contest-closed" class="fact" hidden><i class="ti ti-lock" aria-hidden="true"></i> <strong>Zgłoszenia do konkursu zostały zamknięte.</strong></p>
     <label for="nick">Ksywka lub imię (opcjonalnie)</label>
     <input type="text" id="nick" maxlength="60" autocomplete="off">
     <p class="privacy">Ksywki i imienia nie wysyłamy na serwer, służą tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
@@ -150,25 +144,24 @@
 
 <dialog id="intro-dialog" class="dlg" aria-labelledby="intro-title">
   <div class="dlg-body">
-    <h2 id="intro-title"><i class="ti ti-dna-2" aria-hidden="true"></i> Zanim zagrasz</h2>
+    <h2 id="intro-title"><i class="ti ti-dna-2" aria-hidden="true"></i> Zanim sprawdzisz parametry</h2>
     <h3>Co to jest zgodność HLA</h3>
     <p>HLA to białka na powierzchni komórek, po których układ odpornościowy rozpoznaje, co jest własne, a co obce. Przy przeszczepieniu szpiku geny HLA Dawcy i pacjenta muszą być jak najbardziej zgodne. Geny HLA bada się dopiero po rejestracji w bazie Dawców.</p>
-    <p>Gra jest tylko zabawą edukacyjną i nic nie mówi o Twojej prawdziwej zgodności.</p>
+    <p>Symulator HLA jest tylko narzędziem edukacyjnym i nic nie mówi o Twojej prawdziwej zgodności.</p>
     <h3>Zasady</h3>
     <ul class="dots">
       <li>Losujesz 10 pozycji i porównujesz je ze wzorem stoiska.</li>
-      <li>Masz 5 prób dziennie na każdym stanowisku. Możesz przejść na inne stanowisko i zagrać tam.</li>
-      <li>Po wpisaniu kodu ze stoiska dostajesz dodatkowe próby: 10, a dla dawcy faktycznego 20.</li>
-      <li>Dodatkowe losy: udostępnij wynik albo inny materiał o akcji, oznacz helpers_wroclaw i dkms_pl, pokaż post wolontariuszowi i dostaniesz kod na 5 dodatkowych prób.</li>
-      <li>Wynik od 6 do 10 z 10 pokaż wolontariuszowi i odbierz drobny upominek (do wyczerpania zapasów).</li>
-      <li>Za 10/10 dostajesz certyfikat z własnym tokenem.</li>
+      <li>Masz 5 prób na dobę na swoim urządzeniu, łącznie na wszystkich stanowiskach.</li>
+      <li>Udział w symulatorze i w konkursie jest bezpłatny i nie zależy od rejestracji w bazie dawców szpiku.</li>
+      <li>Za 10/10 dostajesz certyfikat z Tokenem Losu. Osoby pełnoletnie (18+) mogą z nim wziąć udział w konkursie na hasło obalające mit o dawstwie szpiku. Nagrody są wyłącznie za najlepsze hasła.</li>
     </ul>
     <div id="consent-block" class="consent-block" hidden>
       <div id="turnstile" class="turnstile"></div>
-      <p class="consent-text" id="consent-text">Naciskając przycisk, akceptujesz <a href="/regulamin" target="_blank" rel="noopener">regulamin</a> i <a href="/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> oraz zgadzasz się na obliczenie identyfikatora urządzenia.</p>
-      <p class="hint">Identyfikator urządzenia jest pseudonimowy: liczymy go na Twoim telefonie, a serwer zapisuje tylko skróty, które zmieniają się codziennie. Służą do pilnowania limitu prób na stanowisku.</p>
+      <p id="consent-changed" class="msg msg-info" role="status" hidden>Dokumenty zmieniły się od Twojej ostatniej zgody. Przeczytaj je i zaakceptuj ponownie.</p>
+      <p class="consent-text" id="consent-text">Naciskając przycisk, akceptujesz <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulamin konkursu</a> <span class="consent-date" id="consent-date-terms"></span> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> <span class="consent-date" id="consent-date-privacy"></span> oraz zgadzasz się na obliczenie identyfikatora urządzenia.</p>
+      <p class="hint">Identyfikator urządzenia jest pseudonimowy: liczymy go na Twoim telefonie, a serwer zapisuje tylko skróty, które zmieniają się codziennie. Służą do pilnowania limitu 5 prób na dobę.</p>
       <div id="start-msg" class="msg" role="alert" hidden></div>
-      <button class="btn btn-primary btn-lg btn-block" id="start-btn" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Zaakceptuj i zagraj</button>
+      <button class="btn btn-primary btn-lg btn-block" id="start-btn" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Zaakceptuj i sprawdź parametry</button>
     </div>
     <button class="btn btn-inverted btn-lg btn-block" id="intro-ok" type="button" hidden>Zamknij</button>
   </div>
@@ -176,13 +169,9 @@
 
 <dialog id="end-dialog" class="dlg" aria-labelledby="end-title">
   <div class="dlg-body">
-    <h2 id="end-title">Koniec prób na tym stanowisku</h2>
+    <h2 id="end-title">Koniec prób na dziś</h2>
     <p id="end-best" class="lead" hidden></p>
-    <h3>Przejdź na inne stanowisko</h3>
-    <p>Limit prób jest liczony osobno dla każdego stanowiska. Podejdź do innego i zeskanuj jego kod QR.</p>
-    <ul class="booth-list" id="end-booth-list"></ul>
-    <p id="end-booth-hours" hidden></p>
-    <p id="end-booth-empty" hidden>Nie ma teraz innych stanowisk. Wróć jutro, limit prób odnawia się codziennie.</p>
+    <p>Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro, limit odnawia się codziennie.</p>
     <section id="end-cert" class="dlg-cert" hidden>
       <h3 id="end-cert-title">Odbierz swój wynik</h3>
       <label for="end-nick">Ksywka lub imię (opcjonalnie)</label>
@@ -191,10 +180,6 @@
       <button class="btn btn-primary" id="end-cert-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Stwórz grafikę</button>
       <div id="end-cert-output" class="download" hidden></div>
     </section>
-    <div class="fact"><i class="ti ti-ticket" aria-hidden="true"></i>
-      <p>Masz kod od wolontariusza? <a href="/potwierdz">Wpisz kod ze stoiska</a> i odbierz dodatkowe próby.</p></div>
-    <div class="fact"><i class="ti ti-gift" aria-hidden="true"></i>
-      <p><strong>Dodatkowe losy.</strong> Udostępnij wynik albo inny materiał o akcji, oznacz helpers_wroclaw i dkms_pl i pokaż post wolontariuszowi. Dostaniesz kod na 5 dodatkowych prób.</p></div>
     <button class="btn btn-inverted btn-lg btn-block" id="end-close" type="button">Zamknij</button>
   </div>
 </dialog>
@@ -207,9 +192,9 @@
         <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
         <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
       </div>
-      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+      <p class="footer-text">Organizator: Samorząd Studencki Politechniki Wrocławskiej, we współpracy z zespołem akcji Helpers' Generation.</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj" aria-current="page">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/bitwa">Bitwa Wydziałów</a><a href="/statystyki">Statystyki</a><a href="/regulamin">Regulamin</a><a href="/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj" aria-current="page">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

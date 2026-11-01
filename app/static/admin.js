@@ -5,7 +5,7 @@ import { renderSocial, renderPlayerCert, renderDonorCert, renderResultCert, show
 const msg = $('#panel-msg');
 let booths = [];
 let faculties = [];
-const KIND_PL = { potential: 'potencjalny', actual: 'faktyczny', promo: 'dodatkowe losy' };
+const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny' };
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
 
 async function guard(fn, target = msg) {
@@ -20,7 +20,7 @@ async function guard(fn, target = msg) {
 /** Wczytuje wszystkie sekcje admina (wywolywane raz po zalogowaniu administratora). */
 export async function initAdmin() {
   await Promise.all([loadBooths(), loadVolunteers(), loadCodes(), loadDictionary(), loadDays(), refreshTestStatus(),
-    loadHours(), loadWins(), loadPartners(), loadSettings()]);
+    loadHours(), loadWins(), loadPartners(), loadSettings(), loadLegal()]);
 }
 
 async function loadHours() {
@@ -45,7 +45,7 @@ async function loadBooths() {
         h('td', {}, genotypeCell),
         h('td', { class: 'actions' },
           h('a', { class: 'btn btn-small', href: '/stoisko/' + encodeURIComponent(b.id), target: '_blank', rel: 'noopener' }, icon('ti-device-tv'), 'Otwórz ekran stoiska'),
-          act('playlink', 'ti-link', 'Link do gry (ważny ~2 min)'),
+          act('playlink', 'ti-link', 'Link do symulatora (ważny ~2 min)'),
           act('rename', 'ti-pencil', 'Zmień nazwę'), act('details', 'ti-calendar', 'Budynek i termin'),
           act('reset', 'ti-refresh', 'Resetuj genotyp'), act('delete', 'ti-trash', 'Usuń'))));
     }
@@ -119,14 +119,14 @@ $('#hours-form').addEventListener('submit', async (ev) => {
   });
 });
 
-/** Pokazuje aktualny link do gry stoiska (token QR; admin dostaje go ze stanu stoiska). */
+/** Pokazuje aktualny link do symulatora stoiska (token QR; admin dostaje go ze stanu stoiska). */
 async function showPlayLink(boothId, el) {
   const st = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state');
-  if (!st.play_path) throw new Error('Nie udało się pobrać linku do gry.');
+  if (!st.play_path) throw new Error('Nie udało się pobrać linku do symulatora.');
   el.hidden = false;
   el.className = 'inline-result msg msg-info';
   el.textContent = '';
-  el.append(h('p', {}, 'Link do gry dla stoiska „' + boothId + '” (ważny ok. 2 minut od teraz; przepustka po wejściu trwa 30 minut):'),
+  el.append(h('p', {}, 'Link do symulatora dla stoiska „' + boothId + '” (ważny ok. 2 minut od teraz; przepustka po wejściu trwa 30 minut):'),
     h('a', { href: st.play_path, target: '_blank', rel: 'noopener' }, location.origin + st.play_path));
 }
 
@@ -308,7 +308,7 @@ $('#social-btn').addEventListener('click', async () => {
 });
 
 
-// ---------- liczby studentow (Bitwa Wydzialow) ----------
+// ---------- liczby studentow (Puchar Dawcy PWr) ----------
 async function loadStudents() {
   const d = await api('GET', '/api/admin/students');
   const counts = d.counts || {};
@@ -346,7 +346,10 @@ function renderWins() {
   body.textContent = '';
   for (const w of rows) {
     body.append(h('tr', {}, h('td', {}, w.seq), h('td', { class: 'mono' }, w.token), h('td', {}, genotypeCell(w.genotype)),
-      h('td', {}, w.booth_name || w.booth_id), h('td', {}, formatWarsaw(w.won_at))));
+      h('td', {}, w.booth_name || w.booth_id), h('td', {}, formatWarsaw(w.won_at)),
+      h('td', {}, w.submitted_at
+        ? h('span', { class: 'status-tag tag-used' }, 'wykorzystany ' + formatWarsaw(w.submitted_at))
+        : h('span', { class: 'status-tag tag-active' }, 'niewykorzystany'))));
   }
   $('#wins-empty').hidden = rows.length > 0;
   $('#wins-empty').textContent = allWins.length ? 'Brak trafień pasujących do filtra.' : 'Brak trafień.';
@@ -449,7 +452,7 @@ $('#settings-form').addEventListener('submit', async (ev) => {
 // ---------- podglad grafik (tylko lokalnie, bez zapisu na serwerze) ----------
 $('#pv-player-btn').addEventListener('click', async () => {
   const canvas = await renderPlayerCert({ nick: $('#pv-player-nick').value, genotype: '0123012301', wonAt: new Date().toISOString(),
-    token: 'HG-TEST-0001', seq: 1, boothName: 'Stoisko testowe' });
+    token: 'HG-TEST-0001', boothName: 'Stoisko testowe' });
   await showDownload(canvas, $('#pv-player-out'), 'podglad-certyfikat-gracza.png');
 });
 
@@ -464,7 +467,7 @@ $('#pv-donor-btn').addEventListener('click', async () => {
 $('#pv-result-btn').addEventListener('click', async () => {
   const best = Math.max(0, Math.min(10, Number($('#pv-result-best').value) || 0));
   const canvas = await renderResultCert({ nick: $('#pv-result-nick').value, best, boothName: 'Stoisko testowe', date: new Date().toISOString() });
-  await showDownload(canvas, $('#pv-result-out'), 'podglad-wynik-gry.png');
+  await showDownload(canvas, $('#pv-result-out'), 'podglad-wynik-symulatora.png');
 });
 
 // ---------- testy ----------
@@ -511,7 +514,7 @@ async function refreshTestStatus() {
   const el = $('#t-status');
   try {
     const st = await api('GET', T + 'status');
-    el.textContent = (st.game_session ? 'Sesja gry: jest' : 'Sesja gry: brak (otwórz link do gry w tej przeglądarce)')
+    el.textContent = (st.game_session ? 'Sesja gry: jest' : 'Sesja gry: brak (otwórz link do symulatora w tej przeglądarce)')
       + ' · Uzbrojone 10/10: ' + (st.armed ? 'tak' : 'nie')
       + ' · Pozostałe próby: ' + (st.attempts_left === null ? '-' : st.attempts_left);
   } catch (e) {
@@ -523,7 +526,7 @@ $('#t-refresh').addEventListener('click', refreshTestStatus);
 
 $('#t-arm').addEventListener('click', () => runTest($('#t-arm-result'), async () => {
   await api('POST', T + 'arm-win');
-  testResult($('#t-arm-result'), 'Uzbrojone: następne losowanie w tej przeglądarce da 10/10. Otwórz grę przez „Link do gry”, wybierz stoisko i kliknij „Losuj”.', 'ok');
+  testResult($('#t-arm-result'), 'Uzbrojone: następna próba w tej przeglądarce da 10/10. Otwórz symulator przez „Link do symulatora”, wybierz stoisko i kliknij „Sprawdź parametry”.', 'ok');
   await refreshTestStatus();
 }));
 
@@ -556,7 +559,7 @@ $('#t-fake').addEventListener('click', () => runTest($('#t-fake-result'), async 
   if ($('#t-fake-booth').value) body.booth_id = $('#t-fake-booth').value;
   if ($('#t-fake-date').value) body.date = $('#t-fake-date').value;
   const r = await api('POST', T + 'fake-registrations', body);
-  testResult($('#t-fake-result'), 'Dodano testowych rejestracji: ' + r.created + '.', 'ok');
+  testResult($('#t-fake-result'), 'Dodano testowych punktów: ' + r.created + '.', 'ok');
   await loadBooths();
 }));
 
@@ -565,10 +568,176 @@ $('#t-wipe-confirm').addEventListener('input', () => {
 });
 
 $('#t-wipe').addEventListener('click', () => runTest($('#t-wipe-result'), async () => {
-  if (!confirm('Na pewno usunąć wszystkie rejestracje, kody i dane graczy? Tej operacji nie można cofnąć.')) return;
+  if (!confirm('Na pewno usunąć wszystkie punkty, tokeny i dane graczy? Tej operacji nie można cofnąć.')) return;
   await api('POST', T + 'wipe', { confirm: $('#t-wipe-confirm').value.trim() });
   $('#t-wipe-confirm').value = '';
   $('#t-wipe').disabled = true;
   testResult($('#t-wipe-result'), 'Dane testowe wyczyszczone. Stoiska dostały nowe genotypy.', 'ok');
   await Promise.all([loadBooths(), loadCodes(), loadDays(), refreshTestStatus()]);
 }));
+
+// ---------- weryfikacja Tokenu Losu (Komisja Konkursowa, §6.2 regulaminu) ----------
+let checkedToken = null;
+
+function checkLine(el, ok, text) {
+  el.textContent = '';
+  el.className = ok === null ? '' : ok ? 'check-ok' : 'check-bad';
+  el.append(icon(ok === null ? 'ti-info-circle' : ok ? 'ti-circle-check' : 'ti-circle-x'), ' ' + text);
+}
+
+function showToken(r) {
+  checkedToken = r.exists ? r.token : null;
+  $('#token-result').hidden = false;
+  checkLine($('#tc-exists'), r.exists, r.exists ? '1. Token istnieje w rejestrze wygranych 10/10.' : '1. Tokenu nie ma w rejestrze wygranych 10/10 (' + r.token + ').');
+  const g = $('#token-genotype');
+  g.hidden = !r.exists;
+  if (r.exists) renderGenotype(g, r.genotype);
+  checkLine($('#tc-pattern'), null, r.exists
+    ? '2. Wzór i data z rejestru (porównaj z grafiką): ' + formatWarsaw(r.won_at) + ', stoisko: ' + (r.booth_name || '-') + '.'
+    : '2. Brak wzoru i daty do porównania.');
+  checkLine($('#tc-unused'), r.exists ? !r.submitted_at : false, r.exists
+    ? (r.submitted_at ? '3. Token był już wykorzystany w zgłoszeniu (' + formatWarsaw(r.submitted_at) + ').' : '3. Token nie został wykorzystany we wcześniejszym zgłoszeniu.')
+    : '3. Nie dotyczy.');
+  $('#token-meta').textContent = r.exists ? 'Token: ' + r.token : '';
+  $('#token-submit').hidden = !(r.exists && !r.submitted_at);
+  $('#token-unsubmit').hidden = !(r.exists && r.submitted_at);
+}
+
+async function lookupToken(value) {
+  await guard(async () => {
+    showToken(await api('GET', '/api/admin/tokens/' + encodeURIComponent(value)));
+  });
+}
+
+$('#token-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  lookupToken($('#token-input').value);
+});
+
+$('#token-submit').addEventListener('click', async () => {
+  if (!checkedToken) return;
+  await guard(async () => {
+    await api('POST', '/api/admin/tokens/' + encodeURIComponent(checkedToken) + '/submit');
+    setMessage(msg, 'Token oznaczony jako wykorzystany.', 'ok');
+    await Promise.all([lookupToken(checkedToken), loadWins()]);
+  });
+});
+
+$('#token-unsubmit').addEventListener('click', async () => {
+  if (!checkedToken) return;
+  if (!confirm('Cofnąć oznaczenie tokenu jako wykorzystanego?')) return;
+  await guard(async () => {
+    await api('POST', '/api/admin/tokens/' + encodeURIComponent(checkedToken) + '/unsubmit');
+    setMessage(msg, 'Oznaczenie cofnięte.', 'ok');
+    await Promise.all([lookupToken(checkedToken), loadWins()]);
+  });
+});
+
+// ---------- regulaminy i dokumenty ----------
+const legalForm = $('#legal-form');
+const legalMsg = $('#legal-msg');
+let legalEditing = null; // slug edytowanego dokumentu; null = nowy
+
+async function loadLegal() {
+  await guard(async () => {
+    const docs = await api('GET', '/api/admin/legal');
+    const body = $('#legal-body');
+    body.textContent = '';
+    for (const d of docs) {
+      body.append(h('tr', {},
+        h('td', {}, d.title), h('td', { class: 'mono' }, d.slug), h('td', {}, 'v' + d.version),
+        h('td', {}, formatWarsaw(d.updated_at)), h('td', {}, d.published ? 'tak' : 'nie'),
+        h('td', { class: 'actions' },
+          h('button', { class: 'btn btn-small', type: 'button', 'data-legal': 'edit', 'data-slug': d.slug }, icon('ti-pencil'), 'Edytuj'),
+          h('a', { class: 'btn btn-small', href: '/dokumenty/' + encodeURIComponent(d.slug), target: '_blank', rel: 'noopener' }, icon('ti-external-link'), 'Otwórz'),
+          d.base ? '' : h('button', { class: 'btn btn-small', type: 'button', 'data-legal': 'delete', 'data-slug': d.slug }, icon('ti-trash'), 'Usuń'))));
+    }
+  });
+}
+
+function openLegalEditor(doc) {
+  legalEditing = doc ? doc.slug : null;
+  legalForm.hidden = false;
+  $('#legal-form-title').textContent = doc ? 'Edycja: ' + doc.title + ' (wersja ' + doc.version + ')' : 'Nowy dokument';
+  $('#legal-slug-wrap').hidden = !!doc;
+  $('#legal-slug').required = !doc;
+  $('#legal-slug').value = doc ? doc.slug : '';
+  $('#legal-title').value = doc ? doc.title : '';
+  $('#legal-body-md').value = doc ? doc.body_md : '';
+  $('#legal-sort').value = doc ? doc.sort : 0;
+  $('#legal-sort').disabled = !doc;
+  $('#legal-published').value = !doc || doc.published ? '1' : '0';
+  $('#legal-published').disabled = !doc || !!doc.base;
+  $('#legal-preview').hidden = true;
+  setMessage(legalMsg, '');
+  const versions = doc ? doc.versions || [] : [];
+  $('#legal-versions-wrap').hidden = versions.length === 0;
+  const ul = $('#legal-versions');
+  ul.textContent = '';
+  for (const v of versions) {
+    ul.append(h('li', {}, 'Wersja ' + v.version + ': ' + v.title + ' (zastąpiona ' + formatWarsaw(v.saved_at) + (v.saved_by ? ', ' + v.saved_by : '') + ') ',
+      h('button', { class: 'btn btn-small', type: 'button', 'data-version': v.version }, icon('ti-download'), 'Wczytaj do edytora')));
+  }
+  legalForm.scrollIntoView({ block: 'nearest' });
+}
+
+$('#legal-new').addEventListener('click', () => openLegalEditor(null));
+$('#legal-cancel').addEventListener('click', () => { legalForm.hidden = true; legalEditing = null; });
+
+$('#legal-body').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest && ev.target.closest('button[data-legal]');
+  if (!btn) return;
+  const slug = btn.dataset.slug;
+  await guard(async () => {
+    if (btn.dataset.legal === 'edit') {
+      openLegalEditor(await api('GET', '/api/admin/legal/' + encodeURIComponent(slug)));
+    } else {
+      if (!confirm('Usunąć dokument „' + slug + '” razem z historią wersji? Tej operacji nie można cofnąć.')) return;
+      await api('DELETE', '/api/admin/legal/' + encodeURIComponent(slug));
+      if (legalEditing === slug) legalForm.hidden = true;
+      setMessage(msg, 'Dokument usunięty.', 'ok');
+      await loadLegal();
+    }
+  });
+});
+
+$('#legal-versions').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest && ev.target.closest('button[data-version]');
+  if (!btn || !legalEditing) return;
+  await guard(async () => {
+    const v = await api('GET', '/api/admin/legal/' + encodeURIComponent(legalEditing) + '/versions/' + encodeURIComponent(btn.dataset.version));
+    $('#legal-title').value = v.title;
+    $('#legal-body-md').value = v.body_md;
+    setMessage(legalMsg, 'Wczytano wersję ' + v.version + ' do edytora. Zapisz, żeby ją przywrócić jako nową wersję.', 'info');
+  }, legalMsg);
+});
+
+$('#legal-preview-btn').addEventListener('click', async () => {
+  await guard(async () => {
+    const r = await api('POST', '/api/admin/legal/preview', { body_md: $('#legal-body-md').value });
+    const box = $('#legal-preview');
+    box.innerHTML = r.html; // HTML z serwera: Markdown bez surowego HTML
+    box.hidden = false;
+  }, legalMsg);
+});
+
+legalForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  await guard(async () => {
+    const title = $('#legal-title').value;
+    const body_md = $('#legal-body-md').value;
+    let done;
+    if (legalEditing === null) {
+      const r = await api('POST', '/api/admin/legal', { slug: $('#legal-slug').value.trim(), title, body_md });
+      legalEditing = r.slug;
+      done = 'Dokument utworzony.';
+    } else {
+      const r = await api('PUT', '/api/admin/legal/' + encodeURIComponent(legalEditing), {
+        title, body_md, sort: Number($('#legal-sort').value) || 0, published: $('#legal-published').value === '1' });
+      done = 'Zapisano. Wersja ' + r.version + ', ostatnia zmiana ' + formatWarsaw(r.updated_at) + '.';
+    }
+    await loadLegal();
+    openLegalEditor(await api('GET', '/api/admin/legal/' + encodeURIComponent(legalEditing)));
+    setMessage(legalMsg, done, 'ok');
+  }, legalMsg);
+});

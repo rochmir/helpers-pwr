@@ -1,4 +1,4 @@
-"""Panel admina: stoiska, konta, kody, słownik, ustawienia, liczby studentów, trafienia, podsumowania, eksport CSV."""
+"""Panel admina: stoiska, konta, tokeny, słownik, ustawienia, liczby studentów, trafienia i weryfikacja Tokenu Losu, podsumowania, eksport CSV."""
 from __future__ import annotations
 
 import csv
@@ -97,9 +97,8 @@ class DictionaryIn(BaseModel):
 def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
     db.expire_codes(conn)
     rows = conn.execute(
-        "SELECT b.*, (SELECT COUNT(*) FROM donors_stats d WHERE d.booth_id=b.id) AS registered, "
-        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') + "
-        "(SELECT COUNT(*) FROM promo_codes p WHERE p.booth_id=b.id AND p.status='ACTIVE') AS active_codes "
+        "SELECT b.*, (SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='USED') AS registered, "
+        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') AS active_codes "
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
                                "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")} for r in rows]
@@ -146,12 +145,9 @@ def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sql
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
-        used = conn.execute("SELECT (SELECT COUNT(*) FROM donors_stats WHERE booth_id=?) + "
-                            "(SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
-                            "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)",
-                            (booth_id, booth_id, booth_id)).fetchone()[0]
+        used = conn.execute("SELECT COUNT(*) FROM registration_codes WHERE booth_id=?", (booth_id,)).fetchone()[0]
         if used:
-            raise HTTPException(409, "Stoisko ma rejestracje lub kody, więc nie można go usunąć.")
+            raise HTTPException(409, "Stoisko ma tokeny rejestracyjne, więc nie można go usunąć.")
         conn.execute("DELETE FROM genotype_history WHERE booth_id=?", (booth_id,))
         conn.execute("DELETE FROM booths WHERE id=?", (booth_id,))
     return {"ok": True}
@@ -292,20 +288,72 @@ def put_dictionary(body: DictionaryIn, _: dict = Depends(auth.require_admin),
         used = {r[0] for r in conn.execute("SELECT DISTINCT faculty FROM donors_stats")}
         missing = sorted(used - seen)
         if missing:
-            raise HTTPException(409, "Nie można usunąć wydziałów, które mają rejestracje: " + ", ".join(missing) + ".")
+            raise HTTPException(409, "Nie można usunąć wydziałów, które mają punkty: " + ", ".join(missing) + ".")
         old = db.get_dictionary(conn)
         # „Inne” zawsze na końcu (nie da się go zgubić ani przesunąć).
         db.set_dictionary(conn, {"_note": old.get("_note", ""), "faculties": db.with_other_last(faculties)})
     return {"ok": True}
 
 
-# --- trafienia 10/10 ------------------------------------------------------------
+# --- trafienia 10/10 i weryfikacja Tokenu Losu ----------------------------------
+def normalize_token(raw: str) -> str:
+    """Wielkie litery, bez spacji, różne myślniki jak „-”; HGXXXXXXXX dostaje myślniki HG-XXXX-XXXX."""
+    t = re.sub(r"\s+", "", re.sub(r"[\u2010-\u2015\u2212]", "-", raw or "")).upper()
+    m = re.fullmatch(r"HG-?([A-Z0-9]{4})-?([A-Z0-9]{4})", t)
+    return f"HG-{m.group(1)}-{m.group(2)}" if m else t
+
+
+def _win(conn: sqlite3.Connection, token: str) -> sqlite3.Row | None:
+    """Prawdziwe trafienie o danym tokenie (testowe traktujemy jak nieistniejące)."""
+    return conn.execute("SELECT w.token, w.genotype, w.won_at, w.submitted_at, b.name AS booth_name FROM wins w "
+                        "LEFT JOIN booths b ON b.id=w.booth_id WHERE w.token=? AND w.is_test=0",
+                        (normalize_token(token),)).fetchone()
+
+
 @router.get("/wins")
 def list_wins(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    rows = conn.execute("SELECT w.seq, w.token, w.genotype, w.booth_id, b.name AS booth_name, w.won_at FROM wins w "
-                        "LEFT JOIN booths b ON b.id=w.booth_id WHERE w.is_test=0 ORDER BY w.seq")
+    rows = conn.execute("SELECT w.seq, w.token, w.genotype, w.booth_id, b.name AS booth_name, w.won_at, w.submitted_at "
+                        "FROM wins w LEFT JOIN booths b ON b.id=w.booth_id WHERE w.is_test=0 ORDER BY w.seq")
     wins = [dict(r) for r in rows]
     return {"count": len(wins), "wins": wins}
+
+
+@router.get("/tokens/{token}")
+def check_token(token: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Warunki §6.2 regulaminu Konkursu: token istnieje, ma wzór i datę z rejestru, nie był wykorzystany."""
+    w = _win(conn, token)
+    if w is None:
+        return {"exists": False, "token": normalize_token(token), "genotype": None, "won_at": None,
+                "booth_name": None, "submitted_at": None}
+    return {"exists": True, "token": w["token"], "genotype": w["genotype"], "won_at": w["won_at"],
+            "booth_name": w["booth_name"], "submitted_at": w["submitted_at"]}
+
+
+@router.post("/tokens/{token}/submit")
+def submit_token(token: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Oznacza token jako wykorzystany w zgłoszeniu (atomowo: drugi raz = 409)."""
+    t = normalize_token(token)
+    with db.tx(conn):
+        if _win(conn, t) is None:
+            raise HTTPException(404, "Nie ma takiego tokenu w rejestrze wygranych 10/10.")
+        ts = config.now_iso()
+        if conn.execute("UPDATE wins SET submitted_at=? WHERE token=? AND is_test=0 AND submitted_at IS NULL",
+                        (ts, t)).rowcount == 0:
+            raise HTTPException(409, "Ten token został już wykorzystany we wcześniejszym zgłoszeniu.")
+    return {"ok": True, "token": t, "submitted_at": ts}
+
+
+@router.post("/tokens/{token}/unsubmit")
+def unsubmit_token(token: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Cofnięcie pomyłkowego oznaczenia tokenu jako wykorzystanego."""
+    t = normalize_token(token)
+    with db.tx(conn):
+        if _win(conn, t) is None:
+            raise HTTPException(404, "Nie ma takiego tokenu w rejestrze wygranych 10/10.")
+        if conn.execute("UPDATE wins SET submitted_at=NULL WHERE token=? AND is_test=0 AND submitted_at IS NOT NULL",
+                        (t,)).rowcount == 0:
+            raise HTTPException(409, "Ten token nie jest oznaczony jako wykorzystany.")
+    return {"ok": True, "token": t}
 
 
 # --- ustawienia i liczby studentów ----------------------------------------------
@@ -351,6 +399,10 @@ def put_students(body: StudentsIn, _: dict = Depends(auth.require_admin), conn: 
 
 
 # --- podsumowania ---------------------------------------------------------------
+def _used_on(conn: sqlite3.Connection, d: str) -> int:
+    return sum(db.used_counts(conn, date=d).values())
+
+
 @router.get("/summary")
 def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
             conn: sqlite3.Connection = Depends(db.get_db)):
@@ -366,7 +418,9 @@ def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
         rolls, matches = g["r"], g["m"]
     else:
         d = date
-        registered = conn.execute("SELECT COUNT(*) FROM donors_stats WHERE registered_date=?", (d,)).fetchone()[0]
+        start, end = config.day_bounds(d)
+        registered = conn.execute("SELECT COUNT(*) FROM donors_stats WHERE created_at>=? AND created_at<?",
+                                  (start, end)).fetchone()[0]
         g = conn.execute("SELECT COUNT(*) p, COALESCE(SUM(attempts),0) r FROM game_attempts WHERE date=?", (d,)).fetchone()
         players, rolls = g["p"], g["r"]
         matches = sum(1 for r in conn.execute("SELECT matched_at FROM genotype_history WHERE matched_at IS NOT NULL")
@@ -374,25 +428,38 @@ def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
     podium = [f for f in stats.faculty_counts(conn, d) if f["count"] > 0][:3]
     return {"scope": "all" if d is None else "day", "date": date, "registered": registered,
             "registered_total": total, "podium": podium,
-            "battle": [r for r in stats.battle(conn, d)["ranking"] if r["registered"] > 0][:3],
+            "cup": [r for r in stats.cup(conn, d)["ranking"] if r["registered"] > 0][:3],
             "game": {"players": players, "rolls": rolls, "matches": matches}}
 
 
 @router.get("/days")
 def days(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    found = {r[0] for r in conn.execute("SELECT registered_date FROM donors_stats")}
+    found = {config.warsaw_date(r[0]) for r in conn.execute("SELECT created_at FROM donors_stats")}
     found |= {r[0] for r in conn.execute("SELECT date FROM game_attempts")}
     found |= {config.warsaw_date(r[0]) for r in conn.execute(
         "SELECT matched_at FROM genotype_history WHERE matched_at IS NOT NULL")}
     return sorted(found, reverse=True)
 
 
-@router.get("/export-csv")
-def export_csv(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+def _csv(rows: list[list], header: list[str], filename: str) -> Response:
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\r\n")
-    w.writerow(["id", "booth_id", "faculty", "study_year", "registered_date", "kind"])
-    for r in conn.execute("SELECT id,booth_id,faculty,study_year,registered_date,kind FROM donors_stats ORDER BY id"):
-        w.writerow(list(r))
+    w.writerow(header)
+    w.writerows(rows)
     return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": 'attachment; filename="rejestracje.csv"'})
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/export-csv")
+def export_csv(set: str = "punkty", _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """``punkty``: wpisy wydziałów (id, wydział, data i godzina UTC). ``tokeny``: zużyte tokeny rejestracyjne wg
+    stoiska, typu i doby (zestawienie do audytu §6.3 regulaminu Pucharu)."""
+    if set == "tokeny":
+        counts: dict[tuple[str, str, str], int] = {}
+        for r in conn.execute("SELECT booth_id, kind, used_at FROM registration_codes WHERE status='USED'"):
+            key = (r["booth_id"], r["kind"], config.warsaw_date(r["used_at"]))
+            counts[key] = counts.get(key, 0) + 1
+        return _csv([[*k, n] for k, n in sorted(counts.items())], ["booth_id", "kind", "date", "count"],
+                    "tokeny-wg-stoisk.csv")
+    return _csv([list(r) for r in conn.execute("SELECT id,faculty,created_at FROM donors_stats ORDER BY id")],
+                ["id", "faculty", "created_at"], "punkty.csv")

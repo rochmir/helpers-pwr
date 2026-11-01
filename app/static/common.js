@@ -121,6 +121,16 @@ export function formatWarsaw(iso) {
   }).format(d);
 }
 
+/** Data i godzina po polsku w strefie Europe/Warsaw z znacznika UTC serwera, np. "11 grudnia 2026, 16:00". */
+export function formatWarsawLong(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const date = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+  const time = new Intl.DateTimeFormat('pl-PL', { timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit' }).format(d);
+  return date + ', ' + time;
+}
+
 /** Rysuje genotyp jako komorki ksztaltow. mark: opcjonalny genotyp do porownania (klasy match / miss). */
 export function renderGenotype(container, genotype, mark) {
   container.textContent = '';

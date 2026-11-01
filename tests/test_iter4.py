@@ -30,16 +30,16 @@ def always_win(monkeypatch):
     monkeypatch.setattr(game, "is_win", lambda rng=None: True)
 
 
-# --- limit prób na stanowisko i hash urządzenia ---------------------------------
-def test_limit_five_per_booth_same_hash_two_sessions_tolerance_one(admin, booth, other_clients):
+# --- limit prób na urządzenie i hash urządzenia ---------------------------------
+def test_limit_five_per_device_same_hash_two_sessions_tolerance_one(admin, booth, other_clients):
     set_tolerance(admin, 1)
     a, b = other_clients(), other_clients()
     new_session(a, booth)
     new_session(b, booth)  # ten sam hash urządzenia w innej przeglądarce
     exhaust(a, booth)
     r = roll(b, booth)
-    assert r.status_code == 429 and "Limit prób na tym stanowisku" in r.json()["detail"]
-    assert b.get("/api/game/me").json()["booth_left"] == 0
+    assert r.status_code == 429 and r.json()["detail"] == "Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro."
+    assert b.get("/api/game/me").json()["attempts_left"] == 0
 
 
 def test_tolerance_three_allows_three_sessions(admin, booth, other_clients):
@@ -66,33 +66,36 @@ def test_partial_pool_shared_between_sessions(admin, booth, other_clients):
     new_session(b, booth)
     exhaust(a, booth, 3)
     d = roll(b, booth).json()
-    assert d["booth_left"] == 1 and d["attempts_left"] == 1
+    assert d["attempts_left"] == 1
     assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
 
 
-def test_other_booth_gives_new_pool(admin, booth, client):
+def test_limit_is_per_device_not_per_booth(admin, booth, client):
+    """Regulamin konkursu §4.2: 5 prób na dobę na urządzenie, razem na wszystkich stoiskach."""
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
     set_tolerance(admin, 1)
     new_session(client, booth)
-    exhaust(client, booth)
-    assert roll(client, booth).status_code == 429
+    exhaust(client, booth, 3)
     assert enter(client, "w4").status_code == 200
-    me = client.get("/api/game/me").json()
-    assert me["booth_left"] == 5 and me["attempts_left"] == 5
-    d = roll(client, "w4").json()
-    assert d["booth_left"] == 4
+    assert client.get("/api/game/me").json()["attempts_left"] == 2  # trzy próby zeszły z c13
+    assert roll(client, "w4").json()["attempts_left"] == 1
+    assert roll(client, "w4").status_code == 200
+    r = roll(client, "w4")
+    assert r.status_code == 429 and r.json()["detail"].startswith("Limit 5 prób na dobę na tym urządzeniu")
     assert enter(client, booth).status_code == 200
-    assert client.get("/api/game/me").json()["booth_left"] == 0  # pula c13 nadal wykorzystana
+    assert roll(client, booth).status_code == 429  # wrócenie na pierwsze stoisko niczego nie odnawia
+    assert client.get("/api/game/me").json()["attempts_left"] == 0
 
 
-def test_bonus_used_after_booth_pool(admin, booth, other_clients):
-    set_tolerance(admin, 1)
-    p = other_clients()
-    new_session(p, booth)
-    register(p, make_code(admin, booth_id=booth))
-    exhaust(p, booth)
-    d = roll(p, booth).json()
-    assert d["booth_left"] == 0 and d["bonus_attempts"] == 9 and d["attempts_left"] == 9
+def test_limit_across_booths_default_tolerance_and_other_device(admin, booth, other_clients):
+    admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
+    a, b = other_clients(), other_clients()
+    new_session(a, booth)
+    exhaust(a, booth, 5)
+    assert enter(a, "w4").status_code == 200 and roll(a, "w4").status_code == 429
+    new_session(b)
+    assert enter(b, "w4", device="cd" * 32).status_code == 200  # inne urządzenie ma własną pulę
+    assert roll(b, "w4").status_code == 200
 
 
 def test_enter_consent_and_device_validation(client, booth):
@@ -131,7 +134,7 @@ def test_new_day_rotates_salt_and_drops_keys(booth, client, monkeypatch):
     assert enter(client, booth).status_code == 200
     key2 = conn.execute("SELECT device_key FROM game_sessions").fetchone()[0]
     assert key2 and key2 != key1  # ten sam hash urządzenia, inny klucz w nowym dniu
-    assert roll(client, booth).json()["booth_left"] == 4
+    assert roll(client, booth).json()["attempts_left"] == 4
     conn.close()
 
 
@@ -169,7 +172,7 @@ def test_win_token_and_seq(admin, booth, other_clients, monkeypatch):
     w = admin.get("/api/admin/wins").json()
     assert w["count"] == 2 and [x["seq"] for x in w["wins"]] == [1, 2]
     assert w["wins"][0] == {"seq": 1, "token": seen[0], "genotype": w["wins"][0]["genotype"], "booth_id": "c13",
-                            "booth_name": "Budynek C-13", "won_at": w["wins"][0]["won_at"]}
+                            "booth_name": "Budynek C-13", "won_at": w["wins"][0]["won_at"], "submitted_at": None}
 
 
 def test_non_win_roll_has_empty_won_fields(booth, client, monkeypatch):
@@ -189,7 +192,7 @@ def test_test_win_has_seq_zero_and_is_hidden(admin, booth, monkeypatch):
     assert admin.post("/api/admin/test/force-win", json={"booth_id": booth}).status_code == 200
     conn = db.connect()
     rows = conn.execute("SELECT seq, is_test, session_id FROM wins ORDER BY rowid").fetchall()
-    assert [(r["seq"], r["is_test"]) for r in rows] == [(0, 1), (0, 1)] and rows[1]["session_id"] is None
+    assert [(r["seq"], r["is_test"]) for r in rows] == [(0, 1), (0, 1)] and all(r["session_id"] is None for r in rows)
     conn.close()
     assert admin.get("/api/admin/wins").json() == {"count": 0, "wins": []}
     # kolejne prawdziwe trafienie dostaje numer 1
@@ -204,7 +207,7 @@ def test_reset_my_game_and_wipe_clear_new_tables(admin, booth, monkeypatch):
     roll(admin, booth)
     admin.post("/api/admin/test/reset-my-game", json={})
     me = admin.get("/api/game/me").json()
-    assert me["won_token"] is None and me["booth_left"] == 5
+    assert me["won_token"] is None and me["attempts_left"] == 5
     conn = db.connect()
     assert conn.execute("SELECT COUNT(*) FROM booth_plays").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM wins").fetchone()[0] == 1  # wpis trafienia zostaje
@@ -234,7 +237,7 @@ def test_migration_backfills_wins_and_drops_raffle(booth, client):
         assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='raffle_draws'").fetchone() is None
         rows = conn.execute("SELECT genotype, seq, is_test, session_id, token FROM wins ORDER BY won_at").fetchall()
         assert [(r["genotype"], r["seq"], r["is_test"], r["session_id"]) for r in rows] == \
-            [("0000000002", 0, 1, None), ("0000000001", 1, 0, None), ("0000000003", 2, 0, "s1")]
+            [("0000000002", 0, 1, None), ("0000000001", 1, 0, None), ("0000000003", 2, 0, None)]  # wpis wygranej bez sesji (§4.3)
         assert all(TOKEN_RE.match(r["token"]) for r in rows)
         assert conn.execute("SELECT won_token FROM game_sessions").fetchone()[0] == rows[2]["token"]
     conn.close()
@@ -257,18 +260,26 @@ def test_migration_adds_columns_to_old_tables(tmp_path, monkeypatch):
     conn.close()
 
 
-# --- bitwa wydziałów ------------------------------------------------------------
+# --- Puchar Dawcy PWr: Wskaźnik Zaangażowania -----------------------------------
 def put_students(admin, counts, source="GUS 2026"):
     r = admin.put("/api/admin/students", json={"source": source, "counts": counts})
     assert r.status_code == 200, r.text
     return r.json()
 
 
-def test_battle_seed_ranks_all_faculties_except_other(admin, booth, client):
+def add_points(code, n, day_iso="2026-12-08T10:00:00Z"):
+    conn = db.connect()
+    conn.executemany("INSERT INTO donors_stats(faculty,created_at) VALUES(?,?)", [(code, day_iso)] * n)
+    conn.close()
+
+
+def test_cup_seed_ranks_all_faculties_except_other(admin, booth, client):
     assert admin.get("/api/admin/students").json()["counts"]["W4N"] == 4576
-    b = client.get("/api/stats/battle").json()
+    b = client.get("/api/stats/cup").json()
     assert "Sprawozdanie Rektora" in b["source"] and len(b["ranking"]) == 14
     assert b["unranked"] == [{"code": "INNE", "name": "Inne", "registered": 0}]
+    assert b["cup_deadline"] == "2026-12-11T15:30:00Z" and b["cup_closed"] is False
+    assert client.get("/api/stats/battle").status_code == 404  # stary adres nie istnieje
 
 
 def test_seed_does_not_overwrite_existing_students(admin):
@@ -277,29 +288,41 @@ def test_seed_does_not_overwrite_existing_students(admin):
     assert admin.get("/api/admin/students").json()["counts"] == {"W4N": 10}
 
 
-def test_battle_ranking_unranked_and_inne(admin, booth, client):
+def test_cup_ranking_unranked_and_inne(admin, booth, client):
     for fac in ["W4N"] * 3 + ["W13"] * 2 + ["W3", "INNE", "W1"]:
         assert register(client, make_code(admin, booth_id=booth), fac).status_code == 200
-    # W4N: 3/1000 -> 3.0; W13: 2/500 -> 4.0; W3: 1/500 -> 2.0 (INNE ignorowane w rankingu nawet z liczbą)
+    # WZ = LD / LS * 100: W4N 3/1000 -> 0.3; W13 2/500 -> 0.4; W3 1/500 -> 0.2 (INNE poza klasyfikacją nawet z liczbą)
     put_students(admin, {"W4N": 1000, "W13": 500, "W3": 500, "INNE": 100, "W2": None})
-    b = client.get("/api/stats/battle").json()
+    b = client.get("/api/stats/cup").json()
     assert b["source"] == "GUS 2026"
-    assert [(r["rank"], r["code"], r["registered"], r["students"], r["per_1000"]) for r in b["ranking"]] == \
-        [(1, "W13", 2, 500, 4.0), (2, "W4N", 3, 1000, 3.0), (3, "W3", 1, 500, 2.0)]
-    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "per_1000"}
+    assert [(r["rank"], r["code"], r["registered"], r["students"], r["wz"]) for r in b["ranking"]] == \
+        [(1, "W13", 2, 500, 0.4), (2, "W4N", 3, 1000, 0.3), (3, "W3", 1, 500, 0.2)]
+    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz"}
     codes = [u["code"] for u in b["unranked"]]
     assert len(codes) == 12 and codes[-1] == "INNE" and "W1" in codes and "W4N" not in codes
     assert {"code": "W1", "name": b["unranked"][codes.index("W1")]["name"], "registered": 1} in b["unranked"]
 
 
-def test_battle_rounding_and_ties(admin, booth, client):
+def test_cup_rounding_and_ties(admin, booth, client):
     for fac in ["W4N"] * 2 + ["W13"] + ["W3"]:
         register(client, make_code(admin, booth_id=booth), fac)
-    put_students(admin, {"W4N": 600, "W13": 300, "W3": 300})  # 3.33, 3.33, 3.33
-    r = client.get("/api/stats/battle").json()["ranking"]
-    assert r[0]["per_1000"] == 3.33
-    # remis: więcej rejestracji, potem kolejność słownika (W3 przed W13)
+    put_students(admin, {"W4N": 600, "W13": 300, "W3": 300})  # 0.33, 0.33, 0.33
+    r = client.get("/api/stats/cup").json()["ranking"]
+    assert r[0]["wz"] == 0.33
+    # remis: więcej punktów (LD), potem kolejność słownika (W3 przed W13)
     assert [x["code"] for x in r] == ["W4N", "W3", "W13"]
+
+
+def test_cup_tie_at_two_decimals_decided_by_ld_not_raw_ratio(admin, booth, client):
+    """§4.4: remis liczony „do drugiego miejsca po przecinku”: 33/10000 i 1/300 to oba 0,33, więc wygrywa wyższe LD."""
+    add_points("W13", 33)
+    add_points("W3", 1)
+    put_students(admin, {"W13": 10000, "W3": 300})
+    r = client.get("/api/stats/cup").json()["ranking"]
+    assert [(x["code"], x["wz"]) for x in r] == [("W13", 0.33), ("W3", 0.33)]
+    # i zero punktów też jest sklasyfikowane (WZ 0), ale pod punktowanymi
+    put_students(admin, {"W13": 10000, "W3": 300, "W1": 50})
+    assert [x["code"] for x in client.get("/api/stats/cup").json()["ranking"]] == ["W13", "W3", "W1"]
 
 
 def test_students_validation(admin, booth):
@@ -309,15 +332,24 @@ def test_students_validation(admin, booth):
     assert put_students(admin, {"W4N": 100000, "W3": 1}) == {"source": "GUS 2026", "counts": {"W4N": 100000, "W3": 1}}
 
 
-def test_summary_battle_top3(admin, booth, client):
+def test_summary_cup_top3(admin, booth, client):
     for fac in ["W4N"] * 3 + ["W13", "W3"]:
         register(client, make_code(admin, booth_id=booth), fac)
     put_students(admin, {})
-    assert admin.get("/api/admin/summary?date=all").json()["battle"] == []
+    assert admin.get("/api/admin/summary?date=all").json()["cup"] == []
     put_students(admin, {"W4N": 300, "W13": 100, "W3": 100, "W1": 100})
-    top = admin.get("/api/admin/summary?date=all").json()["battle"]
-    assert [(r["code"], r["per_1000"]) for r in top] == [("W4N", 10.0), ("W3", 10.0), ("W13", 10.0)]
-    assert admin.get("/api/admin/summary?date=2001-01-01").json()["battle"] == []
+    top = admin.get("/api/admin/summary?date=all").json()["cup"]
+    assert [(r["code"], r["wz"]) for r in top] == [("W4N", 1.0), ("W3", 1.0), ("W13", 1.0)]
+    assert admin.get("/api/admin/summary?date=2001-01-01").json()["cup"] == []
+
+
+def test_cup_day_filter_uses_warsaw_day(admin, booth, client):
+    """Doba Europe/Warsaw, nie UTC: 23:30 UTC 10 grudnia to już 11 grudnia o 00:30 w Warszawie."""
+    add_points("W4N", 2, "2026-12-10T23:30:00Z")
+    add_points("W4N", 1, "2026-12-10T22:30:00Z")
+    assert admin.get("/api/admin/summary?date=2026-12-11").json()["registered"] == 2
+    assert admin.get("/api/admin/summary?date=2026-12-10").json()["registered"] == 1
+    assert admin.get("/api/admin/days").json()[:2] == ["2026-12-11", "2026-12-10"]
 
 
 # --- logowanie i rangi ----------------------------------------------------------
@@ -373,8 +405,8 @@ def test_old_panels_redirect_to_login(client):
 
 # --- ustawienia, strony ---------------------------------------------------------
 def test_settings_and_facebook_in_config(admin, client):
-    assert admin.get("/api/admin/settings").json() == {"device_tolerance": 10, "facebook_url": "",
-                                                            "device_stats": {"date": config.today(), "base_keys": 0, "ext_keys": 0}}
+    assert admin.get("/api/admin/settings").json() == {"device_tolerance": 10, "facebook_url": "https://www.facebook.com/samorzadpwr",
+                                                       "device_stats": {"date": config.today(), "base_keys": 0, "ext_keys": 0}}
     for bad in ({"device_tolerance": 0}, {"device_tolerance": 51}, {"device_tolerance": 3, "facebook_url": "http://fb.com/x"},
                 {"device_tolerance": 3, "facebook_url": "javascript:alert(1)"}, {"device_tolerance": 3, "facebook_url": "https://a b"}):
         assert admin.put("/api/admin/settings", json=bad).status_code == 422, bad
@@ -383,20 +415,8 @@ def test_settings_and_facebook_in_config(admin, client):
     assert client.get("/api/config").json()["facebook_url"] == "https://facebook.com/samorzad"
     admin.put("/api/admin/settings", json={"device_tolerance": 7, "facebook_url": ""})
     assert client.get("/api/config").json()["facebook_url"] is None
-
-
-def test_legal_page_placeholders(client, tmp_path, monkeypatch):
-    from app import main
-    (tmp_path / "regulamin.html").write_text("<p>{{OWNER}} | {{CONTACT}}</p>", encoding="utf-8")
-    monkeypatch.setattr(main, "STATIC_DIR", tmp_path)
-    monkeypatch.delenv("LEGAL_OWNER", raising=False)
-    monkeypatch.delenv("LEGAL_CONTACT", raising=False)
-    assert client.get("/regulamin").text == "<p>[do uzupełnienia] | [do uzupełnienia]</p>"
-    monkeypatch.setenv("LEGAL_OWNER", "Samorząd <b>&")
-    monkeypatch.setenv("LEGAL_CONTACT", "a@b.pl")
-    assert client.get("/regulamin").text == "<p>Samorząd &lt;b&gt;&amp; | a@b.pl</p>"
-    for path in ("/polityka-prywatnosci", "/bitwa", "/login"):  # trasy istnieją (404 tylko z braku pliku)
-        assert client.get(path).status_code == 404
+    db.init_db()  # domyślny profil z seedu wraca tylko raz: wyczyszczony adres zostaje pusty
+    assert client.get("/api/config").json()["facebook_url"] is None
 
 
 # --- partnerzy ------------------------------------------------------------------
@@ -492,7 +512,7 @@ def test_same_ext_two_sessions_share_five_despite_high_tolerance(admin, booth, o
         new_session(c)
         assert enter(c, booth, device_ext=EXT_A).status_code == 200
     exhaust(a, booth, 3)
-    assert roll(b, booth).json()["booth_left"] == 1
+    assert roll(b, booth).json()["attempts_left"] == 1
     assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
 
 
@@ -506,7 +526,7 @@ def test_same_device_different_ext_each_has_five_up_to_ceiling(admin, booth, oth
     exhaust(cs[1], booth)
     assert roll(cs[0], booth).status_code == 429 and roll(cs[1], booth).status_code == 429
     assert roll(cs[2], booth).status_code == 429  # sufit 5*2 osiągnięty
-    assert cs[2].get("/api/game/me").json()["booth_left"] == 0
+    assert cs[2].get("/api/game/me").json()["attempts_left"] == 0
 
 
 def test_tolerance_one_is_five_total_per_device(admin, booth, other_clients):
@@ -516,7 +536,7 @@ def test_tolerance_one_is_five_total_per_device(admin, booth, other_clients):
         new_session(c)
         assert enter(c, booth, device_ext=ext).status_code == 200
     exhaust(a, booth, 3)
-    assert roll(b, booth).json()["booth_left"] == 1
+    assert roll(b, booth).json()["attempts_left"] == 1
     assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
 
 
@@ -581,4 +601,4 @@ def test_reset_my_game_clears_ext_plays(admin, booth):
     conn = db.connect()
     assert conn.execute("SELECT COUNT(*) FROM booth_plays").fetchone()[0] == 0
     conn.close()
-    assert admin.get("/api/game/me").json()["booth_left"] == 5
+    assert admin.get("/api/game/me").json()["attempts_left"] == 5

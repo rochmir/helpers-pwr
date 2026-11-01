@@ -1,5 +1,6 @@
 import json
 import re
+import secrets
 from datetime import timedelta
 
 import pytest
@@ -45,14 +46,16 @@ def make_code(v, **body):
     return r.json()["code"]
 
 
-def register(c, code, faculty="W4N", year=2):
-    return c.post("/api/donor/register", json={"code": code, "faculty": faculty, "study_year": year})
+def register(c, code, faculty="W4N", device=None, **extra):
+    """Wpisanie tokenu rejestracyjnego; domyślnie z nowym, losowym urządzeniem (jeden głos z urządzenia)."""
+    return c.post("/api/donor/register", json={"code": code, "faculty": faculty,
+                                               "device": device or secrets.token_hex(32), **extra})
 
 
 # --- gra ------------------------------------------------------------------------
 def test_session_and_roll(client, booth, other_clients):
     s = new_session(client, booth)
-    assert s["attempts_left"] == 5 and s["has_won"] is False and s["token"] and s["bonus_attempts"] == 0
+    assert s["attempts_left"] == 5 and s["has_won"] is False and s["token"] and "bonus_attempts" not in s
     r = client.post("/api/game/roll", json={"booth_id": booth})
     assert r.status_code == 200
     d = r.json()
@@ -80,7 +83,7 @@ def test_roll_limit_then_daily_reset(client, booth, monkeypatch):
     for i in range(5):
         assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200
     r = client.post("/api/game/roll", json={"booth_id": booth})
-    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and "Limit prób na tym stanowisku" in r.json()["detail"]
+    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and r.json()["detail"] == "Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro."
     assert client.get(f"/api/booth/{booth}/state").json()["rolls_count"] == 5
     monkeypatch.setattr(config, "today", lambda: "2099-01-01")
     assert client.get("/api/game/me").json()["attempts_left"] == 5
@@ -231,26 +234,31 @@ def test_register_expired(admin, booth, client, monkeypatch):
 def test_register_invalid_dictionary(admin, booth, client):
     code = make_code(admin, booth_id=booth)
     assert register(client, code, faculty="XX").status_code == 422
-    assert register(client, code, year=9).status_code == 422
-    assert register(client, code, year=7).status_code == 200  # kod nie został zużyty
+    assert client.post("/api/donor/register", json={"code": code, "faculty": "W4N"}).status_code == 422  # brak urządzenia
+    assert client.post("/api/donor/register", json={"code": code, "faculty": "W4N", "device": "zly"}).status_code == 422
+    assert register(client, code, faculty="W13").status_code == 200  # token nie został zużyty
 
 
 def test_donors_stats_privacy(admin, booth, client):
+    """§3.4 regulaminu Pucharu: wydział, znacznik czasu i skrót urządzenia; bez roku, stoiska, typu, tokenu i legitymacji."""
     code = make_code(admin, booth_id=booth)
-    register(client, code)
+    register(client, code, device="cd" * 32)
     conn = db.connect()
     cols = [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")]
-    assert "code" not in cols and "created_at" not in cols
+    assert cols == ["id", "faculty", "created_at", "device_hash"]
+    assert "card_hash" not in [r[1] for r in conn.execute("PRAGMA table_info(registration_codes)")]
+    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name IN ('actual_donor_cards','promo_codes')").fetchone() is None
     row = conn.execute("SELECT * FROM donors_stats").fetchone()
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["registered_date"])
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", row["created_at"])
+    assert re.fullmatch(r"[0-9a-f]{32}", row["device_hash"]) and row["device_hash"] != "cd" * 16
     assert code not in json.dumps([tuple(r) for r in conn.execute("SELECT * FROM donors_stats")])
     conn.close()
 
 
 # --- statystyki i admin ---------------------------------------------------------
 def seed_regs(admin, client, booth):
-    for fac, year in [("W4N", 1), ("W4N", 2), ("W4N", 2), ("W13", 3), ("W3", 6)]:
-        assert register(client, make_code(admin, booth_id=booth), fac, year).status_code == 200
+    for fac in ("W4N", "W4N", "W4N", "W13", "W3"):
+        assert register(client, make_code(admin, booth_id=booth), fac).status_code == 200
 
 
 def test_live_stats(admin, booth, client):
@@ -260,10 +268,11 @@ def test_live_stats(admin, booth, client):
     s = client.get("/api/stats/live").json()
     assert s["total"] == 5
     assert len(s["faculties"]) == 15
-    assert s["faculties"][0] == {"code": "W4N", "name": "Wydział Informatyki i Telekomunikacji", "count": 3,
-                                 "potential": 3, "actual": 0, "total": 3}
-    assert [f["count"] for f in s["faculties"]] == sorted((f["count"] for f in s["faculties"]), reverse=True)
-    assert "top_majors" not in s
+    # kolejność słownika (to nie jest ranking), same punkty
+    assert [f["code"] for f in s["faculties"]][:4] == ["W1", "W2", "W3", "W4N"]
+    assert {f["code"]: f["count"] for f in s["faculties"] if f["count"]} == {"W4N": 3, "W13": 1, "W3": 1}
+    assert all(set(f) == {"code", "name", "count"} for f in s["faculties"])
+    assert s["total_potential"] == 5 and s["total_actual"] == 0
     assert s["booths"] == [{"id": "c13", "name": "Budynek C-13", "registered": 5, "matches_count": 0, "rolls_count": 1}]
     assert s["game"] == {"rolls": 1, "matches": 0, "players": 1}
 
@@ -271,13 +280,13 @@ def test_live_stats(admin, booth, client):
 def test_admin_summary_day_vs_all(admin, booth, client, monkeypatch):
     conn = db.connect()
     seed_regs(admin, client, booth)
-    conn.execute("UPDATE donors_stats SET registered_date='2020-01-01' WHERE id<=2")
+    conn.execute("UPDATE donors_stats SET created_at='2020-01-01T12:00:00Z' WHERE id<=2")
     today = config.today()
     d = admin.get(f"/api/admin/summary?date={today}").json()
     assert d["scope"] == "day" and d["date"] == today and d["registered"] == 3 and d["registered_total"] == 5
     # remis: kolejność ze słownika (W3, W4N, W13), nie alfabetyczna
     assert [(f["code"], f["count"]) for f in d["podium"]] == [("W3", 1), ("W4N", 1), ("W13", 1)]
-    assert "top_major" not in d
+    assert "battle" not in d and "cup" in d
     a = admin.get("/api/admin/summary?date=all").json()
     assert a["scope"] == "all" and a["registered"] == 5 and a["podium"][0]["code"] == "W4N"
     assert a["podium"][0]["count"] == 3 and len(a["podium"]) == 3
@@ -306,8 +315,12 @@ def test_csv_export(admin, booth, client):
     assert r.headers["content-type"].startswith("text/csv")
     assert r.content.startswith(b"\xef\xbb\xbf")
     lines = r.content.decode("utf-8-sig").splitlines()
-    assert lines[0] == "id,booth_id,faculty,study_year,registered_date,kind"
-    assert len(lines) == 6 and lines[1].startswith("1,c13,W4N,1,")
+    assert lines[0] == "id,faculty,created_at"
+    assert len(lines) == 6 and lines[1].startswith("1,W4N,20")
+    assert "device_hash" not in r.text
+    r = admin.get("/api/admin/export-csv?set=tokeny")
+    lines = r.content.decode("utf-8-sig").splitlines()
+    assert lines[0] == "booth_id,kind,date,count" and lines[1] == f"c13,potential,{config.today()},5"
 
 
 def test_dictionary_put(admin, booth, client):
@@ -315,7 +328,7 @@ def test_dictionary_put(admin, booth, client):
     assert "_note" in d and len(d["faculties"]) == 15 and d["faculties"][-1] == {"code": "INNE", "name": "Inne"}
     assert all(set(f) == {"code", "name"} for f in d["faculties"])
     pub = client.get("/api/dictionary/faculties").json()
-    assert pub["study_years"][0] == {"value": 1, "label": "1 rok"} and pub["study_years"][-1] == {"value": 7, "label": "Pracownik PWr"}
+    assert set(pub) == {"faculties"}
     facs = d["faculties"]
     bad = [
         [],
@@ -327,7 +340,7 @@ def test_dictionary_put(admin, booth, client):
         assert admin.put("/api/admin/dictionary", json={"faculties": b}).status_code == 422, b
     assert admin.put("/api/admin/dictionary", json={"nope": 1}).status_code == 422
     # usunięcie wydziału z rejestracjami -> 409, bez rejestracji -> OK
-    register(client, make_code(admin, booth_id=booth), "W4N", 1)
+    register(client, make_code(admin, booth_id=booth), "W4N")
     without_w4 = [f for f in facs if f["code"] != "W4N"]
     r = admin.put("/api/admin/dictionary", json={"faculties": without_w4})
     assert r.status_code == 409 and "W4N" in r.json()["detail"]
@@ -372,7 +385,11 @@ def test_headers(client):
     assert r.headers["pragma"] == "no-cache"
     assert "challenges.cloudflare.com" in r.headers["content-security-policy"]
     assert r.headers["x-content-type-options"] == "nosniff" and r.headers["referrer-policy"] == "same-origin"
-    assert r.json() == {"turnstile_site_key": None, "public_url": "https://helpers-pwr.rupary.pl", "facebook_url": None}
+    d = r.json()
+    assert d["turnstile_site_key"] is None and d["public_url"] == "https://helpers-pwr.rupary.pl"
+    assert d["facebook_url"] == "https://www.facebook.com/samorzadpwr"  # domyślny profil Samorządu z seedu
+    assert d["legal_updated_at"].endswith("Z") and d["cup_deadline"] == "2026-12-11T15:30:00Z"
+    assert d["contest_deadline"] == "2026-12-11T15:00:00Z"
     h = client.get("/healthz")
     assert h.json() == {"ok": True} and "content-security-policy" in h.headers and h.headers["cache-control"] == "no-cache"
 
@@ -400,7 +417,10 @@ def test_pages(client):
         pytest.skip("brak app/static")
     assert client.get("/stoisko/c13").status_code == 200
     assert client.get("/stoisko/Bad!").status_code == 404
-    assert client.get("/").status_code == 200
+    for url in ("/", "/graj", "/puchar", "/potwierdz", "/statystyki", "/login", "/dokumenty", "/dokumenty/regulamin-konkursu"):
+        assert client.get(url).status_code == 200, url
+    r = client.get("/bitwa", follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/puchar"
 
 
 def test_bootstrap_booths(client, monkeypatch):

@@ -1,10 +1,10 @@
-// Czesc panelu dla wolontariusza (kody i liczniki stoiska). Logowanie i wybor stoiska robi login.js.
+// Czesc panelu dla wolontariusza (tokeny rejestracyjne i liczniki stoiska). Logowanie i wybor stoiska robi login.js.
 import { api, $, h, icon, setMessage, formatTime, formatDateTime, qrUrl } from './common.js';
 
 const msg = $('#panel-msg');
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
-const KIND_PL = { potential: 'potencjalny', actual: 'faktyczny', promo: 'dodatkowe losy' };
-const CODE_LABEL = { potential: 'Kod rejestracyjny', actual: 'Kod dawcy faktycznego', promo: 'Kod Dodatkowe losy' };
+const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny' };
+const CODE_LABEL = { potential: 'Token rejestracyjny (kod OTP)', actual: 'Token rejestracyjny: dawca faktyczny (kod OTP)' };
 let refreshTimer = null;
 let ctx = { role: 'volunteer', boothId: '' };
 let wired = false;
@@ -43,6 +43,10 @@ async function refresh() {
     $('#c-matches').textContent = me.matches_count ?? 0;
     $('#c-rolls').textContent = me.rolls_count ?? 0;
     renderCodes(me.codes || []);
+    const note = $('#cup-closed-note');
+    note.hidden = !me.cup_closed;
+    note.textContent = me.cup_closed ? me.cup_closed_message : '';
+    $('#gen-btn').disabled = !!me.cup_closed;
     refreshTimer = setTimeout(refresh, 15000);
   } catch (e) {
     if (e.status === 401) { location.reload(); return; }
@@ -55,36 +59,29 @@ function wire() {
   if (wired) return;
   wired = true;
 
-  // kind: 'potential' | 'actual' (z formularza) albo 'promo' (przycisk Dodatkowe losy)
+  // kind: 'potential' (nowy dawca) albo 'actual' (dawca faktyczny z okazana legitymacja; numeru nie zapisujemy)
   async function generate(kind) {
-    const buttons = [$('#gen-btn'), $('#promo-btn')];
-    for (const x of buttons) x.disabled = true;
+    const btn = $('#gen-btn');
+    btn.disabled = true;
     setMessage(msg, '');
     try {
       const body = ctx.role === 'admin' ? { booth_id: ctx.boothId } : {};
       body.kind = kind;
-      if (kind === 'actual') {
-        body.card_number = $('#card-number').value;
-        body.card_date = $('#card-date').value;
-        if (!body.card_number.trim() || !body.card_date) throw Object.assign(new Error('Podaj numer legitymacji i datę jej wydania.'), { detail: 'Podaj numer legitymacji i datę jej wydania.' });
-      }
       const r = await api('POST', '/api/volunteer/generate-code', body);
       $('#code-big').textContent = r.code;
       $('#code-qr').src = qrUrl(r.confirm_path);
       $('#code-expires').textContent = formatTime(r.expires_at);
-      $('#code-kind-label').textContent = CODE_LABEL[r.kind] || 'Kod rejestracyjny';
-      if (r.kind === 'actual') { $('#card-number').value = ''; $('#card-date').value = ''; }
+      $('#code-kind-label').textContent = CODE_LABEL[r.kind] || CODE_LABEL.potential;
       show('code-box', true);
       await refresh();
     } catch (e) {
       setMessage(msg, e.detail || e.message, 'error');
     } finally {
-      for (const x of buttons) x.disabled = false;
+      btn.disabled = false;
     }
   }
 
   $('#gen-btn').addEventListener('click', () => generate($('#code-kind').value));
-  $('#promo-btn').addEventListener('click', () => generate('promo'));
 
   $('#vcodes-body').addEventListener('click', async (ev) => {
     const btn = ev.target.closest && ev.target.closest('[data-cancel]');
@@ -96,8 +93,6 @@ function wire() {
       setMessage(msg, e.detail, 'error');
     }
   });
-
-  $('#code-kind').addEventListener('change', () => { $('#actual-fields').hidden = $('#code-kind').value !== 'actual'; });
 }
 
 /** Uruchamia (lub przelacza na inne stoisko) czesc wolontariusza. me = { role, booth: {id,name}|null }. */

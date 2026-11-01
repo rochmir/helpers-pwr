@@ -186,7 +186,7 @@ function baseParts() {
  */
 export async function deviceHashes() {
   if (!deviceHashSupported()) {
-    throw new Error('Ta przeglądarka nie pozwala obliczyć identyfikatora urządzenia (wymagane jest bezpieczne połączenie HTTPS). Otwórz grę w aktualnej przeglądarce, np. Chrome lub Safari.');
+    throw new Error('Ta przeglądarka nie pozwala obliczyć identyfikatora urządzenia (wymagane jest bezpieczne połączenie HTTPS). Otwórz stronę w aktualnej przeglądarce, np. Chrome lub Safari.');
   }
   const started = Date.now();
   const base = await sha256('hp-device-v1|' + baseParts().join('|'));

@@ -7,7 +7,7 @@ import sqlite3
 import segno
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from .. import captcha, config, db
+from .. import captcha, config, db, legal
 
 router = APIRouter()
 
@@ -20,7 +20,9 @@ def healthz():
 @router.get("/api/config")
 def get_config(conn: sqlite3.Connection = Depends(db.get_db)):
     return {"turnstile_site_key": captcha.site_key() if captcha.enabled() else None,
-            "public_url": config.public_url(), "facebook_url": db.get_setting(conn, "facebook_url") or None}
+            "public_url": config.public_url(), "facebook_url": db.get_setting(conn, "facebook_url") or None,
+            "legal_updated_at": legal.consent_updated_at(conn),
+            "cup_deadline": config.iso(config.cup_deadline()), "contest_deadline": config.iso(config.contest_deadline())}
 
 
 @router.get("/api/qr.svg")

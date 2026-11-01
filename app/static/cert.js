@@ -408,8 +408,8 @@ const fmtNum = (n) => String(n).replace('.', ',');
 
 // ---------- certyfikat gracza 10/10 ----------
 
-/** Dane z serwera: genotype, wonAt (ISO UTC), token, seq, boothName. nick tylko do canvasu. */
-export async function renderPlayerCert({ nick, genotype, wonAt, token, seq, boothName } = {}) {
+/** Dane z serwera: genotype, wonAt (ISO UTC), token, boothName. nick tylko do canvasu. */
+export async function renderPlayerCert({ nick, genotype, wonAt, token, boothName } = {}) {
   const ctxs = await prepare();
   const canvas = makeCanvas(1080, 1920);
   const when = formatWarsaw(wonAt);
@@ -421,17 +421,16 @@ export async function renderPlayerCert({ nick, genotype, wonAt, token, seq, boot
   ];
   if (name) blocks.push({ t: 'hero', text: name, size: 92, color: C.red, mt: 8 });
   if (token) {
-    blocks.push({ t: 'label', text: 'Token trafienia', size: 34, mt: 44 });
+    blocks.push({ t: 'label', text: 'Token Losu', size: 34, mt: 44 });
     blocks.push({ t: 'hero', text: token, size: 92, color: C.red, mt: 4, weight: '800' });
   }
-  if (seq > 0) blocks.push({ t: 'text', text: 'Trafienie nr ' + seq, size: 46, weight: '600', color: C.black, mt: 6 });
   if (genotype) {
     blocks.push({ t: 'label', text: 'Twój wzór', size: 34, mt: 40 });
     blocks.push({ t: 'genotype', value: genotype, mt: 14 });
   }
   if (when) blocks.push({ t: 'text', text: 'Data i godzina: ' + when, size: 38, weight: '600', color: C.black, mt: 36 });
   if (boothName) blocks.push({ t: 'text', text: 'Stanowisko: ' + boothName, size: 38, mt: 4 });
-  blocks.push({ t: 'text', text: 'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w grze HLA. Szansa na to wynosiła 1 do 300.', size: 36, narrow: true, mt: 44 });
+  blocks.push({ t: 'text', text: 'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w symulatorze HLA. W symulatorze 1 do 300. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.', size: 36, narrow: true, mt: 44 });
   blocks.push({ t: 'text', text: 'Prawdziwego bliźniaka genetycznego możesz uratować w rzeczywistości. Zarejestruj się jako potencjalny Dawca szpiku.', size: 36, narrow: true, mt: 20 });
   await drawGraphic(canvas, blocks, { ...ctxs, dateText: when ? '' : dateLong() });
   return canvas;
@@ -482,8 +481,8 @@ export async function renderResultCert({ nick, best, boothName, date } = {}) {
   if (boothName) blocks.push({ t: 'text', text: 'Stanowisko: ' + boothName, size: 38, mt: 36 });
   blocks.push({ t: 'text', text: dateLong(date), size: 38, mt: 4 });
   blocks.push({ t: 'text', size: 38, narrow: true, mt: 56,
-    text: 'Wzór stoiska należy do pacjenta czekającego na Dawcę. Zagraj i sprawdź, czy Ty jesteś jego bliźniakiem genetycznym.' });
-  blocks.push({ t: 'fit', text: 'Zagraj: ' + host + '/graj', size: 46, weight: '800', color: C.red, mt: 36 });
+    text: 'Wzór stoiska należy do pacjenta czekającego na Dawcę. Sprawdź swoje parametry i zobacz, czy Ty jesteś jego bliźniakiem genetycznym.' });
+  blocks.push({ t: 'fit', text: 'Sprawdź parametry: ' + host + '/graj', size: 46, weight: '800', color: C.red, mt: 36 });
   await drawGraphic(canvas, blocks, { ...ctxs, dateText: '' });
   return canvas;
 }
@@ -502,30 +501,30 @@ function socialBlocks(sm) {
     { t: 'title', text: title, size: 64 },
     { t: 'rule', mt: 24 },
     { t: 'hero', text: Number.isFinite(sm.registered) ? String(sm.registered) : 'Brak danych', size: 170, color: C.red, mt: 20 },
-    { t: 'text', text: sm.scope === 'day' ? 'zarejestrowanych tego dnia' : 'zarejestrowanych Dawców', size: 38, weight: '600', color: C.dark, mt: 0 },
+    { t: 'text', text: sm.scope === 'day' ? 'punktów w Pucharze tego dnia' : 'punktów w Pucharze Dawcy PWr', size: 38, weight: '600', color: C.dark, mt: 0 },
   ];
   if (sm.scope === 'day' && Number.isFinite(sm.registered_total)) {
     blocks.push({ t: 'text', text: 'łącznie w akcji: ' + sm.registered_total, size: 34, mt: 8 });
   }
-  const battle = Array.isArray(sm.battle) ? sm.battle.slice(0, 3) : [];
+  const cup = Array.isArray(sm.cup) ? sm.cup.slice(0, 3) : [];
   const podium = Array.isArray(sm.podium) ? sm.podium.slice(0, 3) : [];
-  blocks.push({ t: 'text', text: battle.length ? 'Bitwa Wydziałów' : 'Najlepsze wydziały', size: 46, weight: '800', color: C.black, mt: 56 });
-  if (battle.length) {
-    battle.forEach((p, i) => {
+  blocks.push({ t: 'text', text: cup.length ? 'Puchar Dawcy PWr' : 'Wydziały z największą liczbą punktów', size: 46, weight: '800', color: C.black, mt: 56 });
+  if (cup.length) {
+    cup.forEach((p, i) => {
       blocks.push({ t: 'fit', text: (p.rank || i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code), size: 38, mt: i ? 18 : 16 });
-      blocks.push({ t: 'text', text: fmtNum(p.per_1000) + ' rejestracji na 1000 studentów', size: 32, color: C.grey, mt: 0 });
+      blocks.push({ t: 'text', text: 'WZ: ' + fmtNum(p.wz) + ' (punkty: ' + p.registered + ')', size: 32, color: C.grey, mt: 0 });
     });
   } else if (podium.length) {
     podium.forEach((p, i) => {
-      blocks.push({ t: 'fit', text: (i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code) + ': ' + p.count, size: 38, mt: i ? 12 : 16 });
+      blocks.push({ t: 'fit', text: (i + 1) + '. ' + (p.name ? facultyLabel(p) : p.code) + ': ' + p.count + ' pkt', size: 38, mt: i ? 12 : 16 });
     });
   } else {
     blocks.push({ t: 'text', text: 'Brak danych', size: 38, mt: 16 });
   }
-  blocks.push({ t: 'text', text: 'Gra HLA', size: 46, weight: '800', color: C.black, mt: 56 });
+  blocks.push({ t: 'text', text: 'Symulator HLA', size: 46, weight: '800', color: C.black, mt: 56 });
   const g = sm.game;
   if (g) {
-    blocks.push({ t: 'text', text: 'Graczy: ' + g.players + ', losowań: ' + g.rolls, size: 38, mt: 14 });
+    blocks.push({ t: 'text', text: 'Uczestników: ' + g.players + ', prób: ' + g.rolls, size: 38, mt: 14 });
     blocks.push({ t: 'text', text: 'Trafień 10/10: ' + g.matches, size: 38, mt: 4 });
   } else {
     blocks.push({ t: 'text', text: 'Brak danych', size: 38, mt: 14 });

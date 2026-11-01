@@ -403,7 +403,6 @@ progress.bar::-moz-progress-bar { background: var(--primary); border-radius: 9re
 .code-big { margin: .4rem 0 1.6rem; font: var(--fw-bold) clamp(3.2rem, 13vw, 7.2rem)/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; color: var(--primary); word-break: break-all; }
 .qr { display: block; margin: 0 auto 1.2rem; background: var(--white); padding: 1rem; border-radius: var(--radius-card); max-width: 100%; height: auto; }
 #code-qr { width: 28rem; }
-.promo-gen { margin-top: 1.6rem; }
 
 /* ---------- admin ---------- */
 .admin-nav { display: flex; gap: 0; flex-wrap: wrap; margin: 0 0 2.4rem; border-bottom: .2rem solid var(--grey-bg); }
@@ -531,9 +530,6 @@ progress.bar::-moz-progress-bar { background: var(--primary); border-radius: 9re
 .qr-login { max-width: 44rem; display: flex; flex-direction: column; align-items: center; gap: 1.2rem; }
 .qr-login p { margin: 0; }
 .qr-login-title { font-size: 2.4rem; line-height: 3.3rem; font-weight: var(--fw-bold); }
-.bonus-note { color: var(--grey-dark); font-weight: 400; }
-.bonus-box { margin: 2.4rem 0; }
-#bonus-hint { margin-bottom: 2.4rem; }
 .volunteer-message { width: 100%; min-height: 12rem; font-family: ui-monospace, monospace; font-size: 1.4rem; }
 .copy-row { display: flex; flex-wrap: wrap; gap: 1.2rem; align-items: center; margin-top: 1.2rem; }
 .field-warning { margin: .6rem 0 0; font-size: 1.3rem; line-height: 1.8rem; color: var(--black-variant); padding: .6rem 1rem; background: var(--indication-dualtone); border-left: .4rem solid var(--indication); }
@@ -568,8 +564,6 @@ progress.bar::-moz-progress-bar { background: var(--primary); border-radius: 9re
 .win-seq { margin: 0; font-weight: var(--fw-medium); color: var(--black-variant); }
 .steps-compact { grid-template-columns: 1fr; gap: 1.6rem; margin-bottom: 2.4rem; }
 @media (min-width: 768px) { .steps-compact { grid-template-columns: 1fr; gap: 1.6rem; } }
-.fact-gift { padding: 1.4rem 1.8rem; background: var(--secondary-dualtone); border-radius: .4rem; color: var(--black-variant); }
-.fact-gift i.ti { color: var(--secondary); }
 .method { font-size: 1.6rem; color: var(--grey-dark); }
 .method dt { font-weight: var(--fw-bold); color: var(--black); margin-top: 1.2rem; }
 .method dd { margin: .2rem 0 0; }
@@ -615,3 +609,28 @@ body:has(dialog[open]) { overflow: hidden; }
 .consent-block .consent-text { font-size: 1.5rem; line-height: 2.2rem; margin: 0 0 .6rem; }
 .consent-block .msg { margin: 1.4rem 0 0; }
 .consent-block .btn-block { margin-top: 1.6rem; }
+
+/* ---------- dokumenty prawne (/dokumenty) i edytor w panelu ---------- */
+.doc-meta { margin-bottom: .4rem; }
+.doc-body h2 { font-size: 2.4rem; line-height: 3.3rem; margin-top: 3.2rem; }
+.doc-body h2:first-child { margin-top: 0; }
+.doc-body h3 { font-size: 2.1rem; line-height: 3rem; margin-top: 2.4rem; }
+.doc-body ul, .doc-body ol { padding-left: 2.4rem; margin: 0 0 1.6rem; }
+.doc-body li { margin-bottom: .6rem; }
+.doc-body li::marker { color: var(--primary); }
+.doc-body table { border-collapse: collapse; margin-bottom: 1.6rem; }
+.doc-body th, .doc-body td { border: .2rem solid var(--grey-light); padding: .6rem 1rem; text-align: left; }
+.doc-list { list-style: none; padding: 0; margin: 0; }
+.doc-list li { display: flex; flex-direction: column; gap: .2rem; padding: 1.2rem 0; border-bottom: .2rem solid var(--grey-light); font-size: 1.8rem; }
+.doc-list li:last-child { border-bottom: 0; }
+.doc-list .hint { margin: 0; }
+.consent-date { color: var(--grey-dark); }
+#legal-preview { margin-top: 1.6rem; }
+.version-list { padding-left: 2rem; }
+.version-list li { margin-bottom: .8rem; }
+
+/* ---------- weryfikacja Tokenu Losu ---------- */
+.check-list { list-style: none; padding: 0; margin: 0 0 1.6rem; }
+.check-list li { margin-bottom: .8rem; }
+.check-list .check-ok i.ti { color: var(--secondary); }
+.check-list .check-bad i.ti { color: var(--primary); }
