@@ -52,6 +52,11 @@
       <button class="btn btn-inverted btn-small" id="logout-btn" type="button"><i class="ti ti-logout" aria-hidden="true"></i> Wyloguj</button>
     </div>
 
+    <div class="admin-switch" id="admin-switch" hidden>
+      <label for="admin-section">Sekcja panelu</label>
+      <select id="admin-section"></select>
+    </div>
+
     <div class="card" id="booth-card">
       <h2>Stoisko</h2>
       <p class="hint hint-block" id="booth-hint">Wybierz stoisko, przy którym dziś pracujesz. Tokeny i liczniki dotyczą wybranego stoiska.</p>
@@ -81,6 +86,11 @@
 
       <button class="btn btn-primary btn-lg btn-block" id="gen-btn" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Wygeneruj token rejestracyjny</button>
 
+      <div class="promo-gen">
+        <button class="btn btn-inverted btn-lg btn-block" id="promo-btn" type="button"><i class="ti ti-gift" aria-hidden="true"></i> Dodatkowe próby</button>
+        <p class="hint">Kod na 5 dodatkowych prób w grze, niezwiązany z Pucharem ani z rejestracją. Wydaj go po obejrzeniu na telefonie gracza posta lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl (Facebook, Instagram lub TikTok). Niczego z posta nie zapisujemy.</p>
+      </div>
+
       <div id="code-box" class="code-box" hidden>
         <p class="title3" id="code-kind-label">Token rejestracyjny (kod OTP)</p>
         <div class="code-big" id="code-big"></div>
@@ -106,20 +116,6 @@
       <a class="btn btn-inverted" id="export-csv" href="/api/admin/export-csv"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: punkty wydziałów</a>
       <a class="btn btn-inverted" id="export-csv-tokens" href="/api/admin/export-csv?set=tokeny"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: tokeny wg stoiska i typu</a>
     </div>
-    <nav class="admin-nav" aria-label="Sekcje panelu">
-      <a href="#booths-section">Stoiska</a>
-      <a href="#volunteers-section">Wolontariusze</a>
-      <a href="#codes-section">Tokeny rejestracyjne</a>
-      <a href="#dictionary-section">Słownik</a>
-      <a href="#students-section">Liczby studentów</a>
-      <a href="#wins-section">Trafienia 10/10</a>
-      <a href="#token-section">Weryfikacja Tokenu Losu</a>
-      <a href="#legal-section">Regulaminy i dokumenty</a>
-      <a href="#partners-section">Partnerzy</a>
-      <a href="#settings-section">Ustawienia</a>
-      <a href="#preview-section">Grafiki</a>
-      <a href="#tests-section"><i class="ti ti-flask" aria-hidden="true"></i> Testy</a>
-    </nav>
 
     <section id="booths-section" class="card">
       <h2>Stoiska</h2>

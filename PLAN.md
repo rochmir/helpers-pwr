@@ -72,7 +72,7 @@ utworzeniu stoiska i każdej zmianie).
 **Losowanie** (`POST /api/game/roll`, body `{booth_id}`), jedna transakcja `BEGIN IMMEDIATE`:
 - brak sesji → 401; stoisko nie istnieje → 404; `attempts` dziś ≥ 5 → 429 `{detail, attempts_left:0}`.
 - `attempts += 1`, `booths.rolls_count += 1`.
-- Wygrana z p = 1/300 (`game.WIN_ONE_IN`) **i tylko gdy sesja `has_won=0`**: odczyt
+- Wygrana z p = 1/150 (`game.WIN_ONE_IN`) **i tylko gdy sesja `has_won=0`**: odczyt
   `current_genotype` wewnątrz transakcji (więc wyścig nie istnieje), `matches_count += 1`, `has_won=1`,
   `genotype_history.matched_at` dla starego, nowy unikalny genotyp na stoisko. Zwraca stary genotyp jako trafiony.
   Tym samym znacznikiem czasu: `game_sessions.won_genotype/won_at` (do certyfikatu). Trafienie z `arm-win` /
@@ -232,7 +232,7 @@ CREATE TABLE IF NOT EXISTS); produkcyjna baza migruje się bez utraty danych.
    `play_path` i `qr_seconds_left` tylko personelowi (admin albo wolontariusz tego stoiska); `/stoisko/<id>` wymaga
    więc zalogowania (inaczej link do /wolontariusz). Admin: „Otwórz ekran stoiska” i „Link do gry (ważny ~2 min)”.
    `reset-my-game` zeruje też bonus.
-6. **Szansa na wygraną 1/300** (`game.WIN_ONE_IN`).
+6. **Szansa na wygraną 1/150** (`game.WIN_ONE_IN`).
 7. **Konta wolontariuszy zamiast PIN-u.** Tabela `volunteers(login, password_hash argon2, created_at)`, login
    `^[a-z0-9._-]{3,32}$`, hasło min. 8 znaków (puste = losowe 12 znaków bez 0/O/1/l/I; jawne tylko w odpowiedzi na
    utworzenie/reset). `POST /api/volunteer/auth {login,password,booth_id,cf_turnstile}` (throttle per login),
@@ -377,10 +377,13 @@ Gracz pokazuje wolontariuszowi post (udostępniony wynik albo inny materiał pro
 ## Iteracja 7: regulaminy Konkursu i Pucharu (2026-11-01; nadpisuje iteracje 3-6)
 Źródłem prawdy są dwa regulaminy (seed: `app/legal/regulamin-konkursu.md`, `app/legal/regulamin-pucharu.md`, kopiowane 1:1).
 
-**Nieaktualne od tej iteracji:** limit prób na stanowisko (iter. 3-5), `REGISTER_BONUS*`, `PROMO_BONUS`, kod „Dodatkowe losy”, `promo_codes`, `/api/donor/redeem-promo`, `bonus_attempts`, `hp_bonus` (iter. 3, 6), upominki za 6-10/10, Bitwa Wydziałów i `/api/stats/battle` (iter. 4), karta legitymacji: `card_hash`, `actual_donor_cards`, `app/cards.py` (iter. 3), rok studiów, `LEGAL_OWNER`, statyczne `regulamin.html` i `polityka-prywatnosci.html`.
+**Nieaktualne od tej iteracji:** limit prób na stanowisko (iter. 3-5), `REGISTER_BONUS*`, `hp_bonus` (iter. 3, 6), upominki za 6-10/10, Bitwa Wydziałów i `/api/stats/battle` (iter. 4), karta legitymacji: `card_hash`, `actual_donor_cards`, `app/cards.py` (iter. 3), rok studiów, `LEGAL_OWNER`, statyczne `regulamin.html` i `polityka-prywatnosci.html`.
 
 - Nazewnictwo: Puchar Dawcy PWr (`/puchar`, `/bitwa` 301), symulator HLA „HLA Match Maker – Sprawdź Parametry”, Sprawdź parametry, Próby, Token Losu, Wskaźnik Zaangażowania (WZ), token rejestracyjny (kod OTP), punkty (LD). API: `/api/stats/cup`, `stats.cup`, `wz`. Pole `registered` w rankingu to LD.
 - Konkurs: 5 prób na dobę na urządzenie (`device_pool` sumuje `booth_plays` ze wszystkich stoisk, ta sama formuła z ext i tolerancją). `wins.session_id` zawsze NULL (§4.3), `game_sessions.won_*` zostają do odtworzenia certyfikatu. `wins.submitted_at` + `GET /api/admin/tokens/{token}`, `POST .../submit` (409 gdy wykorzystany), `POST .../unsubmit`; test-tokeny = nieistniejące. Ekran 10/10: instrukcja §5, po `CONTEST_DEADLINE` „Zgłoszenia do konkursu zostały zamknięte.”. `facebook_url` domyślnie `https://www.facebook.com/samorzadpwr` (seed raz, `facebook_url_seeded`).
 - Puchar: `donors_stats(id, faculty, created_at, device_hash)`; `device_hash = HMAC(SECRET_KEY, "cup:"+device_ext)[:32]`, częściowy UNIQUE. Duplikat = 409 bez zużycia tokenu. Stoisko i typ liczone z `registration_codes` USED (`db.used_counts`). Doby wg Europe/Warsaw (`config.day_bounds`). `CUP_DEADLINE` (domyślnie 2026-12-11 16:30) i `CONTEST_DEADLINE` (16:00) z env; po CUP_DEADLINE `register` i `generate-code` dają 410. WZ = `round(LD/LS*100, 2)`, sort `(-wz, -LD, słownik)`.
 - Dokumenty prawne: tabele `legal_documents`, `legal_document_versions`; `app/legal.py` (seed, render `markdown-it-py` `js-default`, `{{CONTACT}}` po renderze), `routes/legal.py`; strony `/dokumenty`, `/dokumenty/{slug}`, `/regulamin` i `/polityka-prywatnosci` (302); `/api/legal`, `/api/config.legal_updated_at`; admin `/api/admin/legal*`. Zgoda w `hp_consent` trzyma `legal_updated_at`.
-- Migracja (`db._migrate_cup_contest`, idempotentna): DROP `promo_codes`, `actual_donor_cards`, kolumn `bonus_attempts`, `card_hash`; przebudowa `donors_stats` (created_at = południe Warsaw z dawnego `registered_date`); `UPDATE wins SET session_id=NULL`.
+- Migracja (`db._migrate_cup_contest`, idempotentna): DROP `actual_donor_cards`, kolumny `card_hash`; przebudowa `donors_stats` (created_at = południe Warsaw z dawnego `registered_date`); `UPDATE wins SET session_id=NULL`.
+- Faktyczni dawcy na `/puchar`: dalej liczą się do LD i WZ (wzór bez zmian), ale ich część jest granatowa (`--tertiary`). Typ dawcy NIE trafia do `donors_stats` (§3.4 Pucharu), tylko do osobnej tabeli zbiorczej `cup_actual_counts(faculty, actual)` (`CREATE TABLE IF NOT EXISTS`, zwiększana w transakcji `register` po udanym INSERT; 409 jej nie rusza). `stats.cup` dodaje `actual` i `potential` (w widoku z `date` pomijane: licznik nie ma dat; wpisy bez podziału = nowi). `admin_test`: `wipe` czyści licznik, `fake-registrations` zwiększa go dla typu actual.
+- Dodatkowe próby przywrócone po decyzji właściciela: +5 za post/story z oznaczeniem Samorządu i dkms_pl (`PROMO_BONUS`, `promo_codes`, `/api/donor/redeem-promo`) oraz +10/+20 za oddany głos w Pucharze (`CUP_VOTE_BONUS`, `CUP_VOTE_BONUS_ACTUAL`), przyznawane dopiero po udanym wpisie do `donors_stats`. Bonus idzie ponad pulę `device_pool`, w `game_sessions.bonus_attempts`. Teksty mówią o udziale w Pucharze, nigdy o rejestracji; informacja o +10/+20 tylko na `/potwierdz`. Regulamin i polityka wymagają uzupełnienia w panelu.
+- Panel admina: lista „Sekcja panelu” na górze; „Stoisko i tokeny” (`stoisko`) to pierwsza pozycja, a każda inna sekcja ukrywa blok stoiska. Wybór w `#sekcja` i localStorage `hp_admin_section`.

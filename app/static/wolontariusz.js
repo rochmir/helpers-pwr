@@ -3,11 +3,12 @@ import { api, $, h, icon, setMessage, formatTime, formatDateTime, qrUrl } from '
 
 const msg = $('#panel-msg');
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
-const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny' };
-const CODE_LABEL = { potential: 'Token rejestracyjny (kod OTP)', actual: 'Token rejestracyjny: dawca faktyczny (kod OTP)' };
+const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny', promo: 'dodatkowe próby' };
+const CODE_LABEL = { potential: 'Token rejestracyjny (kod OTP)', actual: 'Token rejestracyjny: dawca faktyczny (kod OTP)', promo: 'Kod dodatkowych prób' };
 let refreshTimer = null;
 let ctx = { role: 'volunteer', boothId: '' };
 let wired = false;
+let lastClosed = false; // po CUP_DEADLINE token rejestracyjny jest zablokowany, kod dodatkowych prob nie
 
 function show(id, on) { $('#' + id).hidden = !on; }
 
@@ -46,7 +47,8 @@ async function refresh() {
     const note = $('#cup-closed-note');
     note.hidden = !me.cup_closed;
     note.textContent = me.cup_closed ? me.cup_closed_message : '';
-    $('#gen-btn').disabled = !!me.cup_closed;
+    lastClosed = !!me.cup_closed;
+    $('#gen-btn').disabled = lastClosed;
     refreshTimer = setTimeout(refresh, 15000);
   } catch (e) {
     if (e.status === 401) { location.reload(); return; }
@@ -59,10 +61,11 @@ function wire() {
   if (wired) return;
   wired = true;
 
-  // kind: 'potential' (nowy dawca) albo 'actual' (dawca faktyczny z okazana legitymacja; numeru nie zapisujemy)
+  // kind: 'potential' (nowy dawca), 'actual' (dawca faktyczny z okazana legitymacja; numeru nie zapisujemy)
+  // albo 'promo' (przycisk Dodatkowe proby)
   async function generate(kind) {
-    const btn = $('#gen-btn');
-    btn.disabled = true;
+    const buttons = [$('#gen-btn'), $('#promo-btn')];
+    buttons.forEach((b) => { b.disabled = true; });
     setMessage(msg, '');
     try {
       const body = ctx.role === 'admin' ? { booth_id: ctx.boothId } : {};
@@ -77,11 +80,13 @@ function wire() {
     } catch (e) {
       setMessage(msg, e.detail || e.message, 'error');
     } finally {
-      btn.disabled = false;
+      buttons.forEach((b) => { b.disabled = false; });
+      if (lastClosed) $('#gen-btn').disabled = true;
     }
   }
 
   $('#gen-btn').addEventListener('click', () => generate($('#code-kind').value));
+  $('#promo-btn').addEventListener('click', () => generate('promo'));
 
   $('#vcodes-body').addEventListener('click', async (ev) => {
     const btn = ev.target.closest && ev.target.closest('[data-cancel]');

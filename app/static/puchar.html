@@ -35,10 +35,14 @@
   <section id="ranking-section" class="card">
     <h2><i class="ti ti-trophy" aria-hidden="true"></i> Ranking wg Wskaźnika Zaangażowania</h2>
     <p class="hint hint-block"><strong>Ranking orientacyjny. Oficjalne wyniki po audycie: 13 grudnia 2026.</strong> Zliczanie punktów trwa do <span id="cup-deadline">11 grudnia 2026, 16:30</span>. <span id="cup-closed" hidden>Zliczanie punktów zostało zakończone.</span></p>
+    <ul class="legend" aria-label="Legenda wykresu">
+      <li><span class="swatch swatch-potential" aria-hidden="true"></span>Nowi dawcy</li>
+      <li><span class="swatch swatch-actual" aria-hidden="true"></span>Faktyczni dawcy</li>
+    </ul>
     <ol class="bars" id="cup-list"></ol>
     <div class="table-wrap">
     <table class="table" id="cup-table">
-      <thead><tr><th>Miejsce</th><th>Wydział</th><th>Punkty (LD)</th><th>Studenci (LS)</th><th>WZ</th></tr></thead>
+      <thead><tr><th>Miejsce</th><th>Wydział</th><th>Punkty (LD)</th><th>Faktyczni</th><th>Studenci (LS)</th><th>WZ</th></tr></thead>
       <tbody id="cup-body"></tbody>
     </table>
     </div>
@@ -46,7 +50,7 @@
 
   <section id="unranked-section" class="card" hidden>
     <h2>Poza klasyfikacją</h2>
-    <p class="hint hint-block">Dla tych wydziałów nie mamy liczby studentów (LS), więc nie można ich sklasyfikować. Pozycja „Inne” nie bierze udziału w klasyfikacji. Pokazujemy same punkty (LD).</p>
+    <p class="hint hint-block">Dla tych wydziałów nie mamy liczby studentów (LS), więc nie można ich sklasyfikować. Pozycja „Inne” nie bierze udziału w klasyfikacji. Pokazujemy same punkty (LD), w tym faktycznych dawców.</p>
     <ul class="unranked-list" id="unranked-list"></ul>
   </section>
 
@@ -61,7 +65,7 @@
     <h2>Skąd te liczby</h2>
     <dl class="method">
       <dt>Punkty (LD)</dt>
-      <dd>Suma zweryfikowanych punktów (nowo zarejestrowani dawcy oraz zweryfikowani faktyczni dawcy) przypisanych do wydziału przez osoby, które wpisały token rejestracyjny. Każda osoba oddaje jeden głos.</dd>
+      <dd>Suma zweryfikowanych punktów (nowo zarejestrowani dawcy oraz zweryfikowani faktyczni dawcy) przypisanych do wydziału przez osoby, które wpisały token rejestracyjny. Każda osoba oddaje jeden głos. Faktyczni dawcy liczą się tak samo jak nowi: w rankingu są oznaczeni granatowym kolorem tylko po to, żeby było widać, jaka część punktów od nich pochodzi.</dd>
       <dt>Liczba studentów (LS)</dt>
       <dd>Oficjalna liczba studentów wydziału według stanu na 30 listopada 2026 r., podana przez Centrum Kształcenia PWr. Źródło wpisane przez organizatorów: <span id="cup-source">-</span></dd>
       <dt>Wskaźnik Zaangażowania (WZ)</dt>

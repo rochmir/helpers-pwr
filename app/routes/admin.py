@@ -98,7 +98,8 @@ def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection 
     db.expire_codes(conn)
     rows = conn.execute(
         "SELECT b.*, (SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='USED') AS registered, "
-        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') AS active_codes "
+        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') + "
+        "(SELECT COUNT(*) FROM promo_codes p WHERE p.booth_id=b.id AND p.status='ACTIVE') AS active_codes "
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
                                "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")} for r in rows]
@@ -145,7 +146,8 @@ def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sql
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
-        used = conn.execute("SELECT COUNT(*) FROM registration_codes WHERE booth_id=?", (booth_id,)).fetchone()[0]
+        used = conn.execute("SELECT (SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
+                            "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)", (booth_id, booth_id)).fetchone()[0]
         if used:
             raise HTTPException(409, "Stoisko ma tokeny rejestracyjne, więc nie można go usunąć.")
         conn.execute("DELETE FROM genotype_history WHERE booth_id=?", (booth_id,))

@@ -72,7 +72,7 @@
           </div>
           <div class="machine-controls">
             <div class="attempts">
-              <span>Pozostałe próby: <strong id="attempts-left">-</strong></span>
+              <span>Pozostałe próby: <strong id="attempts-left">-</strong> <span class="bonus-note" id="bonus-note" hidden></span></span>
               <span class="pips" id="pips" aria-hidden="true"></span>
             </div>
             <button class="btn btn-spin" id="roll-btn" type="button"><i class="ti ti-dice-5" aria-hidden="true"></i> Sprawdź parametry</button>
@@ -117,7 +117,7 @@
 
   <section id="win-section" class="card" hidden>
     <h2><i class="ti ti-trophy" aria-hidden="true"></i> Genotyp 10/10!</h2>
-    <p>Jesteś bliźniakiem genetycznym! W symulatorze szansa na to wynosiła 1 do 300. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.</p>
+    <p>Jesteś bliźniakiem genetycznym! W symulatorze szansa na to wynosiła 1 do 150. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.</p>
     <div class="code-box win-token-box">
       <p class="title3">Twój Token Losu</p>
       <div class="code-big" id="win-token">-</div>
@@ -152,6 +152,7 @@
     <ul class="dots">
       <li>Losujesz 10 pozycji i porównujesz je ze wzorem stoiska.</li>
       <li>Masz 5 prób na dobę na swoim urządzeniu, łącznie na wszystkich stanowiskach.</li>
+      <li>Dodatkowe próby: opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl (Facebook, Instagram lub TikTok), pokaż go wolontariuszowi i dostaniesz kod na 5 dodatkowych prób. Dodatkowe próby wykorzystujesz po 5 próbach na dobę i nie znikają o północy.</li>
       <li>Udział w symulatorze i w konkursie jest bezpłatny i nie zależy od rejestracji w bazie dawców szpiku.</li>
       <li>Za 10/10 dostajesz certyfikat z Tokenem Losu. Osoby pełnoletnie (18+) mogą z nim wziąć udział w konkursie na hasło obalające mit o dawstwie szpiku. Nagrody są wyłącznie za najlepsze hasła.</li>
     </ul>
@@ -172,6 +173,8 @@
     <h2 id="end-title">Koniec prób na dziś</h2>
     <p id="end-best" class="lead" hidden></p>
     <p>Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro, limit odnawia się codziennie.</p>
+    <div class="fact"><i class="ti ti-gift" aria-hidden="true"></i>
+      <p><strong>Dodatkowe próby.</strong> Opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl i pokaż je wolontariuszowi. Dostaniesz kod na 5 dodatkowych prób, który wpiszesz na <a href="/potwierdz">stronie wpisywania kodów</a>.</p></div>
     <section id="end-cert" class="dlg-cert" hidden>
       <h3 id="end-cert-title">Odbierz swój wynik</h3>
       <label for="end-nick">Ksywka lub imię (opcjonalnie)</label>

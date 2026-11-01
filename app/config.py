@@ -14,6 +14,9 @@ TZ = ZoneInfo("Europe/Warsaw")
 DAILY_ATTEMPTS = 5         # prób na dobę na jedno urządzenie (regulamin konkursu, §4.2)
 DEVICE_TOLERANCE = 10      # domyślny sufit dla identycznych urządzeń (settings.device_tolerance, 1..50)
 CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; kody rejestracyjne i tokeny trafień
+PROMO_BONUS = 5            # dodatkowe próby za post lub story z oznaczeniem Samorządu i dkms_pl (kod od wolontariusza)
+CUP_VOTE_BONUS = 10        # dodatkowe próby za udział w Pucharze Dawcy PWr (token typu potential), po udanym głosie
+CUP_VOTE_BONUS_ACTUAL = 20  # to samo dla tokenu typu actual
 # Terminy z regulaminów (Europe/Warsaw); nadpisywane zmiennymi CUP_DEADLINE i CONTEST_DEADLINE (RRRR-MM-DDTGG:MM).
 DEFAULT_CUP_DEADLINE = "2026-12-11T16:30"       # koniec zliczania punktów w Pucharze Dawcy PWr (§6.1)
 DEFAULT_CONTEST_DEADLINE = "2026-12-11T16:00"   # koniec zgłoszeń konkursowych (§5.4)

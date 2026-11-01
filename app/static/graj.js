@@ -71,9 +71,12 @@ function renderPips(n) {
   for (let i = 0; i < MAX_TRIES; i++) wrap.append(h('span', { class: 'pip' + (i < n ? ' full' : '') }));
 }
 
-function setAttempts(n) {
+function setAttempts(n, bonus) {
   attemptsLeft = n;
   $('#attempts-left').textContent = n;
+  const note = $('#bonus-note');
+  note.hidden = !(bonus > 0);
+  note.textContent = bonus > 0 ? '(w tym ' + bonus + ' dodatkowych)' : '';
   renderPips(Math.min(n, MAX_TRIES));
   const over = n <= 0;
   $('#roll-btn').hidden = over;
@@ -138,7 +141,7 @@ async function renderWin() {
 /** Ekran konca prob: najlepszy wynik dnia zamiast ostatniego rzutu. */
 function showEnd(best) {
   const local = bestLocal && bestLocal.matches === best ? bestLocal : null;
-  setAttempts(0);
+  setAttempts(0, 0);
   if (local) {
     machine.hidden = false;
     renderTarget(local.booth);
@@ -173,7 +176,7 @@ function enterPlay(me) {
   renderTarget(boothGenotype);
   buildReels(playerEl);
   setScore(0, false);
-  setAttempts(me.attempts_left);
+  setAttempts(me.attempts_left, me.bonus_attempts || 0);
   updateRewards();
   if (me.attempts_left <= 0) showEnd(me.best_today || 0);
 }
@@ -332,7 +335,6 @@ async function init() {
     legalUpdatedAt = (cfg && cfg.legal_updated_at) || null;
   } catch (e) { legalUpdatedAt = null; }
   storageRemove('hp_intro'); // dawny znacznik okna startowego, zgoda to teraz hp_consent
-  storageRemove('hp_bonus'); // dawny znacznik dodatkowych prob (mechanika usunieta)
   let me = null;
   try {
     me = await api('GET', '/api/game/me');
@@ -398,6 +400,7 @@ async function roll() {
   let matched = 0;
   let r = null;
   let left = null;
+  let leftBonus = 0;
   rollBtn.disabled = true;
   setMessage(msg, '');
   show('win-banner', false);
@@ -438,6 +441,7 @@ async function roll() {
     });
     setScore(r.matches, false);
     left = r.attempts_left;
+    leftBonus = r.bonus_attempts || 0;
     if (!bestLocal || r.matches > bestLocal.matches) {
       bestLocal = { matches: r.matches, player: r.player_genotype, booth: r.booth_genotype };
     }
@@ -481,7 +485,7 @@ async function roll() {
     }
   } finally {
     busy = false;
-    if (left !== null) setAttempts(left);
+    if (left !== null) setAttempts(left, leftBonus);
     else rollBtn.disabled = false;
   }
 }

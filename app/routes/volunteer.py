@@ -51,10 +51,11 @@ def me(booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer
 def generate_code(body: GenerateIn, staff: dict = Depends(auth.require_volunteer),
                   conn: sqlite3.Connection = Depends(db.get_db)):
     """Token rejestracyjny (kod OTP) po weryfikacji wymazu albo legitymacji dawcy faktycznego (jej numeru nie zapisujemy)."""
-    if config.cup_closed():
+    # Kod promo (dodatkowe próby) nie zależy od terminu Pucharu; token rejestracyjny po terminie = 410.
+    if body.kind != "promo" and config.cup_closed():
         raise HTTPException(410, config.cup_closed_message())
     bid = auth.resolve_booth(staff, body.booth_id)
-    if body.kind not in ("potential", "actual"):
+    if body.kind not in ("potential", "actual", "promo"):
         raise HTTPException(422, "Niepoprawny typ tokenu.")
     ts = config.now_iso()
     with db.tx(conn):
@@ -63,8 +64,11 @@ def generate_code(body: GenerateIn, staff: dict = Depends(auth.require_volunteer
         code = db.unique_code(conn, bid)
         if code is None:
             raise HTTPException(503, "Nie udało się wygenerować tokenu. Spróbuj ponownie.")
-        conn.execute("INSERT INTO registration_codes(code,booth_id,status,created_at,kind) VALUES(?,?,'ACTIVE',?,?)",
-                     (code, bid, ts, body.kind))
+        if body.kind == "promo":
+            conn.execute("INSERT INTO promo_codes(code,booth_id,status,created_at) VALUES(?,?,'ACTIVE',?)", (code, bid, ts))
+        else:
+            conn.execute("INSERT INTO registration_codes(code,booth_id,status,created_at,kind) VALUES(?,?,'ACTIVE',?,?)",
+                         (code, bid, ts, body.kind))
     return {"code": code, "kind": body.kind, "expires_at": config.expiry_of(ts), "confirm_path": f"/potwierdz?kod={code}"}
 
 
@@ -78,14 +82,15 @@ def cancel(conn: sqlite3.Connection, code: str, staff: dict) -> dict:
     """Anulowanie tokenu ACTIVE (status EXPIRED). Wolontariusz tylko na swoim stoisku."""
     with db.tx(conn):
         db.expire_codes(conn)
-        row = conn.execute("SELECT * FROM registration_codes WHERE code=?", (code,)).fetchone()
-        if row is None:
+        found = db.find_code(conn, code)
+        if found is None:
             raise HTTPException(404, "Nie ma takiego tokenu.")
+        table, row = found
         if staff["role"] == "volunteer" and not staff["booth"]:
             raise HTTPException(409, "Wybierz stoisko.")
         if staff["role"] == "volunteer" and row["booth_id"] != staff["booth"]:
             raise HTTPException(403, "To token z innego stoiska.")
         if row["status"] != "ACTIVE":
             raise HTTPException(409, "Token nie jest już aktywny.")
-        conn.execute("UPDATE registration_codes SET status='EXPIRED' WHERE code=?", (code,))
+        conn.execute(f"UPDATE {table} SET status='EXPIRED' WHERE code=?", (code,))
     return {"ok": True}

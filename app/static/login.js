@@ -8,6 +8,43 @@ const ROLE_PL = { admin: 'administrator', volunteer: 'wolontariusz' };
 let ts = null;
 let adminLoaded = false;
 let boothsLoaded = false;
+let navWired = false;
+const SECTION_KEY = 'hp_admin_section'; // zapamietana sekcja panelu admina (tylko w tej przegladarce)
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* tryb prywatny */ } }
+
+/** Lista rozwijana sekcji admina: widoczna jest jedna, reszta ma atrybut hidden (DOM i pola formularzy zostaja). */
+const BOOTH_SECTION = 'stoisko';
+
+function wireAdminNav() {
+  if (navWired) return;
+  navWired = true;
+  const sel = $('#admin-section');
+  const sections = [...document.querySelectorAll('#admin-part > section.card')];
+  const slug = (sec) => sec.id.replace(/-section$/, '');
+  const panel = $('#panel');
+  sel.append(h('option', { value: BOOTH_SECTION }, 'Stoisko i tokeny'));
+  for (const sec of sections) {
+    sel.append(h('option', { value: slug(sec) }, sec.querySelector('h2').textContent.trim()));
+  }
+  const known = (v) => v === BOOTH_SECTION || sections.some((sec) => slug(sec) === v);
+  const apply = (v, store) => {
+    if (!known(v)) v = BOOTH_SECTION;
+    sel.value = v;
+    panel.classList.toggle('admin-view-booth', v === BOOTH_SECTION);
+    panel.classList.toggle('admin-view-section', v !== BOOTH_SECTION);
+    for (const sec of sections) sec.hidden = slug(sec) !== v;
+    if (store) {
+      lsSet(SECTION_KEY, v);
+      try { history.replaceState(null, '', '#' + v); } catch (e) { /* bez hasha */ }
+    }
+  };
+  const fromHash = () => location.hash.replace(/^#/, '').replace(/-section$/, '');
+  apply(fromHash() || lsGet(SECTION_KEY) || '', false);
+  sel.addEventListener('change', () => apply(sel.value, true));
+  window.addEventListener('hashchange', () => apply(fromHash(), true));
+}
 
 async function showLogin() {
   stopVolunteer();
@@ -52,6 +89,9 @@ async function showPanel(me) {
   $('#volunteer-part').hidden = !booth;
   await initVolunteer({ role: me.role, booth });
   $('#admin-part').hidden = me.role !== 'admin';
+  $('#admin-switch').hidden = me.role !== 'admin';
+  if (me.role !== 'admin') $('#panel').classList.remove('admin-view-booth', 'admin-view-section');
+  if (me.role === 'admin') wireAdminNav();
   if (me.role === 'admin' && !adminLoaded) {
     adminLoaded = true;
     await initAdmin();

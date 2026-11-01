@@ -1,4 +1,4 @@
-"""Iteracja 7: regulaminy Konkursu i Pucharu (limit na urządzenie, bez bonusów, Token Losu jednorazowy, jeden głos,
+"""Iteracja 7: regulaminy Konkursu i Pucharu (limit na urządzenie, dodatkowe próby, Token Losu jednorazowy, jeden głos,
 terminy, WZ) oraz dokumenty prawne edytowane z panelu. Migracja ze schematu iteracji 6."""
 import hashlib
 import hmac
@@ -83,17 +83,63 @@ def real_win(c, booth, monkeypatch):
     return roll(c, booth).json()["won_token"]
 
 
-# --- brak dodatkowych prób ------------------------------------------------------
-def test_promo_mechanics_removed(admin, booth, client, conn):
+# --- dodatkowe próby (kod promo, udział w Pucharze) -----------------------------
+def test_promo_mechanics_present(admin, booth, client, other_clients, conn):
     assert client.post("/api/donor/redeem-promo", json={"code": "C13-AAAA"}).status_code == 404
-    assert admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).status_code == 422
-    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='promo_codes'").fetchone() is None
-    for name in ("REGISTER_BONUS", "REGISTER_BONUS_ACTUAL", "PROMO_BONUS"):
-        assert not hasattr(config, name)
+    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='promo_codes'").fetchone() is not None
+    assert (config.PROMO_BONUS, config.CUP_VOTE_BONUS, config.CUP_VOTE_BONUS_ACTUAL) == (5, 10, 20)
+    assert not hasattr(config, "REGISTER_BONUS")
     assert config.DAILY_ATTEMPTS == 5
     s = new_session(client, booth)
-    assert set(s) == {"token", "attempts_left", "has_won", "best_today", "pass_booth", "won_genotype", "won_at",
-                      "won_token", "won_seq", "won_booth_name"}
+    assert set(s) == {"token", "attempts_left", "device_left", "bonus_attempts", "has_won", "best_today", "pass_booth",
+                      "won_genotype", "won_at", "won_token", "won_seq", "won_booth_name"}
+    assert s["bonus_attempts"] == 0 and s["attempts_left"] == 5
+
+
+def test_promo_code_one_time_and_does_not_need_cup_open(admin, booth, other_clients, monkeypatch, conn):
+    gen = lambda: admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"})
+    r = gen()
+    assert r.status_code == 200 and r.json()["kind"] == "promo"
+    code = r.json()["code"]
+    chk = other_clients().get(f"/api/donor/check-code?kod={code}").json()
+    assert chk["valid"] and chk["kind"] == "promo" and chk["bonus"] == 5
+    assert register(other_clients(), code).status_code == 404            # promo nie jest tokenem rejestracyjnym
+    p = other_clients()
+    d = p.post("/api/donor/redeem-promo", json={"code": code}).json()
+    assert d["bonus_attempts_granted"] == 5 and d["attempts_left"] == 10
+    assert p.get("/api/game/me").json()["bonus_attempts"] == 5
+    again = p.post("/api/donor/redeem-promo", json={"code": code})
+    assert again.status_code == 410 and p.get("/api/game/me").json()["bonus_attempts"] == 5   # drugie użycie odrzucone
+    assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 0
+    # po terminie Pucharu kod promo dalej działa, a token rejestracyjny nie
+    monkeypatch.setattr(config, "cup_closed", lambda: True)
+    code2 = gen().json()["code"]
+    assert admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "potential"}).status_code == 410
+    assert other_clients().post("/api/donor/redeem-promo", json={"code": code2}).status_code == 200
+
+
+def test_promo_code_expires_cancel_and_lists(admin, booth, other_clients, monkeypatch):
+    code = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).json()["code"]
+    listed = admin.get("/api/admin/codes").json()
+    assert any(c["code"] == code and c["kind"] == "promo" for c in listed)
+    assert admin.post(f"/api/volunteer/codes/{code}/cancel", headers=JSON).status_code == 200
+    assert other_clients().post("/api/donor/redeem-promo", json={"code": code}).status_code == 410
+    code = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).json()["code"]
+    later = config.now() + timedelta(minutes=config.code_ttl_minutes() + 1)
+    monkeypatch.setattr(config, "now", lambda: later)
+    assert other_clients().post("/api/donor/redeem-promo", json={"code": code}).status_code == 410
+
+
+def test_wipe_and_reset_clear_bonus(admin, booth, conn):
+    new_session(admin, booth)
+    code = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).json()["code"]
+    admin.post("/api/donor/redeem-promo", json={"code": code})
+    assert admin.get("/api/game/me").json()["bonus_attempts"] == 5
+    assert admin.post("/api/admin/test/reset-my-game", headers=JSON).status_code == 200
+    assert admin.get("/api/game/me").json()["bonus_attempts"] == 0
+    code = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).json()["code"]
+    assert admin.post("/api/admin/test/wipe", json={"confirm": "USUŃ"}).status_code == 200
+    assert conn.execute("SELECT COUNT(*) FROM promo_codes").fetchone()[0] == 0
 
 
 # --- Token Losu: weryfikacja i jednorazowość (§6.2) -----------------------------
@@ -209,9 +255,10 @@ def test_register_records_only_faculty_time_hash_and_voids_token(admin, booth, c
     assert register(client, code, "W13").status_code == 410  # token unieważniony
 
 
-def test_register_response_promises_nothing(admin, booth, client):
+def test_register_response_has_bonus_fields(admin, booth, client):
     r = register(client, make_code(admin, booth_id=booth))
-    assert set(r.json()) == {"ok", "faculty", "faculty_name", "booth_name", "kind"}
+    assert set(r.json()) == {"ok", "faculty", "faculty_name", "booth_name", "kind", "token", "bonus_attempts_granted",
+                             "attempts_left", "play_path"}
 
 
 # --- terminy (CUP_DEADLINE, CONTEST_DEADLINE) -----------------------------------
@@ -260,7 +307,7 @@ def test_deadline_env_override_and_surfaces(admin, booth, client, monkeypatch, c
 # --- schemat po migracji --------------------------------------------------------
 def test_no_card_or_study_year_anywhere_in_schema(client, conn):
     ddl = " ".join(r[0] or "" for r in conn.execute("SELECT sql FROM sqlite_master"))
-    for forbidden in ("card_hash", "actual_donor_cards", "study_year", "registered_date", "promo_codes", "bonus_attempts"):
+    for forbidden in ("card_hash", "actual_donor_cards", "study_year", "registered_date"):
         assert forbidden not in ddl, forbidden
     assert not (Path(db.__file__).parent / "cards.py").exists()
 
@@ -298,9 +345,9 @@ def test_migration_from_iteration_6_keeps_data_and_is_idempotent(tmp_path, monke
         conn = db.connect()
         cols = lambda t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
-        assert not {"promo_codes", "actual_donor_cards", "donors_stats_new"} & names
+        assert not {"actual_donor_cards", "donors_stats_new"} & names and "promo_codes" in names
         assert cols("donors_stats") == {"id", "faculty", "created_at", "device_hash"}
-        assert "bonus_attempts" not in cols("game_sessions") and "card_hash" not in cols("registration_codes")
+        assert "bonus_attempts" in cols("game_sessions") and "card_hash" not in cols("registration_codes")
         assert "submitted_at" in cols("wins") and "idx_donors_device" in names
         rows = conn.execute("SELECT faculty, created_at, device_hash FROM donors_stats ORDER BY id").fetchall()
         assert [(r["faculty"], config.warsaw_date(r["created_at"]), r["device_hash"]) for r in rows] == \
@@ -310,6 +357,9 @@ def test_migration_from_iteration_6_keeps_data_and_is_idempotent(tmp_path, monke
         assert conn.execute("SELECT won_token FROM game_sessions").fetchone()[0] == "HG-AAAA-BBBB"  # certyfikat gracza zostaje
         # typ i stoisko dalej da się policzyć ze zużytych tokenów
         assert db.used_counts(conn, "c13") == {"actual": 1}
+        # istniejące kody promo i bonusy przeżywają każdy start
+        assert conn.execute("SELECT status FROM promo_codes WHERE code='C13-CCCC'").fetchone()[0] == "USED"
+        assert conn.execute("SELECT bonus_attempts FROM game_sessions WHERE session_id='s1'").fetchone()[0] == 15
         assert conn.execute("SELECT kind FROM registration_codes WHERE code='C13-BBBB'").fetchone()[0] == "potential"
         assert [r["slug"] for r in conn.execute("SELECT slug FROM legal_documents ORDER BY sort")] == list(legal.BASE_SLUGS)
         assert db.get_setting(conn, "facebook_url") == "https://www.facebook.com/samorzadpwr"
@@ -537,7 +587,8 @@ def test_footer_and_nav_naming_in_served_pages(client):
     graj = client.get("/graj").text
     assert "Sprawdź parametry" in graj and ">Losuj<" not in graj and "Token Losu" in graj
     assert "1 do 1 000 000" in graj and "Zgłoszenia do konkursu zostały zamknięte." in graj and "@samorzadpwr" in graj
-    assert "upominek" not in graj.lower() and "dodatkowe próby" not in graj.lower()
+    assert "upominek" not in graj.lower()
+    assert not re.search(r"(10|20) dodatkowych", graj) and "udział w pucharze" not in graj.lower()  # bonus za głos: nie przed głosowaniem
 
 
 def test_static_sources_have_no_removed_features_or_long_dashes():
@@ -545,9 +596,120 @@ def test_static_sources_have_no_removed_features_or_long_dashes():
     for f in list(static.glob("*.html")) + list(static.glob("*.js")):
         text = f.read_text(encoding="utf-8")
         assert "—" not in text, f.name
-        for gone in ("hp_bonus'", "redeem-promo", "card-number", "study-year", "Dodatkowe losy", "per_1000", "api/stats/battle"):
-            if f.name == "graj.js" and gone == "hp_bonus'":
-                continue  # graj.js tylko czyści dawny klucz
+        for gone in ("card-number", "study-year", "Dodatkowe losy", "per_1000", "api/stats/battle"):
             assert gone not in text, (f.name, gone)
         assert not re.search(r"\son[a-z]+=\"", text), f.name  # żadnego inline JS w HTML
     assert "ti ti-" in (static / "graj.html").read_text(encoding="utf-8")
+
+
+# --- licznik faktycznych dawców (cup_actual_counts) -----------------------------
+def _actual_counts():
+    conn = db.connect()
+    try:
+        return {r["faculty"]: r["actual"] for r in conn.execute("SELECT faculty, actual FROM cup_actual_counts")}
+    finally:
+        conn.close()
+
+
+def test_actual_counter_only_for_actual_and_not_on_409(client, booth, other_clients):
+    v = volunteer(other_clients)
+    assert register(client, make_code(v, kind="potential"), faculty="W4N").status_code == 200
+    assert _actual_counts() == {}
+    dev = "d" * 64
+    assert register(client, make_code(v, kind="actual"), faculty="W4N", device=dev).status_code == 200
+    assert register(client, make_code(v, kind="actual"), faculty="W3").status_code == 200
+    assert _actual_counts() == {"W4N": 1, "W3": 1}
+    # ten sam skrót urządzenia = 409, licznik bez zmian
+    code = make_code(v, kind="actual")
+    assert register(client, code, faculty="W4N", device=dev).status_code == 409
+    assert _actual_counts() == {"W4N": 1, "W3": 1}
+    conn = db.connect()
+    assert [c["name"] for c in conn.execute("PRAGMA table_info(donors_stats)")] == ["id", "faculty", "created_at", "device_hash"]
+    assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 3
+    conn.close()
+
+
+def test_cup_split_wz_unchanged_and_day_view_has_no_split(client, booth, other_clients, admin):
+    conn = db.connect()
+    db.set_setting(conn, "faculty_students", json.dumps({"source": "t", "counts": {"W4N": 100}}))
+    conn.commit()
+    conn.close()
+    v = volunteer(other_clients)
+    register(client, make_code(v, kind="potential"), faculty="W4N")
+    register(client, make_code(v, kind="actual"), faculty="W4N")
+    register(client, make_code(v, kind="actual"), faculty="W3")
+    from app.routes import stats
+    conn = db.connect()
+    try:
+        d = stats.cup(conn)
+        row = next(r for r in d["ranking"] if r["code"] == "W4N")
+        assert (row["registered"], row["actual"], row["potential"], row["wz"]) == (2, 1, 1, 2.0)
+        un = next(r for r in d["unranked"] if r["code"] == "W3")
+        assert (un["registered"], un["actual"], un["potential"]) == (1, 1, 0)
+        assert all(r["actual"] <= r["registered"] for r in d["ranking"] + d["unranked"])
+        day = stats.cup(conn, config.warsaw_date(config.now_iso()))
+        assert "actual" not in day["ranking"][0] and day["ranking"][0]["wz"] == 2.0
+        conn.execute("UPDATE cup_actual_counts SET actual=99 WHERE faculty='W4N'")  # niespójność: ucięte do LD
+        assert next(r for r in stats.cup(conn)["ranking"] if r["code"] == "W4N")["actual"] == 2
+    finally:
+        conn.close()
+
+
+def test_actual_counter_migration_idempotent_and_wipe(client, admin, booth):
+    for _ in range(2):
+        db.init_db()
+        conn = db.connect()
+        assert [c["name"] for c in conn.execute("PRAGMA table_info(cup_actual_counts)")] == ["faculty", "actual"]
+        conn.close()
+    conn = db.connect()
+    conn.execute("DROP TABLE cup_actual_counts")  # istniejąca baza sprzed zmiany
+    conn.commit()
+    conn.close()
+    db.init_db()
+    conn = db.connect()
+    conn.execute("INSERT INTO cup_actual_counts VALUES('W4N',3)")
+    legal_before = conn.execute("SELECT COUNT(*) FROM legal_documents").fetchone()[0]
+    conn.commit()
+    conn.close()
+    assert admin.post("/api/admin/test/wipe", json={"confirm": "USUŃ"}).status_code == 200
+    conn = db.connect()
+    assert conn.execute("SELECT COUNT(*) FROM cup_actual_counts").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM legal_documents").fetchone()[0] == legal_before > 0
+    conn.close()
+
+
+def test_fake_registrations_feed_actual_counter(admin, booth):
+    assert admin.post("/api/admin/test/fake-registrations", json={"count": 200}).status_code == 200
+    conn = db.connect()
+    n_actual = conn.execute("SELECT COUNT(*) FROM registration_codes WHERE kind='actual'").fetchone()[0]
+    assert n_actual > 0
+    assert conn.execute("SELECT COALESCE(SUM(actual),0) FROM cup_actual_counts").fetchone()[0] == n_actual
+    conn.close()
+
+
+# --- dodatkowe próby: migracja ze schematu bez promo_codes / bonus_attempts -----
+def test_migration_adds_promo_and_bonus_and_restart_keeps_them(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    raw = sqlite3.connect(config.db_path())
+    raw.executescript(OLD_SCHEMA.replace("bonus_attempts INTEGER NOT NULL DEFAULT 0, ", "")
+                      .split("CREATE TABLE IF NOT EXISTS promo_codes(")[0] +
+                      "CREATE TABLE IF NOT EXISTS partners(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, filename TEXT NOT NULL);")
+    ts = "2026-10-31T10:00:00Z"
+    raw.execute("INSERT INTO game_sessions(session_id,created_at) VALUES('s1',?)", (ts,))
+    raw.commit()
+    raw.close()
+    for i in range(3):
+        db.init_db()
+        conn = db.connect()
+        assert "bonus_attempts" in {r[1] for r in conn.execute("PRAGMA table_info(game_sessions)")}
+        assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='promo_codes'").fetchone()
+        if i == 0:
+            conn.execute("UPDATE game_sessions SET bonus_attempts=7 WHERE session_id='s1'")
+            conn.execute("INSERT INTO booths(id,name,pin_hash,current_genotype,genotype_updated_at,created_at) "
+                         "VALUES('c13','C','x','0123012301',?,?)", (ts, ts))
+            conn.execute("INSERT INTO promo_codes VALUES('C13-DDDD','c13','ACTIVE',?,NULL)", (ts,))
+            conn.commit()
+        else:
+            assert conn.execute("SELECT bonus_attempts FROM game_sessions").fetchone()[0] == 7
+            assert conn.execute("SELECT status FROM promo_codes WHERE code='C13-DDDD'").fetchone()[0] == "ACTIVE"
+        conn.close()

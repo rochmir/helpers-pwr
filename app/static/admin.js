@@ -5,7 +5,7 @@ import { renderSocial, renderPlayerCert, renderDonorCert, renderResultCert, show
 const msg = $('#panel-msg');
 let booths = [];
 let faculties = [];
-const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny' };
+const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny', promo: 'dodatkowe próby' };
 const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
 
 async function guard(fn, target = msg) {

@@ -29,16 +29,27 @@ def faculty_counts(conn: sqlite3.Connection, date: str | None = None) -> list[di
 def cup(conn: sqlite3.Connection, date: str | None = None) -> dict:
     """Puchar Dawcy PWr: ranking wg Wskaźnika Zaangażowania WZ = LD / LS * 100 (§4 regulaminu), tylko wydziały
     z liczbą studentów (LS), bez „Inne”. Remis WZ (do 2 miejsc po przecinku): wyższe LD, potem kolejność słownika.
-    ``registered`` to LD (punkty). ``unranked``: wydziały bez LS oraz „Inne”."""
+    ``registered`` to LD (punkty). ``unranked``: wydziały bez LS oraz „Inne”.
+    Bez ``date`` każda pozycja ma też ``actual`` (faktyczni dawcy, z ``cup_actual_counts``) i ``potential``
+    (``registered - actual``); wpisy bez podziału liczą się jako nowi. Licznik nie ma dat, więc w widoku
+    dziennym (``date``) podziału nie ma."""
+    split = {} if date else {r["faculty"]: r["actual"] for r in conn.execute("SELECT faculty, actual FROM cup_actual_counts")}
+
+    def parts(code: str, ld: int) -> dict:
+        if date:
+            return {}
+        a = max(0, min(split.get(code, 0), ld))
+        return {"actual": a, "potential": ld - a}
     students = db.get_students(conn)
     ranking, unranked = [], []
     for f in _faculty_rows(conn, date):
         n = students["counts"].get(f["code"])
         if n and f["code"] != db.OTHER_FACULTY["code"]:
             ranking.append({"code": f["code"], "name": f["name"], "registered": f["count"], "students": n,
-                            "wz": round(f["count"] / n * 100, 2)})
+                            "wz": round(f["count"] / n * 100, 2), **parts(f["code"], f["count"])})
         else:
-            unranked.append({"code": f["code"], "name": f["name"], "registered": f["count"]})
+            unranked.append({"code": f["code"], "name": f["name"], "registered": f["count"],
+                             **parts(f["code"], f["count"])})
     ranking.sort(key=lambda r: (-r["wz"], -r["registered"]))
     return {"ranking": [{"rank": i, **r} for i, r in enumerate(ranking, 1)], "unranked": unranked,
             "source": students["source"]}

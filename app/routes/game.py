@@ -53,8 +53,8 @@ def device_pool(conn: sqlite3.Connection, device_key: str, ext_key: str | None, 
 
 
 def game_state(conn: sqlite3.Connection, sid: str) -> dict:
-    """Stan gracza: próby na dziś, najlepszy wynik dnia, ważna przepustka, ostatnie trafienie."""
-    s = conn.execute("SELECT has_won, pass_booth, pass_until, device_key, device_ext_key, won_genotype, won_at, won_token "
+    """Stan gracza: próby (pula urządzenia + dodatkowe), najlepszy wynik dnia, ważna przepustka, ostatnie trafienie."""
+    s = conn.execute("SELECT has_won, bonus_attempts, pass_booth, pass_until, device_key, device_ext_key, won_genotype, won_at, won_token "
                      "FROM game_sessions WHERE session_id=?", (sid,)).fetchone()
     a = conn.execute("SELECT best FROM game_attempts WHERE session_id=? AND date=?", (sid, config.today())).fetchone()
     pass_ok = bool(s["pass_booth"] and s["pass_until"] and s["pass_until"] > config.now_iso())
@@ -63,7 +63,8 @@ def game_state(conn: sqlite3.Connection, sid: str) -> dict:
         left = device_pool(conn, s["device_key"], s["device_ext_key"], sid, config.today())
     win = conn.execute("SELECT w.seq, b.name FROM wins w LEFT JOIN booths b ON b.id=w.booth_id WHERE w.token=?",
                        (s["won_token"],)).fetchone() if s["won_token"] else None
-    return {"attempts_left": left, "has_won": bool(s["has_won"]),
+    return {"attempts_left": left + s["bonus_attempts"], "device_left": left,
+            "bonus_attempts": s["bonus_attempts"], "has_won": bool(s["has_won"]),
             "best_today": a["best"] if a else 0, "pass_booth": s["pass_booth"] if pass_ok else None,
             "won_genotype": s["won_genotype"], "won_at": s["won_at"], "won_token": s["won_token"],
             "won_seq": win["seq"] if win else None, "won_booth_name": win["name"] if win else None}
@@ -136,7 +137,8 @@ def roll(body: RollIn, sid: str = Depends(auth.game_session), conn: sqlite3.Conn
         return _roll(conn, sid, body.booth_id)
     except _LimitReached:
         st = game_state(conn, sid)
-        return JSONResponse({"detail": DEVICE_LIMIT, "attempts_left": 0, "best_today": st["best_today"]},
+        return JSONResponse({"detail": DEVICE_LIMIT, "attempts_left": 0, "device_left": 0, "bonus_attempts": 0,
+                             "best_today": st["best_today"]},
                             status_code=429)
 
 
@@ -154,15 +156,22 @@ def _roll(conn: sqlite3.Connection, sid: str, booth_id: str) -> dict:
         row = conn.execute("SELECT best FROM game_attempts WHERE session_id=? AND date=?", (sid, today)).fetchone()
         prev_best = row["best"] if row else 0
         pool = device_pool(conn, key, sess["device_ext_key"], sid, today)
-        if pool <= 0:
+        bonus = sess["bonus_attempts"]
+        if pool <= 0 and bonus <= 0:
             raise _LimitReached
-        # Wiersz dnia zawsze istnieje (do best); licznik prób idzie do booth_plays (stoisko tylko porządkowo).
-        conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,1) "
-                     "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+1", (sid, today))
-        conn.execute("INSERT INTO booth_plays(device_key,booth_id,date,session_id,attempts,ext_key) VALUES(?,?,?,?,1,?) "
-                     "ON CONFLICT(device_key,booth_id,date,session_id) DO UPDATE SET attempts=attempts+1, "
-                     "ext_key=excluded.ext_key", (key, booth["id"], today, sid, sess["device_ext_key"] or key))
-        pool -= 1
+        # Najpierw pula urządzenia (5 na dobę), potem dodatkowe próby (w tej samej transakcji). Wiersz dnia zawsze
+        # istnieje (do best); licznik puli idzie do booth_plays (stoisko tylko porządkowo).
+        from_pool = 1 if pool > 0 else 0
+        conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,?) "
+                     "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+?", (sid, today, from_pool, from_pool))
+        if from_pool:
+            conn.execute("INSERT INTO booth_plays(device_key,booth_id,date,session_id,attempts,ext_key) VALUES(?,?,?,?,1,?) "
+                         "ON CONFLICT(device_key,booth_id,date,session_id) DO UPDATE SET attempts=attempts+1, "
+                         "ext_key=excluded.ext_key", (key, booth["id"], today, sid, sess["device_ext_key"] or key))
+            pool -= 1
+        else:
+            conn.execute("UPDATE game_sessions SET bonus_attempts=bonus_attempts-1 WHERE session_id=?", (sid,))
+            bonus -= 1
         conn.execute("UPDATE booths SET rolls_count=rolls_count+1 WHERE id=?", (booth["id"],))
         has_won = bool(sess["has_won"])
         old = booth["current_genotype"]
@@ -180,5 +189,5 @@ def _roll(conn: sqlite3.Connection, sid: str, booth_id: str) -> dict:
         best = max(prev_best, matches)
         conn.execute("UPDATE game_attempts SET best=? WHERE session_id=? AND date=?", (best, sid, today))
     return {"matches": matches, "win": win, "player_genotype": player, "booth_genotype": old,
-            "attempts_left": pool, "has_won": has_won, "best_today": best,
+            "attempts_left": pool + bonus, "device_left": pool, "bonus_attempts": bonus, "has_won": has_won, "best_today": best,
             **won}

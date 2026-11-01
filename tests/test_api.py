@@ -55,7 +55,7 @@ def register(c, code, faculty="W4N", device=None, **extra):
 # --- gra ------------------------------------------------------------------------
 def test_session_and_roll(client, booth, other_clients):
     s = new_session(client, booth)
-    assert s["attempts_left"] == 5 and s["has_won"] is False and s["token"] and "bonus_attempts" not in s
+    assert s["attempts_left"] == 5 and s["has_won"] is False and s["token"] and s["bonus_attempts"] == 0
     r = client.post("/api/game/roll", json={"booth_id": booth})
     assert r.status_code == 200
     d = r.json()
@@ -207,7 +207,7 @@ def test_code_generation_format(admin, booth):
 def test_register_flow(admin, booth, other_clients, client):
     code = make_code(admin, booth_id=booth)
     chk = client.get(f"/api/donor/check-code?kod= {code.lower()} ").json()
-    assert chk == {"valid": True, "booth_name": "Budynek C-13", "kind": "potential"}
+    assert chk == {"valid": True, "booth_name": "Budynek C-13", "kind": "potential", "bonus": config.CUP_VOTE_BONUS}
     r = register(client, code)
     assert r.status_code == 200
     d = r.json()
@@ -247,7 +247,7 @@ def test_donors_stats_privacy(admin, booth, client):
     cols = [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")]
     assert cols == ["id", "faculty", "created_at", "device_hash"]
     assert "card_hash" not in [r[1] for r in conn.execute("PRAGMA table_info(registration_codes)")]
-    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name IN ('actual_donor_cards','promo_codes')").fetchone() is None
+    assert conn.execute("SELECT 1 FROM sqlite_master WHERE name='actual_donor_cards'").fetchone() is None
     row = conn.execute("SELECT * FROM donors_stats").fetchone()
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", row["created_at"])
     assert re.fullmatch(r"[0-9a-f]{32}", row["device_hash"]) and row["device_hash"] != "cd" * 16

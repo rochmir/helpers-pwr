@@ -430,7 +430,7 @@ export async function renderPlayerCert({ nick, genotype, wonAt, token, boothName
   }
   if (when) blocks.push({ t: 'text', text: 'Data i godzina: ' + when, size: 38, weight: '600', color: C.black, mt: 36 });
   if (boothName) blocks.push({ t: 'text', text: 'Stanowisko: ' + boothName, size: 38, mt: 4 });
-  blocks.push({ t: 'text', text: 'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w symulatorze HLA. W symulatorze 1 do 300. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.', size: 36, narrow: true, mt: 44 });
+  blocks.push({ t: 'text', text: 'Udało Ci się zostać wirtualnym bliźniakiem genetycznym w symulatorze HLA. W symulatorze 1 do 150. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.', size: 36, narrow: true, mt: 44 });
   blocks.push({ t: 'text', text: 'Prawdziwego bliźniaka genetycznego możesz uratować w rzeczywistości. Zarejestruj się jako potencjalny Dawca szpiku.', size: 36, narrow: true, mt: 20 });
   await drawGraphic(canvas, blocks, { ...ctxs, dateText: when ? '' : dateLong() });
   return canvas;

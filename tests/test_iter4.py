@@ -277,7 +277,7 @@ def test_cup_seed_ranks_all_faculties_except_other(admin, booth, client):
     assert admin.get("/api/admin/students").json()["counts"]["W4N"] == 4576
     b = client.get("/api/stats/cup").json()
     assert "Sprawozdanie Rektora" in b["source"] and len(b["ranking"]) == 14
-    assert b["unranked"] == [{"code": "INNE", "name": "Inne", "registered": 0}]
+    assert b["unranked"] == [{"code": "INNE", "name": "Inne", "registered": 0, "actual": 0, "potential": 0}]
     assert b["cup_deadline"] == "2026-12-11T15:30:00Z" and b["cup_closed"] is False
     assert client.get("/api/stats/battle").status_code == 404  # stary adres nie istnieje
 
@@ -297,10 +297,11 @@ def test_cup_ranking_unranked_and_inne(admin, booth, client):
     assert b["source"] == "GUS 2026"
     assert [(r["rank"], r["code"], r["registered"], r["students"], r["wz"]) for r in b["ranking"]] == \
         [(1, "W13", 2, 500, 0.4), (2, "W4N", 3, 1000, 0.3), (3, "W3", 1, 500, 0.2)]
-    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz"}
+    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz", "actual", "potential"}
     codes = [u["code"] for u in b["unranked"]]
     assert len(codes) == 12 and codes[-1] == "INNE" and "W1" in codes and "W4N" not in codes
-    assert {"code": "W1", "name": b["unranked"][codes.index("W1")]["name"], "registered": 1} in b["unranked"]
+    assert {"code": "W1", "name": b["unranked"][codes.index("W1")]["name"], "registered": 1,
+            "actual": 0, "potential": 1} in b["unranked"]
 
 
 def test_cup_rounding_and_ties(admin, booth, client):

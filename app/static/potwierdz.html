@@ -41,12 +41,14 @@
     <input type="text" id="code" name="code" autocapitalize="characters" autocomplete="off" spellcheck="false" required>
     <p id="code-status" class="hint"></p>
 
-    <label for="faculty">Wydział <span class="req">*</span></label>
-    <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
+    <div id="donor-fields">
+      <label for="faculty">Wydział <span class="req">*</span></label>
+      <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
 
-    <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
-    <input type="text" id="donor-name" maxlength="80" autocomplete="off">
-    <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
+      <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
+      <input type="text" id="donor-name" maxlength="80" autocomplete="off">
+      <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
+    </div>
 
     <div id="turnstile" class="turnstile"></div>
     <p class="consent-text" id="consent-text">Wysyłając token, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu Dawcy PWr</a> oraz <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> i zgadzasz się na obliczenie skrótu urządzenia, który pilnuje jednego głosu z urządzenia. Zapisujemy tylko wydział, znacznik czasu i ten skrót.</p>
@@ -57,6 +59,13 @@
     <span class="iconbox" aria-hidden="true"><i class="ti ti-circle-check"></i></span>
     <h2 id="done-title">Dziękujemy za udział w akcji!</h2>
     <p id="done-text"></p>
+    <div class="eyecatcher bonus-box" id="bonus-box" hidden>
+      <div>
+        <p class="title" id="bonus-title"></p>
+        <p id="bonus-text"></p>
+      </div>
+      <a class="btn btn-plain btn-lg" id="bonus-play" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a>
+    </div>
     <div id="cert-output" class="download" hidden></div>
   </section>
   </div>
