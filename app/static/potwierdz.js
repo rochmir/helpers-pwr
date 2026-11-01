@@ -122,7 +122,7 @@ $('#confirm-form').addEventListener('submit', async (ev) => {
     if (r.bonus_attempts_granted) {
       $('#bonus-title').textContent = 'Masz ' + r.bonus_attempts_granted + ' dodatkowych prób w HLA Match Maker';
       $('#bonus-text').textContent = (promo ? 'Dziękujemy za pomoc w promocji akcji. ' : 'To podziękowanie za udział w Pucharze Dawcy PWr. ')
-        + 'Masz teraz ' + r.attempts_left + ' prób do wykorzystania. Dodatkowe próby wykorzystujesz po 5 próbach na dobę i nie znikają o północy.';
+        + 'Dodatkowe próby wykorzystujesz po wyczerpaniu 5 prób na dobę na danym stanowisku i nie znikają o północy.';
       if (r.play_path) $('#bonus-play').href = r.play_path;
       $('#bonus-box').hidden = false;
     }

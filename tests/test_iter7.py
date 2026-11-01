@@ -91,7 +91,7 @@ def test_promo_mechanics_present(admin, booth, client, other_clients, conn):
     assert not hasattr(config, "REGISTER_BONUS")
     assert config.DAILY_ATTEMPTS == 5
     s = new_session(client, booth)
-    assert set(s) == {"token", "attempts_left", "device_left", "bonus_attempts", "has_won", "best_today", "pass_booth",
+    assert set(s) == {"token", "attempts_left", "booth_left", "bonus_attempts", "has_won", "best_today", "pass_booth", "pass_is_lecture",
                       "won_genotype", "won_at", "won_token", "won_seq", "won_booth_name"}
     assert s["bonus_attempts"] == 0 and s["attempts_left"] == 5
 

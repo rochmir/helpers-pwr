@@ -6,6 +6,7 @@ ustawia wyłącznie serwer.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import sqlite3
@@ -48,11 +49,41 @@ def split_title(text: str) -> tuple[str, str]:
     raise ValueError("Brak nagłówka # na początku dokumentu.")
 
 
+# SHA-256 ciała (po ``split_title``) poprzednich wersji seedu: dokument w bazie z dokładnie taką treścią nie był
+# zmieniany w panelu, więc przy starcie dostaje nową treść seedu (wersja +1). Wartości z commita 463c281 (seed v1).
+PREVIOUS_SEED_SHA256 = {
+    "regulamin-konkursu": ("fb663c80d697b5a038ce8d7204d04654bb79224c0bbd7945dfea6f978fcec72b",),
+    "regulamin-pucharu": ("dc380fa703839da27b8b7d1f0975419f98757a3473b6dd1d817429b997f44da3",),
+    "polityka-prywatnosci": ("fca77a29550101ebe375e9186ea6f29f46799aba5441d931ba37f1bf7399b956",),
+}
+SEED_UPDATE_AUTHOR = "system"
+
+
+def _update_untouched(conn: sqlite3.Connection, slug: str, title: str, body: str) -> None:
+    """Podmienia treść dokumentu, jeśli w bazie jest jeszcze jedna z poprzednich wersji seedu. Zapis jak w panelu:
+    kopia starej wersji w ``legal_document_versions``, wersja +1, ``updated_at`` teraz. Dokument zmieniony ręcznie
+    (inny hash) zostaje nietknięty, a drugi start nic nie zmienia, bo hash nowej treści nie jest na liście."""
+    from . import db
+    with db.tx(conn):
+        row = conn.execute("SELECT title, body_md, version FROM legal_documents WHERE slug=?", (slug,)).fetchone()
+        if row is None or hashlib.sha256(row["body_md"].encode()).hexdigest() not in PREVIOUS_SEED_SHA256.get(slug, ()):
+            return
+        now = config.now_iso()
+        conn.execute("INSERT INTO legal_document_versions(slug,version,title,body_md,saved_at,saved_by) VALUES(?,?,?,?,?,?)",
+                     (slug, row["version"], row["title"], row["body_md"], now, SEED_UPDATE_AUTHOR))
+        conn.execute("UPDATE legal_documents SET title=?, body_md=?, version=?, updated_at=? WHERE slug=?",
+                     (title, body, row["version"] + 1, now, slug))
+        log.info("Zaktualizowano dokument %s do wersji %s", slug, row["version"] + 1)
+
+
 def seed(conn: sqlite3.Connection) -> None:
-    """Wstawia brakujące dokumenty bazowe z ``app/legal/*.md`` (istniejących nie rusza)."""
+    """Wstawia brakujące dokumenty bazowe z ``app/legal/*.md``; istniejące zmienia tylko, gdy nadal mają treść
+    poprzedniej wersji seedu (``PREVIOUS_SEED_SHA256``)."""
     now = config.now_iso()
     for sort, slug in enumerate(BASE_SLUGS, 1):
         if conn.execute("SELECT 1 FROM legal_documents WHERE slug=?", (slug,)).fetchone():
+            title, body = split_title((LEGAL_DIR / f"{slug}.md").read_text(encoding="utf-8"))
+            _update_untouched(conn, slug, title, body)
             continue
         title, body = split_title((LEGAL_DIR / f"{slug}.md").read_text(encoding="utf-8"))
         conn.execute("INSERT INTO legal_documents(slug,title,body_md,published,sort,version,created_at,updated_at) "

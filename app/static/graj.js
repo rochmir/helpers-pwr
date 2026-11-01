@@ -153,14 +153,15 @@ function showEnd(best) {
   }
   bestOverall = Math.max(bestOverall, best);
   updateRewards();
-  const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec prób na dziś.';
-  setResult(title, 'Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro.', 'end');
+  const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec prób na tym stanowisku.';
+  setResult(title, 'Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro.', 'end');
   // Przy wygranej gracz najpierw widzi ekran wygranej (token, Facebook); okno otwiera przyciskiem.
   if (!winShown) openEndDialog();
 }
 
 function enterPlay(me) {
   show('scan-section', false);
+  if (me.pass_is_lecture) showLecture();
   bestOverall = Math.max(bestOverall, me.best_today || 0);
   if (me.has_won) {
     if (me.won_genotype) won = { genotype: me.won_genotype, at: me.won_at, token: me.won_token, booth: me.won_booth_name };
@@ -281,8 +282,26 @@ async function showStart(withSession) {
   }
 }
 
-/** Okno konca prob: najlepszy wynik dnia i certyfikat albo grafika z wynikiem. */
-function openEndDialog() {
+/** Blok „Więcej o akcji” po wejściu ze stanowiska Zajęcia: stała treść z regulaminów plus lista stanowisk. */
+let lectureShown = false;
+async function showLecture() {
+  if (lectureShown) return;
+  lectureShown = true;
+  show('lecture-section', true);
+  const empty = $('#lecture-booth-empty');
+  let booths = [];
+  let hours = '';
+  try {
+    const d = await api('GET', '/api/booths/public');
+    booths = d.booths || [];
+    hours = d.hours || '';
+  } catch (e) { /* blad listy nie blokuje reszty bloku */ }
+  fillBoothList($('#lecture-booth-list'), $('#lecture-booth-hours'), booths, hours);
+  empty.hidden = booths.length > 0;
+}
+
+/** Okno konca prob: najlepszy wynik dnia, inne stanowiska (bledy API nie blokuja reszty), certyfikat. */
+async function openEndDialog() {
   if (endDlg.open || typeof endDlg.showModal !== 'function') return;
   const hasCert = !!won || bestOverall > 0;
   $('#end-best').textContent = bestOverall > 0 ? 'Twój najlepszy wynik dziś: ' + bestOverall + '/10.' : '';
@@ -291,6 +310,22 @@ function openEndDialog() {
   $('#end-cert-title').textContent = won ? 'Twój certyfikat 10/10' : 'Odbierz swój wynik';
   endDlg.showModal();
   endDlg.scrollTop = 0;
+  const list = $('#end-booth-list');
+  const hoursEl = $('#end-booth-hours');
+  const empty = $('#end-booth-empty');
+  list.textContent = '';
+  hoursEl.hidden = true;
+  empty.hidden = true;
+  let booths = [];
+  let hours = '';
+  try {
+    const d = await api('GET', '/api/booths/public');
+    const here = $('#game-booth').textContent;
+    booths = (d.booths || []).filter((b) => b.name !== here);
+    hours = d.hours || '';
+  } catch (e) { /* blad listy nie blokuje reszty okna */ }
+  fillBoothList(list, hoursEl, booths, hours);
+  empty.hidden = booths.length > 0;
 }
 
 /** Grafika z wynikiem: certyfikat 10/10 gdy sesja ma trafienie, inaczej grafika z najlepszym wynikiem. */

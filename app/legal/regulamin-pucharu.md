@@ -23,8 +23,9 @@ w ramach ogólnouczelnianej akcji Fundacji DKMS – Helpers’ Generation na Pol
 3. Student skanuje kod telefonem, a w dedykowanym module Serwisu https://helpers-pwr.rupary.pl:
    - wybiera z listy swój macierzysty Wydział,
    - zatwierdza przypisanie punktu za pomocą otrzymanego jednorazowego tokenu.
-4. W celu wyeliminowania wielokrotnego głosowania przez tę samą osobę oraz zabezpieczenia procedury bez przetwarzania danych osobowych, system generuje i zapisuje jednostronny skrót kryptograficzny (hash) parametrów urządzenia/sesji przeglądarki (fingerprint). System rejestruje wyłącznie: identyfikator Wydziału, znacznik czasu, hash fingerprintu oraz unieważnia wykorzystany token OTP. W bazie Turnieju nie są gromadzone ani przetwarzane jakiekolwiek dane osobowe (w tym imię, nazwisko, numer legitymacji czy numer PESEL).
+4. W celu wyeliminowania wielokrotnego głosowania przez tę samą osobę oraz zabezpieczenia procedury bez przetwarzania danych osobowych, system generuje i zapisuje jednostronny skrót kryptograficzny (hash) parametrów urządzenia/sesji przeglądarki (fingerprint). System rejestruje wyłącznie: identyfikator Wydziału, znacznik czasu, hash fingerprintu oraz unieważnia wykorzystany token OTP. Odrębnie, bez powiązania z pojedynczym głosem, znacznikiem czasu ani hashem, prowadzony jest zbiorczy licznik liczby faktycznych dawców na Wydział, służący prezentacji rankingu. W bazie Turnieju nie są gromadzone ani przetwarzane jakiekolwiek dane osobowe (w tym imię, nazwisko, numer legitymacji czy numer PESEL).
 5. Każdy uczestnik (zarówno nowo zarejestrowany dawca, jak i dawca faktyczny) może oddać dokładnie jeden głos w Turnieju.
+6. Oddanie głosu uprawnia do dodatkowych prób w symulatorze HLA Match Maker (10 prób, a w przypadku faktycznego dawcy 20 prób), na zasadach określonych w regulaminie tego konkursu.
 
 ## §4. Algorytm Wyłonienia Zwycięzcy (Wskaźnik Zaangażowania)
 

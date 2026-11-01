@@ -38,7 +38,7 @@ def test_limit_five_per_device_same_hash_two_sessions_tolerance_one(admin, booth
     new_session(b, booth)  # ten sam hash urządzenia w innej przeglądarce
     exhaust(a, booth)
     r = roll(b, booth)
-    assert r.status_code == 429 and r.json()["detail"] == "Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro."
+    assert r.status_code == 429 and r.json()["detail"] == "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
     assert b.get("/api/game/me").json()["attempts_left"] == 0
 
 
@@ -70,32 +70,36 @@ def test_partial_pool_shared_between_sessions(admin, booth, other_clients):
     assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
 
 
-def test_limit_is_per_device_not_per_booth(admin, booth, client):
-    """Regulamin konkursu §4.2: 5 prób na dobę na urządzenie, razem na wszystkich stoiskach."""
+def test_limit_is_per_booth_not_across_booths(admin, booth, client):
+    """Regulamin konkursu §4.2: 5 prób na dobę na urządzenie na każdym stanowisku (osobna pula na każdym)."""
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
     set_tolerance(admin, 1)
     new_session(client, booth)
     exhaust(client, booth, 3)
+    assert client.get("/api/game/me").json()["attempts_left"] == 2
     assert enter(client, "w4").status_code == 200
-    assert client.get("/api/game/me").json()["attempts_left"] == 2  # trzy próby zeszły z c13
-    assert roll(client, "w4").json()["attempts_left"] == 1
-    assert roll(client, "w4").status_code == 200
+    assert client.get("/api/game/me").json()["attempts_left"] == 5  # w4 ma własne 5 prób
+    exhaust(client, "w4", 5)
     r = roll(client, "w4")
-    assert r.status_code == 429 and r.json()["detail"].startswith("Limit 5 prób na dobę na tym urządzeniu")
+    assert r.status_code == 429 and r.json()["detail"] == "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
     assert enter(client, booth).status_code == 200
-    assert roll(client, booth).status_code == 429  # wrócenie na pierwsze stoisko niczego nie odnawia
+    assert client.get("/api/game/me").json()["attempts_left"] == 2  # pierwsze stoisko pamięta trzy próby
+    exhaust(client, booth, 2)
+    assert roll(client, booth).status_code == 429
     assert client.get("/api/game/me").json()["attempts_left"] == 0
 
 
-def test_limit_across_booths_default_tolerance_and_other_device(admin, booth, other_clients):
+def test_same_pool_on_the_same_booth_other_device_has_its_own(admin, booth, other_clients):
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
-    a, b = other_clients(), other_clients()
+    a, a2, b = other_clients(), other_clients(), other_clients()
     new_session(a, booth)
+    new_session(a2, booth)  # ten sam hash urządzenia, ta sama pula na tym stanowisku
     exhaust(a, booth, 5)
-    assert enter(a, "w4").status_code == 200 and roll(a, "w4").status_code == 429
+    assert roll(a2, booth).status_code == 429
+    assert enter(a, "w4").status_code == 200 and roll(a, "w4").status_code == 200  # inne stanowisko: nowe 5
     new_session(b)
-    assert enter(b, "w4", device="cd" * 32).status_code == 200  # inne urządzenie ma własną pulę
-    assert roll(b, "w4").status_code == 200
+    assert enter(b, booth, device="cd" * 32).status_code == 200  # inne urządzenie ma własną pulę
+    assert roll(b, booth).status_code == 200
 
 
 def test_enter_consent_and_device_validation(client, booth):

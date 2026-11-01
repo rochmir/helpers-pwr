@@ -102,7 +102,8 @@ def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection 
         "(SELECT COUNT(*) FROM promo_codes p WHERE p.booth_id=b.id AND p.status='ACTIVE') AS active_codes "
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
-                               "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")} for r in rows]
+                               "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")}
+            | {"is_lecture": bool(r["is_lecture"])} for r in rows]
 
 
 @router.post("/booths", status_code=201)
@@ -144,8 +145,11 @@ def patch_booth(booth_id: str, body: BoothPatch, _: dict = Depends(auth.require_
 @router.delete("/booths/{booth_id}")
 def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
     with db.tx(conn):
-        if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
+        booth = conn.execute("SELECT is_lecture FROM booths WHERE id=?", (booth_id,)).fetchone()
+        if booth is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
+        if booth["is_lecture"]:
+            raise HTTPException(409, "Stanowiska Zajęcia nie można usunąć.")
         used = conn.execute("SELECT (SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
                             "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)", (booth_id, booth_id)).fetchone()[0]
         if used:
@@ -165,6 +169,22 @@ def reset_genotype(booth_id: str, _: dict = Depends(auth.require_admin), conn: s
         conn.execute("UPDATE booths SET current_genotype=?, genotype_updated_at=? WHERE id=?", (g, ts, booth_id))
         conn.execute("INSERT INTO genotype_history(genotype,booth_id,created_at) VALUES(?,?,?)", (g, booth_id, ts))
     return {"genotype": g}
+
+
+def _lecture_view(conn: sqlite3.Connection, token: str) -> dict:
+    return {"token": token, "url": f"{config.public_url()}/zajecia/{token}"}
+
+
+@router.get("/lecture-screen")
+def get_lecture_screen(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Statyczny link do ekranu stanowiska „Zajęcia” dla prowadzących (tworzony przy pierwszym użyciu)."""
+    return _lecture_view(conn, db.lecture_screen_token(conn))
+
+
+@router.post("/lecture-screen/rotate")
+def rotate_lecture_screen(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Nowy link; poprzedni przestaje działać."""
+    return _lecture_view(conn, db.rotate_lecture_screen_token(conn))
 
 
 @router.get("/booth-hours")

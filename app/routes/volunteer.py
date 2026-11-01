@@ -59,8 +59,11 @@ def generate_code(body: GenerateIn, staff: dict = Depends(auth.require_volunteer
         raise HTTPException(422, "Niepoprawny typ tokenu.")
     ts = config.now_iso()
     with db.tx(conn):
-        if conn.execute("SELECT 1 FROM booths WHERE id=?", (bid,)).fetchone() is None:
+        booth = conn.execute("SELECT is_lecture FROM booths WHERE id=?", (bid,)).fetchone()
+        if booth is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
+        if booth["is_lecture"]:
+            raise HTTPException(409, "Na stanowisku Zajęcia nie ma wolontariusza, więc nie wystawia się tam tokenów ani kodów.")
         code = db.unique_code(conn, bid)
         if code is None:
             raise HTTPException(503, "Nie udało się wygenerować tokenu. Spróbuj ponownie.")

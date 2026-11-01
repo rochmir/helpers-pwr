@@ -11,7 +11,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Warsaw")
-DAILY_ATTEMPTS = 5         # prób na dobę na jedno urządzenie (regulamin konkursu, §4.2)
+DAILY_ATTEMPTS = 5         # prób na dobę na jedno urządzenie na każdym stanowisku (regulamin konkursu, §4.2)
 DEVICE_TOLERANCE = 10      # domyślny sufit dla identycznych urządzeń (settings.device_tolerance, 1..50)
 CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; kody rejestracyjne i tokeny trafień
 PROMO_BONUS = 5            # dodatkowe próby za post lub story z oznaczeniem Samorządu i dkms_pl (kod od wolontariusza)

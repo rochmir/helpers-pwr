@@ -81,7 +81,7 @@ def test_bonus_is_spent_after_the_daily_pool_then_429(admin, booth, other_client
     seen = []
     for i in range(15):
         d = roll(p, booth).json()
-        seen.append((d["attempts_left"], d["device_left"], d["bonus_attempts"]))
+        seen.append((d["attempts_left"], d["booth_left"], d["bonus_attempts"]))
     assert seen[0] == (14, 4, 10) and seen[4] == (10, 0, 10) and seen[5] == (9, 0, 9) and seen[-1] == (0, 0, 0)
     r = roll(p, booth)
     assert r.status_code == 429 and r.json()["attempts_left"] == 0

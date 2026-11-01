@@ -1,6 +1,7 @@
 """SQLite: połączenie na żądanie, schemat, seed słownika, pomocnicze zapytania."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -27,7 +28,8 @@ CREATE TABLE IF NOT EXISTS booths(
   current_genotype TEXT NOT NULL, genotype_updated_at TEXT NOT NULL,
   matches_count INTEGER NOT NULL DEFAULT 0, rolls_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
-  building TEXT NOT NULL DEFAULT '', date_from TEXT NULL, date_to TEXT NULL);
+  building TEXT NOT NULL DEFAULT '', date_from TEXT NULL, date_to TEXT NULL,
+  is_lecture INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS genotype_history(
   genotype TEXT PRIMARY KEY, booth_id TEXT NOT NULL, created_at TEXT NOT NULL, matched_at TEXT NULL,
   is_test INTEGER NOT NULL DEFAULT 0);
@@ -140,6 +142,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "booths", "building", "TEXT NOT NULL DEFAULT ''")
     _add_column(conn, "booths", "date_from", "TEXT NULL")
     _add_column(conn, "booths", "date_to", "TEXT NULL")
+    # stanowisko „Zajęcia” (promocja na wykładach): poza publicznymi wykazami, bez wolontariusza i bez ograniczenia datami
+    _add_column(conn, "booths", "is_lecture", "INTEGER NOT NULL DEFAULT 0")
     # wzór i czas trafienia (anonimowo, bez nicku) + oznaczenie trafień testowych
     _add_column(conn, "genotype_history", "is_test", "INTEGER NOT NULL DEFAULT 0")
     _add_column(conn, "game_sessions", "won_genotype", "TEXT NULL")
@@ -253,9 +257,42 @@ def init_db() -> None:
             set_setting(conn, "facebook_url_seeded", "1")
         from . import legal
         legal.seed(conn)
+        ensure_lecture_booth(conn)
     finally:
         conn.close()
     bootstrap_booths()
+
+
+LECTURE_BOOTH_ID = "zajecia"
+LECTURE_BOOTH_NAME = "Zajęcia"
+LECTURE_TOKEN_KEY = "lecture_screen_token"
+
+
+def ensure_lecture_booth(conn: sqlite3.Connection) -> None:
+    """Idempotentnie tworzy stanowisko „Zajęcia” (is_lecture=1), jeśli nie ma stoiska o tym id."""
+    with tx(conn):
+        if conn.execute("SELECT 1 FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone() is None:
+            create_booth(conn, LECTURE_BOOTH_ID, LECTURE_BOOTH_NAME, is_lecture=True)
+            log.info("Utworzono stanowisko %s", LECTURE_BOOTH_ID)
+
+
+def lecture_screen_token(conn: sqlite3.Connection) -> str:
+    """Token statycznego linku `/zajecia/{token}`; tworzony przy pierwszym użyciu (``INSERT OR IGNORE`` chroni wyścig)."""
+    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (LECTURE_TOKEN_KEY, secrets.token_urlsafe(16)))
+    return get_setting(conn, LECTURE_TOKEN_KEY)
+
+
+def rotate_lecture_screen_token(conn: sqlite3.Connection) -> str:
+    token = secrets.token_urlsafe(16)
+    set_setting(conn, LECTURE_TOKEN_KEY, token)
+    return token
+
+
+def lecture_token_ok(conn: sqlite3.Connection, given: str | None) -> bool:
+    """Stałoczasowe porównanie tokenu ekranu Zajęć."""
+    if not given:
+        return False
+    return hmac.compare_digest(given.encode(), lecture_screen_token(conn).encode())
 
 
 def get_booth_hours(conn: sqlite3.Connection) -> str:
@@ -311,15 +348,16 @@ def fresh_genotype(conn: sqlite3.Connection) -> str:
 
 
 def create_booth(conn: sqlite3.Connection, booth_id: str, name: str, building: str = "",
-                 date_from: str | None = None, date_to: str | None = None) -> None:
+                 date_from: str | None = None, date_to: str | None = None, is_lecture: bool = False) -> None:
     """Wstawia stoisko wraz z pierwszym genotypem. Wołać w transakcji.
 
     Kolumna ``pin_hash`` została po starym logowaniu PIN-em (NOT NULL); wpisujemy hash losowego sekretu."""
     ts = config.now_iso()
     g = fresh_genotype(conn)
     conn.execute("INSERT INTO booths(id,name,pin_hash,current_genotype,genotype_updated_at,created_at,"
-                 "building,date_from,date_to) VALUES(?,?,?,?,?,?,?,?,?)",
-                 (booth_id, name, hasher.hash(secrets.token_urlsafe(24)), g, ts, ts, building, date_from, date_to))
+                 "building,date_from,date_to,is_lecture) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                 (booth_id, name, hasher.hash(secrets.token_urlsafe(24)), g, ts, ts, building, date_from, date_to,
+                  int(is_lecture)))
     conn.execute("INSERT INTO genotype_history(genotype,booth_id,created_at) VALUES(?,?,?)", (g, booth_id, ts))
 
 

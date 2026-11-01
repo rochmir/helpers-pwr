@@ -49,9 +49,16 @@ logowanie na dany login jest blokowane na 5 minut (licznik per login, nie per IP
 
 ## Limit prób
 
-5 prób na dobę na urządzenie, łącznie na wszystkich stoiskach (regulamin konkursu §4.2), liczone po kluczu urządzenia (działa między przeglądarkami tego samego telefonu).
+5 prób na dobę na urządzenie na każdym stoisku (regulamin konkursu §4.2 ust. 2), liczone po kluczu urządzenia (działa między przeglądarkami tego samego telefonu).
 Limit 5 trzyma klucz rozszerzony; identyczne modele telefonów dają ten sam klucz podstawowy, więc `settings.device_tolerance` (1-50, domyślnie 10) to sufit
-`5 * tolerancja` prób łącznie na klucz podstawowy. Nie ma żadnych dodatkowych prób za rejestrację ani za posty. Po zmianie dnia klucz znika, więc trzeba ponownie zeskanować kod QR ze stoiska.
+`5 * tolerancja` prób łącznie na klucz podstawowy. Dodatkowe próby (kod za post/story, głos w Pucharze) idą ponad pulę stoiska i nie wygasają o północy. Po zmianie dnia klucz znika, więc trzeba ponownie zeskanować kod QR ze stoiska.
+
+## Stanowisko „Zajęcia”
+
+Stoisko `zajecia` (`booths.is_lecture=1`, tworzone przy starcie) służy do promocji na wykładach, także przed akcją. Nie ma wolontariusza (tokeny i kody: 409,
+usunięcie: 409), nie ma go w publicznych wykazach, a gra działa na nim bez ograniczenia datami. Prowadzący otwiera na ekranie sali statyczny link
+`/zajecia/{token}` (rotujący QR, bez logowania). Link bierzesz w panelu admina, sekcja „Stoiska”: pole „Zajęcia: link dla prowadzących”, przycisk „Kopiuj link”;
+„Wygeneruj nowy link” unieważnia poprzedni (token w `settings.lecture_screen_token`).
 
 ## Konkurs i Token Losu
 

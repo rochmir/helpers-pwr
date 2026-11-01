@@ -28,12 +28,27 @@
   <div class="container">
     <p class="eyebrow">Helpers' Generation</p>
     <h1>Sprawdź, czy jesteś bliźniakiem genetycznym</h1>
-      <p class="lead">Wzór stoiska należy do pacjenta czekającego na Dawcę. Sprawdź swoje parametry i zobacz, czy jesteś jego bliźniakiem genetycznym. Masz 5 prób na dobę na swoim urządzeniu, łącznie na wszystkich stanowiskach. Udział nie zależy od rejestracji w bazie dawców.</p><p class="booth-line" id="game-booth-wrap" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Stoisko: <strong id="game-booth"></strong></p>
+      <p class="lead">Wzór stoiska należy do pacjenta czekającego na Dawcę. Sprawdź swoje parametry i zobacz, czy jesteś jego bliźniakiem genetycznym. Masz 5 prób na dobę na każdym stanowisku, więc zajrzyj też do pozostałych. Udział nie zależy od rejestracji w bazie dawców.</p><p class="booth-line" id="game-booth-wrap" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Stoisko: <strong id="game-booth"></strong></p>
   </div>
 </section>
 <main class="section section-tight">
 <div class="container">
   <div id="game-msg" class="msg" hidden></div>
+
+  <section id="lecture-section" class="card" hidden>
+    <h2><i class="ti ti-heart-handshake" aria-hidden="true"></i> Więcej o akcji</h2>
+    <p>Od 7 do 11 grudnia 2026 na kampusie Politechniki Wrocławskiej trwa akcja rejestracji potencjalnych dawców szpiku i komórek macierzystych. Rejestracja jest dobrowolna, bezpłatna i bezinteresowna.</p>
+    <p>Symulator HLA pokazuje, jak dobiera się dawcę na podstawie 10 cech HLA. W rzeczywistości szansa na bliźniaka genetycznego to około 1 do 1 000 000.</p>
+    <ul class="dots">
+      <li>Konkurs na hasło obalające mit o dawstwie szpiku jest dla osób 18+ po uzyskaniu wyniku 10/10. Szczegóły w <a href="/dokumenty/regulamin-konkursu">regulaminie konkursu</a>.</li>
+      <li>Puchar Dawcy PWr to turniej wydziałów. Zobacz <a href="/puchar">ranking</a> i <a href="/dokumenty/regulamin-pucharu">regulamin</a>.</li>
+    </ul>
+    <h3>Gdzie nas znajdziesz</h3>
+    <ul class="booth-list" id="lecture-booth-list"></ul>
+    <p id="lecture-booth-hours" hidden></p>
+    <p id="lecture-booth-empty" hidden>Terminy stanowisk wkrótce.</p>
+    <p class="link-row"><a href="/puchar">Puchar Dawcy PWr</a> · <a href="/dokumenty">Regulaminy i dokumenty</a></p>
+  </section>
 
   <section id="booths-section" class="card narrow" hidden>
     <h2>Podejdź do jednego ze stanowisk</h2>
@@ -101,7 +116,7 @@
       </div>
       <p class="link-row">Masz token rejestracyjny od wolontariusza? <a href="/potwierdz">Wpisz token rejestracyjny</a>, żeby przyznać punkt swojemu wydziałowi w Pucharze Dawcy PWr.</p>
     </div>
-    <p id="end-note" class="hint center" hidden>Limit 5 prób na dobę dotyczy jednego urządzenia (łącznie na wszystkich stanowiskach) i odnawia się codziennie.</p>
+    <p id="end-note" class="hint center" hidden>Limit 5 prób na dobę dotyczy jednego stanowiska i odnawia się codziennie. Na innym stanowisku masz kolejne 5 prób.</p>
     <p class="center"><button class="btn btn-primary" id="end-open-btn" type="button" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Co dalej</button></p>
 
     <section id="result-cert-section" class="card" hidden>
@@ -151,8 +166,8 @@
     <h3>Zasady</h3>
     <ul class="dots">
       <li>Losujesz 10 pozycji i porównujesz je ze wzorem stoiska.</li>
-      <li>Masz 5 prób na dobę na swoim urządzeniu, łącznie na wszystkich stanowiskach.</li>
-      <li>Dodatkowe próby: opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl (Facebook, Instagram lub TikTok), pokaż go wolontariuszowi i dostaniesz kod na 5 dodatkowych prób. Dodatkowe próby wykorzystujesz po 5 próbach na dobę i nie znikają o północy.</li>
+      <li>Masz 5 prób na dobę na każdym stanowisku. Na innym stanowisku dostajesz kolejne 5 prób.</li>
+      <li>Dodatkowe próby: opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl (Facebook, Instagram lub TikTok), pokaż go wolontariuszowi i dostaniesz kod na 5 dodatkowych prób. Dodatkowe próby wykorzystujesz po wyczerpaniu 5 prób na stanowisku i nie znikają o północy.</li>
       <li>Udział w symulatorze i w konkursie jest bezpłatny i nie zależy od rejestracji w bazie dawców szpiku.</li>
       <li>Za 10/10 dostajesz certyfikat z Tokenem Losu. Osoby pełnoletnie (18+) mogą z nim wziąć udział w konkursie na hasło obalające mit o dawstwie szpiku. Nagrody są wyłącznie za najlepsze hasła.</li>
     </ul>
@@ -160,7 +175,7 @@
       <div id="turnstile" class="turnstile"></div>
       <p id="consent-changed" class="msg msg-info" role="status" hidden>Dokumenty zmieniły się od Twojej ostatniej zgody. Przeczytaj je i zaakceptuj ponownie.</p>
       <p class="consent-text" id="consent-text">Naciskając przycisk, akceptujesz <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulamin konkursu</a> <span class="consent-date" id="consent-date-terms"></span> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> <span class="consent-date" id="consent-date-privacy"></span> oraz zgadzasz się na obliczenie identyfikatora urządzenia.</p>
-      <p class="hint">Identyfikator urządzenia jest pseudonimowy: liczymy go na Twoim telefonie, a serwer zapisuje tylko skróty, które zmieniają się codziennie. Służą do pilnowania limitu 5 prób na dobę.</p>
+      <p class="hint">Identyfikator urządzenia jest pseudonimowy: liczymy go na Twoim telefonie, a serwer zapisuje tylko skróty, które zmieniają się codziennie. Służą do pilnowania limitu 5 prób na dobę na każdym stanowisku.</p>
       <div id="start-msg" class="msg" role="alert" hidden></div>
       <button class="btn btn-primary btn-lg btn-block" id="start-btn" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Zaakceptuj i sprawdź parametry</button>
     </div>
@@ -170,9 +185,13 @@
 
 <dialog id="end-dialog" class="dlg" aria-labelledby="end-title">
   <div class="dlg-body">
-    <h2 id="end-title">Koniec prób na dziś</h2>
+    <h2 id="end-title">Koniec prób na tym stanowisku</h2>
     <p id="end-best" class="lead" hidden></p>
-    <p>Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro, limit odnawia się codziennie.</p>
+    <h3>Zagraj na innym stanowisku</h3>
+    <p>Limit 5 prób na dobę jest liczony osobno dla każdego stanowiska. Podejdź do innego i zeskanuj jego kod QR albo wróć jutro, limit odnawia się codziennie.</p>
+    <ul class="booth-list" id="end-booth-list"></ul>
+    <p id="end-booth-hours" hidden></p>
+    <p id="end-booth-empty" hidden>Nie ma teraz innych stanowisk. Wróć jutro.</p>
     <div class="fact"><i class="ti ti-gift" aria-hidden="true"></i>
       <p><strong>Dodatkowe próby.</strong> Opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl i pokaż je wolontariuszowi. Dostaniesz kod na 5 dodatkowych prób, który wpiszesz na <a href="/potwierdz">stronie wpisywania kodów</a>.</p></div>
     <section id="end-cert" class="dlg-cert" hidden>

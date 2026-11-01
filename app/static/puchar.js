@@ -2,8 +2,8 @@ import { api, $, h, facultyLabel, formatWarsawLong } from './common.js';
 
 const fmt = (n) => Number(n).toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 
-/** Po „w tym”: 1 faktycznego dawcy, 2 i więcej faktycznych dawców. */
-const actualText = (n) => 'w tym ' + n + (n === 1 ? ' faktycznego dawcy' : ' faktycznych dawców');
+/** Po „w tym”: 1 faktyczny dawca, 2 i więcej faktycznych dawców. */
+const actualText = (n) => 'w tym ' + n + (n === 1 ? ' faktyczny dawca' : ' faktycznych dawców');
 
 function bars(listEl, rows) {
   listEl.textContent = '';

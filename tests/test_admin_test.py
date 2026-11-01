@@ -58,7 +58,7 @@ def test_force_win(admin, booth):
     assert st["genotype"] == d["new_genotype"] and st["matches_count"] == 1 and st["rolls_count"] == 0
     conn = db.connect()
     assert conn.execute("SELECT matched_at FROM genotype_history WHERE genotype=?", (d["old_genotype"],)).fetchone()[0]
-    assert conn.execute("SELECT COUNT(*) FROM genotype_history").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM genotype_history WHERE booth_id=?", (booth,)).fetchone()[0] == 2
     conn.close()
     assert admin.post("/api/admin/test/force-win", json={"booth_id": "nope"}).status_code == 404
 
@@ -162,8 +162,8 @@ def test_wipe(admin, booth, client, monkeypatch):
     conn = db.connect()
     for t in ("donors_stats", "registration_codes", "game_sessions", "game_attempts", "wins"):
         assert conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] == 0, t
-    assert [tuple(r) for r in conn.execute("SELECT genotype, booth_id, matched_at FROM genotype_history")] == [(st["genotype"], booth, None)]
-    assert conn.execute("SELECT COUNT(*) FROM booths").fetchone()[0] == 1
+    assert [tuple(r) for r in conn.execute("SELECT genotype, booth_id, matched_at FROM genotype_history WHERE booth_id=?", (booth,))] == [(st["genotype"], booth, None)]
+    assert conn.execute("SELECT COUNT(*) FROM booths").fetchone()[0] == 2  # c13 i Zajęcia
     # dokumenty prawne to nie dane testowe
     assert conn.execute("SELECT COUNT(*) FROM legal_documents").fetchone()[0] == 3
     conn.close()

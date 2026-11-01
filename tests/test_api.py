@@ -83,7 +83,7 @@ def test_roll_limit_then_daily_reset(client, booth, monkeypatch):
     for i in range(5):
         assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200
     r = client.post("/api/game/roll", json={"booth_id": booth})
-    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and r.json()["detail"] == "Limit 5 prób na dobę na tym urządzeniu wykorzystany. Wróć jutro."
+    assert r.status_code == 429 and r.json()["attempts_left"] == 0 and r.json()["detail"] == "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
     assert client.get(f"/api/booth/{booth}/state").json()["rolls_count"] == 5
     monkeypatch.setattr(config, "today", lambda: "2099-01-01")
     assert client.get("/api/game/me").json()["attempts_left"] == 5
@@ -110,7 +110,7 @@ def test_forced_win(client, booth, monkeypatch):
     # inna sesja może wygrać; genotyp w historii jest oznaczony
     conn = db.connect()
     assert conn.execute("SELECT matched_at FROM genotype_history WHERE genotype=?", (old,)).fetchone()[0]
-    assert conn.execute("SELECT COUNT(*) FROM genotype_history").fetchone()[0] == 2
+    assert conn.execute("SELECT COUNT(*) FROM genotype_history WHERE booth_id=?", (booth,)).fetchone()[0] == 2
     conn.close()
 
 
@@ -271,9 +271,9 @@ def test_live_stats(admin, booth, client):
     # kolejność słownika (to nie jest ranking), same punkty
     assert [f["code"] for f in s["faculties"]][:4] == ["W1", "W2", "W3", "W4N"]
     assert {f["code"]: f["count"] for f in s["faculties"] if f["count"]} == {"W4N": 3, "W13": 1, "W3": 1}
-    assert all(set(f) == {"code", "name", "count"} for f in s["faculties"])
+    assert all(set(f) == {"code", "name", "count", "actual", "potential"} for f in s["faculties"])
     assert s["total_potential"] == 5 and s["total_actual"] == 0
-    assert s["booths"] == [{"id": "c13", "name": "Budynek C-13", "registered": 5, "matches_count": 0, "rolls_count": 1}]
+    assert s["booths"] == [{"id": "c13", "name": "Budynek C-13", "registered": 5, "actual": 0, "matches_count": 0, "rolls_count": 1}]
     assert s["game"] == {"rolls": 1, "matches": 0, "players": 1}
 
 
@@ -357,7 +357,7 @@ def test_booth_admin_crud(admin, booth):
     row = admin.get("/api/admin/booths").json()[0]
     assert row["id"] == "c13" and set(row) == {"id", "name", "current_genotype", "genotype_updated_at",
                                                "matches_count", "rolls_count", "registered", "active_codes",
-                                               "building", "date_from", "date_to"}
+                                               "building", "date_from", "date_to", "is_lecture"}
     g = admin.post("/api/admin/booths/c13/reset-genotype", json={}).json()["genotype"]
     assert g != row["current_genotype"] and len(g) == 10
     code = make_code(admin, booth_id="c13")
@@ -429,7 +429,7 @@ def test_bootstrap_booths(client, monkeypatch):
     db.bootstrap_booths()
     db.bootstrap_booths()
     c = db.connect()
-    assert [r["id"] for r in c.execute("SELECT id FROM booths ORDER BY id")] == ["c13", "c14", "w4"]
+    assert [r["id"] for r in c.execute("SELECT id FROM booths ORDER BY id")] == ["c13", "c14", "w4", "zajecia"]
     assert c.execute("SELECT name FROM booths WHERE id='c14'").fetchone()[0] == "Budynek C-14"
     assert c.execute("SELECT name FROM booths WHERE id='c13'").fetchone()[0] == "Budynek C-13"
     c.close()

@@ -38,7 +38,7 @@ async function loadBooths() {
       const genotypeCell = h('div', { class: 'genotype genotype-mini', 'aria-label': 'Genotyp stoiska' });
       renderGenotype(genotypeCell, b.current_genotype);
       body.append(h('tr', {},
-        h('td', { class: 'mono' }, b.id), h('td', {}, b.name),
+        h('td', { class: 'mono' }, b.id), h('td', {}, b.is_lecture ? b.name + ' (bez wolontariusza, poza wykazami)' : b.name),
         h('td', {}, [b.building, formatDateRange(b.date_from, b.date_to)].filter(Boolean).join(', ')),
         h('td', {}, b.registered), h('td', {}, b.active_codes),
         h('td', {}, b.matches_count), h('td', {}, b.rolls_count),
@@ -47,7 +47,7 @@ async function loadBooths() {
           h('a', { class: 'btn btn-small', href: '/stoisko/' + encodeURIComponent(b.id), target: '_blank', rel: 'noopener' }, icon('ti-device-tv'), 'Otwórz ekran stoiska'),
           act('playlink', 'ti-link', 'Link do symulatora (ważny ~2 min)'),
           act('rename', 'ti-pencil', 'Zmień nazwę'), act('details', 'ti-calendar', 'Budynek i termin'),
-          act('reset', 'ti-refresh', 'Resetuj genotyp'), act('delete', 'ti-trash', 'Usuń'))));
+          act('reset', 'ti-refresh', 'Resetuj genotyp'), ...(b.is_lecture ? [] : [act('delete', 'ti-trash', 'Usuń')]))));
     }
     const sel = $('#cf-booth');
     const cur = sel.value;
@@ -56,6 +56,7 @@ async function loadBooths() {
     for (const b of booths) sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
     sel.value = cur;
     fillBoothSelects();
+    await loadLectureLink();
   });
 }
 
@@ -96,6 +97,37 @@ $('#booths-body').addEventListener('click', async (ev) => {
         break;
     }
     await loadBooths();
+  });
+});
+
+/** Pole z pełnym linkiem do ekranu Zajęć (widoczne, gdy istnieje stanowisko is_lecture). */
+async function loadLectureLink() {
+  const box = $('#lecture-box');
+  box.hidden = !booths.some((b) => b.is_lecture);
+  if (box.hidden) return;
+  $('#lecture-url').value = (await api('GET', '/api/admin/lecture-screen')).url;
+}
+
+$('#lecture-copy').addEventListener('click', async () => {
+  const input = $('#lecture-url');
+  const status = $('#lecture-status');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    status.textContent = 'Skopiowano.';
+  } catch (e) {
+    input.focus();
+    input.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+    status.textContent = ok ? 'Skopiowano.' : 'Zaznaczono link, skopiuj go ręcznie (Ctrl+C).';
+  }
+});
+
+$('#lecture-rotate').addEventListener('click', async () => {
+  if (!confirm('Wygenerować nowy link? Poprzedni przestanie działać, a ekrany otwarte ze starym linkiem stracą kod QR.')) return;
+  await guard(async () => {
+    $('#lecture-url').value = (await api('POST', '/api/admin/lecture-screen/rotate')).url;
+    $('#lecture-status').textContent = 'Nowy link gotowy. Poprzedni nie działa.';
   });
 });
 
@@ -479,7 +511,10 @@ function fillBoothSelects() {
     const cur = sel.value;
     sel.textContent = '';
     if (withEmpty) sel.append(h('option', { value: '' }, 'losowe'));
-    for (const b of booths) sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
+    for (const b of booths) {
+      if (b.is_lecture && withEmpty) continue; // sztuczne rejestracje: na Zajęciach nie ma tokenów
+      sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
+    }
     if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
   }
   updateTestLinks();

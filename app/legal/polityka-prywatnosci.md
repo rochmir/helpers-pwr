@@ -15,8 +15,8 @@ Podstawy prawne to RODO art. 6 ust. 1 lit. a (zgoda) oraz lit. f (prawnie uzasad
 ### a) Skrót urządzenia w symulatorze (limit prób)
 
 - **Jak działa:** przeglądarka liczy na telefonie dwa skróty. Pierwszy powstaje z parametrów wspólnych dla przeglądarek jednego urządzenia: system, rozmiar i głębia kolorów ekranu, liczba rdzeni, ekran dotykowy, strefa czasowa. Drugi dodaje parametry odróżniające egzemplarze tego samego modelu: wersję systemu, język, model telefonu i wersję platformy (gdy przeglądarka je udostępnia), ustawienia dostępności (ograniczenie animacji, kontrast, przezroczystość, odwrócenie i wymuszenie kolorów), gamę kolorów i zakres dynamiki ekranu, obsługę nowszych emoji, listę zainstalowanych czcionek (z krótkiej listy znanych nazw), listę głosów syntezy mowy, pojemność pamięci przeglądarki (zaokrągloną do potęgi dwójki) oraz układ graficzny i maksymalny rozmiar tekstury. Nie czytamy pikseli canvas ani dźwięku. Surowe wartości nie opuszczają telefonu. Serwer zamienia oba skróty kluczem dobowym na dwa pseudonimowe klucze. Surowych skrótów nie zapisuje.
-- **Cel:** limit 5 prób na dobę na jedno urządzenie. Klucz rozszerzony pilnuje limitu dla jednego egzemplarza telefonu, klucz podstawowy pozwala nie blokować osób z identycznym modelem.
-- **Podstawa:** zgoda wyrażona przyciskiem „Zaakceptuj i zagraj” w oknie startowym przed pierwszą próbą, także na dostęp do informacji w urządzeniu: art. 399 ustawy Prawo komunikacji elektronicznej (Dz.U. 2024 poz. 1221).
+- **Cel:** limit 5 prób na dobę na jedno urządzenie na każdym stanowisku. Klucz rozszerzony pilnuje limitu dla jednego egzemplarza telefonu, klucz podstawowy pozwala nie blokować osób z identycznym modelem.
+- **Podstawa:** zgoda wyrażona przyciskiem „Zaakceptuj i sprawdź parametry” w oknie startowym przed pierwszą próbą, także na dostęp do informacji w urządzeniu: art. 399 ustawy Prawo komunikacji elektronicznej (Dz.U. 2024 poz. 1221).
 - **Okres:** oba klucze i liczniki prób są kasowane następnego dnia razem z kluczem dobowym.
 - **Ważne:** to dane pseudonimowe, nie anonimowe. Traktujemy je jako dane osobowe.
 - **Cofnięcie zgody:** wyczyść dane strony w przeglądarce albo napisz na {{CONTACT}}. Skutek: nie sprawdzisz dalej parametrów w symulatorze.
@@ -45,6 +45,8 @@ Zgłoszenie składasz dobrowolnie, publikując komentarz z hasłem i certyfikate
 
 - Wpis punktu: wydział, znacznik czasu i skrót urządzenia z punktu b. Bez numeru legitymacji, bez stoiska i bez typu.
 - Osobno trzymamy listę wydanych tokenów rejestracyjnych: kod, stoisko, typ (nowy dawca albo dawca faktyczny, który okazał legitymację wolontariuszowi), status i czas. Ta lista nie zawiera wydziału ani skrótu urządzenia, więc nie wskazuje osoby.
+- Przy kodzie na dodatkowe próby zapisujemy tylko kod, stoisko, status i czas oraz liczbę dodatkowych prób w sesji symulatora. Nie zapisujemy posta, linku ani nazwy konta w mediach społecznościowych.
+- Dla każdego Wydziału prowadzimy zbiorczą liczbę faktycznych dawców, niepowiązaną z pojedynczym głosem.
 
 ### g) Konta personelu
 
@@ -77,6 +79,7 @@ Przycisk „Udostępnij” przekazuje obraz do aplikacji, którą wybierzesz na 
 - **hp_game** (cookie): sesja symulatora, 30 dni.
 - **hp_staff** (cookie): logowanie personelu, 12 godzin dla administratora i 14 godzin dla wolontariusza.
 - **hp_game** (localStorage): token sesji symulatora.
+- W przeglądarce administratora klucz hp_admin_section przechowuje ostatnio wybraną sekcję panelu.
 - **hp_consent** (localStorage): zapamiętana zgoda razem z datą ostatniej zmiany dokumentów, którą zaakceptowano. Gdy dokumenty się zmienią, zapytamy o zgodę ponownie.
 - Cookies Turnstile, jeśli Cloudflare je ustawi.
 

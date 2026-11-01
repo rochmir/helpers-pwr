@@ -1,7 +1,12 @@
 import { api, $, renderGenotype, qrUrl } from './common.js';
 import { spinReels, prefersReducedMotion, confetti } from './reels.js';
 
-const boothId = decodeURIComponent(location.pathname.replace(/\/+$/, '').split('/').pop() || '');
+const pathParts = location.pathname.replace(/\/+$/, '').split('/');
+const lastPart = decodeURIComponent(pathParts.pop() || '');
+// /zajecia/{token}: ekran stanowiska Zajęcia dla prowadzących, bez logowania (token w adresie zastępuje cookie personelu).
+const isLectureScreen = pathParts.pop() === 'zajecia';
+const boothId = isLectureScreen ? 'zajecia' : lastPart;
+const screenToken = isLectureScreen ? lastPart : null;
 const POLL_MS = 2500;
 const OVERLAY_MS = 7000; // czas pokazania overlay'a od startu animacji
 
@@ -19,6 +24,12 @@ function showState(s) {
   $('#rolls-count').textContent = s.rolls_count;
   // Ważny link do gry dostaje tylko zalogowany personel; bez sesji pokazujemy zachętę do logowania.
   $('#qr-login').hidden = !!s.play_path;
+  if (isLectureScreen && !s.play_path) {
+    // Link został zmieniony przez administratora: logowanie nic tu nie da, trzeba nowego linku.
+    $('.qr-login-title').textContent = 'Ten link do ekranu nie działa';
+    $('#qr-login p:not(.qr-login-title)').textContent = 'Poproś administratora akcji o nowy link do ekranu Zajęć.';
+    $('#qr-login a').hidden = true;
+  }
   $('#qr-timer').hidden = !s.play_path;
   if (!s.play_path) {
     qrPath = null;
@@ -67,7 +78,8 @@ function celebrate(newGenotype) {
 
 async function poll() {
   try {
-    const s = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state');
+    const s = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state'
+      + (screenToken ? '?screen=' + encodeURIComponent(screenToken) : ''));
     $('#offline').hidden = true;
     $('#booth-error').hidden = true;
     showState(s);

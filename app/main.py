@@ -128,6 +128,21 @@ def stoisko(booth_id: str):
     return _stoisko()
 
 
+@app.get("/zajecia/{screen_token}", include_in_schema=False)
+def zajecia(screen_token: str):
+    """Statyczny link dla prowadzących zajęcia: ten sam ekran co /stoisko/zajecia, bez logowania. Zły token = 404."""
+    conn = db.connect()
+    try:
+        ok = len(screen_token) <= 64 and db.lecture_token_ok(conn, screen_token)
+    except UnicodeEncodeError:
+        ok = False
+    finally:
+        conn.close()
+    if not ok:
+        raise HTTPException(404, "Nie znaleziono strony.")
+    return _stoisko()
+
+
 # Statyki z wersją w ścieżce (strony HTML odwołują się tylko do nich); stary hash też działa,
 # ale dostaje bieżące pliki — po przebudowie nowe strony i tak wskazują nowy hash.
 app.mount("/static/v/{version}", StaticFiles(directory=STATIC_DIR, check_dir=False), name="static_v")

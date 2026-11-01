@@ -65,7 +65,7 @@ def fake_registrations(body: FakeIn, _: dict = Depends(auth.require_admin),
     if body.date is not None and not DATE_RE.match(body.date):
         raise HTTPException(422, "Data w formacie RRRR-MM-DD.")
     with db.tx(conn):
-        booths = [r[0] for r in conn.execute("SELECT id FROM booths")]
+        booths = [r[0] for r in conn.execute("SELECT id FROM booths WHERE is_lecture=0")]  # na Zajęciach nie ma tokenów
         if not booths:
             raise HTTPException(409, "Brak stoisk. Najpierw utwórz stoisko.")
         if body.booth_id is not None and body.booth_id not in booths:
