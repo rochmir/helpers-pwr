@@ -22,13 +22,12 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Symulator HLA</a><a href="/potwierdz" class="active" aria-current="page">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/potwierdz" class="active" aria-current="page"><i class="ti ti-ticket" aria-hidden="true"></i><span class="short">Token</span><span class="long">Wpisz token rejestracyjny</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
-    <p class="eyebrow">Helpers' Generation</p>
     <h1>Wpisz token rejestracyjny</h1>
-      <p class="lead" id="lead-text">Token rejestracyjny (kod OTP) dostajesz od wolontariusza po weryfikacji na stoisku. Wpisz go i wybierz swój wydział, a wydział dostanie punkt w Pucharze Dawcy PWr. Każda osoba oddaje jeden głos.</p>
+      <p class="lead" id="lead-text">Token dostajesz od wolontariusza po weryfikacji na stoisku. Wpisz go i wybierz wydział, a wydział dostanie punkt w Pucharze Dawcy PWr. Każda osoba oddaje jeden głos.</p>
   </div>
 </section>
 <main class="section section-tight">
@@ -50,7 +49,6 @@
       <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
     </div>
 
-    <div id="turnstile" class="turnstile"></div>
     <p class="consent-text" id="consent-text">Wysyłając token, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu Dawcy PWr</a> oraz <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> i zgadzasz się na obliczenie skrótu urządzenia, który pilnuje jednego głosu z urządzenia. Zapisujemy tylko wydział, znacznik czasu i ten skrót.</p>
     <button class="btn btn-primary btn-lg" type="submit" id="submit-btn"><i class="ti ti-circle-check" aria-hidden="true"></i> Wyślij token</button>
   </form>

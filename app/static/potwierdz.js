@@ -1,10 +1,9 @@
-import { api, $, h, setMessage, loadTurnstile, requireToken, facultyLabel, getConfig, storageSet } from './common.js';
+import { api, $, h, setMessage, facultyLabel, getConfig, storageSet } from './common.js';
 import { renderDonorCert, showDownload } from './cert.js';
 import { deviceHashes, deviceHashSupported } from './fingerprint.js';
 
 const msg = $('#confirm-msg');
 const codeEl = $('#code');
-let ts = null;
 let busy = false;
 let closed = false; // zliczanie punktow zakonczone (CUP_DEADLINE); nie dotyczy kodu dodatkowych prob
 let closedText = '';
@@ -86,7 +85,6 @@ async function init() {
     noHash = true;
     applyKind(codeKind);
   }
-  try { ts = await loadTurnstile($('#turnstile')); } catch (e) { setMessage(msg, e.message, 'error'); }
 }
 
 codeEl.addEventListener('change', checkCode);
@@ -97,23 +95,19 @@ $('#confirm-form').addEventListener('submit', async (ev) => {
   busy = true;
   setMessage(msg, '');
   const name = $('#donor-name').value; // tylko lokalnie
-  let sent = false; // token Turnstile jest jednorazowy: reset po kazdej probie wyslania
   try {
     const chk = await checkCode();
     if (chk && !chk.valid) throw Object.assign(new Error(), { detail: 'Ten token jest nieprawidłowy, już użyty albo wygasł. Poproś wolontariusza o nowy.' });
     if (!$('#confirm-form').checkValidity()) { $('#confirm-form').reportValidity(); return; }
-    const cf = requireToken(ts);
     const promo = codeKind === 'promo';
     const { base, ext } = promo ? {} : await deviceHashes();
-    sent = true;
     const r = promo
-      ? await api('POST', '/api/donor/redeem-promo', { code: normCode(), cf_turnstile: cf ?? null })
+      ? await api('POST', '/api/donor/redeem-promo', { code: normCode() })
       : await api('POST', '/api/donor/register', {
         code: normCode(),
         faculty: $('#faculty').value,
         device: base,
         device_ext: ext,
-        cf_turnstile: cf ?? null,
       });
     $('#confirm-form').hidden = true;
     msg.hidden = true;
@@ -140,7 +134,6 @@ $('#confirm-form').addEventListener('submit', async (ev) => {
     else setMessage(msg, e.status === 404 ? 'Nie znamy takiego tokenu. Sprawdź, czy został przepisany poprawnie.'
       : e.status === 422 ? 'Wybrany wydział jest nieprawidłowy. Wybierz go ponownie z listy.' : (e.detail || e.message), 'error');
   } finally {
-    if (ts && sent) ts.reset();
     busy = false;
   }
 });

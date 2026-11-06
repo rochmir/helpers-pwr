@@ -386,7 +386,7 @@ def test_headers(client):
     assert "challenges.cloudflare.com" in r.headers["content-security-policy"]
     assert r.headers["x-content-type-options"] == "nosniff" and r.headers["referrer-policy"] == "same-origin"
     d = r.json()
-    assert d["turnstile_site_key"] is None and d["public_url"] == "https://helpers-pwr.rupary.pl"
+    assert "turnstile_site_key" not in d and d["public_url"] == "https://helpers-pwr.rupary.pl"
     assert d["facebook_url"] == "https://www.facebook.com/samorzadpwr"  # domyślny profil Samorządu z seedu
     assert d["legal_updated_at"].endswith("Z") and d["cup_deadline"] == "2026-12-11T15:30:00Z"
     assert d["contest_deadline"] == "2026-12-11T15:00:00Z"

@@ -187,50 +187,111 @@ export function getConfig() {
   return configPromise;
 }
 
-let tsScriptPromise = null;
-function loadTurnstileScript() {
-  // id="turnstile" na stronie tworzy window.turnstile (element DOM), wiec sprawdzamy, czy jest tam API
-  if (window.turnstile && typeof window.turnstile.render === 'function') return Promise.resolve();
-  if (!tsScriptPromise) {
-    tsScriptPromise = new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      s.async = true;
-      s.addEventListener('load', () => resolve());
-      s.addEventListener('error', () => { tsScriptPromise = null; reject(new Error('Nie udało się załadować zabezpieczenia antybotowego.')); });
-      document.head.append(s);
-    });
-  }
-  return tsScriptPromise;
-}
-
-/**
- * Renderuje widget Turnstile w containerEl.
- * Zwraca null, gdy Turnstile jest wylaczony (brak klucza), inaczej uchwyt:
- *   { getToken(): string|null, reset(): void }
- * Tokeny sa jednorazowe - wywolaj reset() po kazdym wyslaniu formularza.
- */
-export async function loadTurnstile(containerEl) {
-  const cfg = await getConfig();
-  if (!cfg || !cfg.turnstile_site_key) return null;
-  await loadTurnstileScript();
-  let token = null;
-  const widgetId = window.turnstile.render(containerEl, {
-    sitekey: cfg.turnstile_site_key,
-    callback: (t) => { token = t; },
-    'expired-callback': () => { token = null; },
-    'error-callback': () => { token = null; },
-  });
-  return {
-    getToken: () => token,
-    reset: () => { token = null; try { window.turnstile.reset(widgetId); } catch (e) { /* ignoruj */ } },
+/** Plynne doliczanie liczby w elemencie (ease-out). Bez animacji przy prefers-reduced-motion. */
+export function countUp(el, from, to, ms = 1000, done) {
+  const token = (el._countToken = (el._countToken || 0) + 1);
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced || from === to) { el.textContent = to; if (done) done(to); return; }
+  const t0 = performance.now();
+  const step = (now) => {
+    if (token !== el._countToken) return;
+    const p = Math.min(1, (now - t0) / ms);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+    el.textContent = v;
+    if (p < 1) requestAnimationFrame(step);
+    else if (done) done(to);
   };
+  requestAnimationFrame(step);
 }
 
-/** Zwraca token do wyslania lub undefined; rzuca Error, gdy widget jest, a token jeszcze nie jest gotowy. */
-export function requireToken(ts) {
-  if (!ts) return undefined;
-  const t = ts.getToken();
-  if (!t) throw new Error('Poczekaj chwilę na weryfikację antybotową (pole powyżej) i spróbuj ponownie.');
-  return t;
+/** Liczba z doliczaniem tylko gdy wartosc sie zmienila. */
+export function setCount(el, value) {
+  const to = Number(value);
+  if (!Number.isFinite(to)) { el.textContent = value ?? '-'; return; }
+  const from = el.dataset.v === undefined ? 0 : Number(el.dataset.v);
+  if (el.dataset.v !== undefined && from === to) return;
+  el.dataset.v = to;
+  countUp(el, from, to, 900);
+}
+
+/** Odswieza dane co 10 s z podanego endpointu i ustawia wskaznik "na zywo" w statusEl.
+ *  render(dane) wypelnia strone; blad sieci pokazuje "Brak polaczenia" i ponawia. */
+export function pollLive(statusEl, render, path = '/api/stats/live', ms = 10000) {
+  const tick = async () => {
+    try {
+      render(await api('GET', path));
+      statusEl.classList.remove('is-offline');
+      statusEl.textContent = 'na żywo · ' + new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      statusEl.classList.add('is-offline');
+      statusEl.textContent = 'Brak połączenia, ponawiam…';
+    }
+    setTimeout(tick, ms);
+  };
+  tick();
+}
+
+/** Tekst stoiska: "Budynek - Nazwa, 3-7 listopada" (lista w /graj). */
+export function boothText(b) {
+  const label = (b.building ? b.building + ' - ' : '') + b.name;
+  const range = formatDateRange(b.date_from, b.date_to);
+  return label + (range ? ', ' + range : '');
+}
+
+const barState = new WeakMap();
+
+/** Wykres slupkowy skumulowany: nowi (czerwony) + faktyczni (granatowy). Wiersze sa trwale i aktualizowane po kluczu,
+ *  wiec slupki rosna od 0 przy pierwszym rysunku, a potem plynnie zmieniaja dlugosc.
+ *  items: [{ key, rank (opcjonalnie), label, value (dlugosc slupka), countText, potential, actual, aria, sub (wezel lub tekst) }] */
+export function updateBars(listEl, items, emptyText) {
+  let st = barState.get(listEl);
+  if (!st) { st = { rows: new Map(), first: true }; barState.set(listEl, st); }
+  if (!items.length) {
+    listEl.textContent = '';
+    st.rows.clear();
+    listEl.append(h('li', { class: 'empty' }, emptyText));
+    return;
+  }
+  if (st.rows.size === 0) listEl.textContent = '';
+  const max = Math.max(...items.map((it) => it.value), 0.0001);
+  const seen = new Set();
+  items.forEach((it, i) => {
+    seen.add(it.key);
+    let row = st.rows.get(it.key);
+    if (!row) {
+      const potential = h('span', { class: 'seg seg-potential' });
+      const actual = h('span', { class: 'seg seg-actual' });
+      const group = h('span', { class: 'seg-group' }, potential, actual);
+      const rank = it.rank === undefined ? null : h('span', { class: 'bar-rank' });
+      const name = h('span', { class: 'bar-label' });
+      const track = h('div', { class: 'stack', role: 'img' }, group);
+      const count = h('strong', { class: 'bar-count' });
+      const sub = h('span', { class: 'bar-sub' });
+      const el = h('li', { class: 'bar-row' }, rank, name, track, h('span', { class: 'bar-num' }, count), sub);
+      row = { el, group, potential, actual, rank, name, track, count, sub };
+      st.rows.set(it.key, row);
+    }
+    if (row.rank) row.rank.textContent = it.rank;
+    row.name.textContent = it.label;
+    row.el.classList.toggle('is-first', it.first === true);
+    row.track.setAttribute('aria-label', it.aria);
+    row.count.textContent = it.countText;
+    row.sub.textContent = '';
+    row.sub.append(it.sub);
+    const sum = it.potential + it.actual;
+    const apply = () => {
+      row.group.style.width = (it.value / max * 100) + '%';
+      row.potential.style.width = (sum ? it.potential / sum * 100 : 0) + '%';
+      row.actual.style.width = (sum ? it.actual / sum * 100 : 0) + '%';
+    };
+    if (st.first) {
+      row.group.style.width = '0%';
+      requestAnimationFrame(() => requestAnimationFrame(apply));
+    } else apply();
+    if (listEl.children[i] !== row.el) listEl.insertBefore(row.el, listEl.children[i] || null);
+  });
+  for (const [key, row] of st.rows) {
+    if (!seen.has(key)) { row.el.remove(); st.rows.delete(key); }
+  }
+  st.first = false;
 }

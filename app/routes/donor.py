@@ -10,7 +10,7 @@ from collections import deque
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from .. import auth, captcha, config, db, qrtoken
+from .. import auth, config, db, qrtoken
 from .game import attempts_left
 
 router = APIRouter()
@@ -40,12 +40,10 @@ class RegisterIn(BaseModel):
     faculty: str = Field(max_length=32)
     device: str = Field(pattern=r"^[0-9a-f]{64}$")
     device_ext: str | None = Field(None, pattern=r"^[0-9a-f]{64}$")
-    cf_turnstile: str | None = Field(None, max_length=4096)
 
 
 class RedeemPromoIn(BaseModel):
     code: str = Field(max_length=64)
-    cf_turnstile: str | None = Field(None, max_length=4096)
 
 
 def norm_code(code: str) -> str:
@@ -102,7 +100,6 @@ def register(body: RegisterIn, request: Request, response: Response,
     Dodatkowe próby w grze za udział w Pucharze dostaje tylko przyjęty głos (409/410/404/422 nie dają nic)."""
     if config.cup_closed():
         raise HTTPException(410, config.cup_closed_message())
-    captcha.require(body.cf_turnstile)
     code = norm_code(body.code)
     token = request.cookies.get(auth.GAME_COOKIE) or request.headers.get("X-Game-Token")
     device_hash = cup_device_hash(body.device, body.device_ext)
@@ -146,7 +143,6 @@ def redeem_promo(body: RedeemPromoIn, request: Request, response: Response,
                  conn: sqlite3.Connection = Depends(db.get_db)):
     """Kod dodatkowych prób (+5 za post lub story): tylko dodatkowe próby, bez ``donors_stats`` i punktów Pucharu.
     Nie zależy od ``CUP_DEADLINE``."""
-    captcha.require(body.cf_turnstile)
     code = norm_code(body.code)
     token = request.cookies.get(auth.GAME_COOKIE) or request.headers.get("X-Game-Token")
     with db.tx(conn):

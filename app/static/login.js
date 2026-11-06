@@ -1,11 +1,10 @@
 // Jedno logowanie dla wolontariuszy i administratorow. Po zalogowaniu ta sama strona pokazuje funkcje wg rangi.
-import { api, $, h, setMessage, loadTurnstile, requireToken } from './common.js';
+import { api, $, h, setMessage } from './common.js';
 import { initVolunteer, stopVolunteer } from './wolontariusz.js';
 import { initAdmin } from './admin.js';
 
 const msg = $('#panel-msg');
 const ROLE_PL = { admin: 'administrator', volunteer: 'wolontariusz' };
-let ts = null;
 let adminLoaded = false;
 let boothsLoaded = false;
 let navWired = false;
@@ -54,9 +53,6 @@ async function showLogin() {
   if (prefill && !$('#login').value) {
     $('#login').value = prefill.trim().toLowerCase();
     $('#password').focus();
-  }
-  if (!ts) {
-    try { ts = await loadTurnstile($('#turnstile')); } catch (e) { setMessage(msg, e.message, 'error'); }
   }
 }
 
@@ -111,18 +107,14 @@ $('#login-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   setMessage(msg, '');
   try {
-    const cf = requireToken(ts);
     await api('POST', '/api/auth/login', {
       login: $('#login').value.trim().toLowerCase(),
       password: $('#password').value,
-      cf_turnstile: cf ?? null,
     });
     $('#password').value = '';
     await showPanel(await api('GET', '/api/auth/me'));
   } catch (e) {
     setMessage(msg, e.status === 401 ? 'Błędny login lub hasło.' : (e.detail || e.message), 'error');
-  } finally {
-    if (ts) ts.reset();
   }
 });
 

@@ -50,11 +50,12 @@ def split_title(text: str) -> tuple[str, str]:
 
 
 # SHA-256 ciała (po ``split_title``) poprzednich wersji seedu: dokument w bazie z dokładnie taką treścią nie był
-# zmieniany w panelu, więc przy starcie dostaje nową treść seedu (wersja +1). Wartości z commita 463c281 (seed v1).
+# zmieniany w panelu, więc przy starcie dostaje nową treść seedu (wersja +1). Wartości z commita 463c281 (seed v1) i kolejnych wersji seedu.
 PREVIOUS_SEED_SHA256 = {
     "regulamin-konkursu": ("fb663c80d697b5a038ce8d7204d04654bb79224c0bbd7945dfea6f978fcec72b",),
     "regulamin-pucharu": ("dc380fa703839da27b8b7d1f0975419f98757a3473b6dd1d817429b997f44da3",),
-    "polityka-prywatnosci": ("fca77a29550101ebe375e9186ea6f29f46799aba5441d931ba37f1bf7399b956",),
+    "polityka-prywatnosci": ("fca77a29550101ebe375e9186ea6f29f46799aba5441d931ba37f1bf7399b956",
+                             "2bff634c64ab4280617fa265e9bad38453060685107aabfc65e541dc4687cf15"),
 }
 SEED_UPDATE_AUTHOR = "system"
 

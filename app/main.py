@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import captcha, config, db, pages
+from . import config, db, pages
 from .pages import STATIC_DIR, VERSIONED_PREFIX
 from .routes import admin, admin_test, donor, game, legal, login, misc, partners, stats, volunteer
 
@@ -37,8 +37,6 @@ async def _rotate_salt_hourly():
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
-    if not captcha.enabled():
-        log.warning("Turnstile wyłączony (brak TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY).")
     if not config.admin_secret():
         log.warning("Brak ADMIN_SECRET — konto awaryjne admin jest niedostępne.")
     if not config.legal_contact():

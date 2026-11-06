@@ -22,50 +22,45 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar" class="active" aria-current="page">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i><span class="short">Token</span><span class="long">Wpisz token rejestracyjny</span></a><a href="/puchar" class="active" aria-current="page"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
-    <p class="eyebrow">Helpers' Generation</p>
-    <h1>Puchar Dawcy PWr</h1><p class="lead">Który wydział jest najbardziej zaangażowany w ratowanie życia? Klasyfikacja opiera się na Wskaźniku Zaangażowania (WZ), czyli punktach wydziału w stosunku do liczby jego studentów, więc porównanie jest uczciwe także dla mniejszych wydziałów.</p><p class="hint" id="cup-status">Ładowanie…</p>
+    <h1>Puchar Dawcy PWr</h1>
+    <p class="lead">Który wydział jest najbardziej zaangażowany w ratowanie życia?</p>
+    <p class="live-status" id="cup-status">Ładowanie…</p>
   </div>
 </section>
 <main class="section section-tight">
 <div class="container">
-  <section id="ranking-section" class="card">
-    <h2><i class="ti ti-trophy" aria-hidden="true"></i> Ranking wg Wskaźnika Zaangażowania</h2>
+  <section id="ranking-section" class="stat-block">
+    <h2 class="stat-h"><i class="ti ti-trophy" aria-hidden="true"></i> Ranking wg Wskaźnika Zaangażowania</h2>
     <p class="hint hint-block"><strong>Ranking orientacyjny. Oficjalne wyniki po audycie: 13 grudnia 2026.</strong> Zliczanie punktów trwa do <span id="cup-deadline">11 grudnia 2026, 16:30</span>. <span id="cup-closed" hidden>Zliczanie punktów zostało zakończone.</span></p>
+    <ol class="bars" id="cup-list"></ol>
     <ul class="legend" aria-label="Legenda wykresu">
-      <li><span class="swatch swatch-potential" aria-hidden="true"></span>Nowi dawcy</li>
+      <li><span class="swatch swatch-potential" aria-hidden="true"></span>Potencjalni dawcy</li>
       <li><span class="swatch swatch-actual" aria-hidden="true"></span>Faktyczni dawcy</li>
     </ul>
-    <ol class="bars" id="cup-list"></ol>
-    <div class="table-wrap">
-    <table class="table" id="cup-table">
-      <thead><tr><th>Miejsce</th><th>Wydział</th><th>Punkty (LD)</th><th>Faktyczni</th><th>Studenci (LS)</th><th>WZ</th></tr></thead>
-      <tbody id="cup-body"></tbody>
-    </table>
-    </div>
   </section>
 
-  <section id="unranked-section" class="card" hidden>
-    <h2>Poza klasyfikacją</h2>
+  <section id="unranked-section" class="stat-block" hidden>
+    <h2 class="stat-h">Poza klasyfikacją</h2>
     <p class="hint hint-block">Dla tych wydziałów nie mamy liczby studentów (LS), więc nie można ich sklasyfikować. Pozycja „Inne” nie bierze udziału w klasyfikacji. Pokazujemy same punkty (LD), w tym faktycznych dawców.</p>
     <ul class="unranked-list" id="unranked-list"></ul>
   </section>
 
-  <section id="prize-section" class="card">
-    <h2><i class="ti ti-award" aria-hidden="true"></i> Nagroda główna</h2>
+  <section id="prize-section" class="stat-block">
+    <h2 class="stat-h"><i class="ti ti-award" aria-hidden="true"></i> Nagroda główna</h2>
     <p>Zwycięski Wydział otrzymuje tytuł Najbardziej Zaangażowanej Społeczności PWr w Ratowaniu Życia oraz Tytułowy Puchar Dawcy PWr.</p>
     <p>Dodatkowo Wydział otrzymuje Celowy Grant Studencki w wysokości 3 000 zł. Środki trafiają do właściwej Wydziałowej Rady Samorządu Studenckiego i mogą być wydane wyłącznie na doposażenie ogólnodostępnej infrastruktury studenckiej, na przykład meble relaksacyjne, pufy albo sprzęt do strefy studenta.</p>
     <p><a href="/dokumenty/regulamin-pucharu">Regulamin Pucharu Dawcy PWr</a></p>
   </section>
 
-  <section id="method-section" class="card card-grey">
-    <h2>Skąd te liczby</h2>
+  <section id="method-section" class="stat-block">
+    <h2 class="stat-h">Skąd te liczby</h2>
     <dl class="method">
       <dt>Punkty (LD)</dt>
-      <dd>Suma zweryfikowanych punktów (nowo zarejestrowani dawcy oraz zweryfikowani faktyczni dawcy) przypisanych do wydziału przez osoby, które wpisały token rejestracyjny. Każda osoba oddaje jeden głos. Faktyczni dawcy liczą się tak samo jak nowi: w rankingu są oznaczeni granatowym kolorem tylko po to, żeby było widać, jaka część punktów od nich pochodzi.</dd>
+      <dd>Suma zweryfikowanych punktów (potencjalni dawcy oraz zweryfikowani faktyczni dawcy) przypisanych do wydziału przez osoby, które wpisały token rejestracyjny. Każda osoba oddaje jeden głos. Faktyczni dawcy liczą się tak samo jak potencjalni: w rankingu są oznaczeni granatowym kolorem tylko po to, żeby było widać, jaka część punktów od nich pochodzi.</dd>
       <dt>Liczba studentów (LS)</dt>
       <dd>Oficjalna liczba studentów wydziału według stanu na 30 listopada 2026 r., podana przez Centrum Kształcenia PWr. Źródło wpisane przez organizatorów: <span id="cup-source">-</span></dd>
       <dt>Wskaźnik Zaangażowania (WZ)</dt>

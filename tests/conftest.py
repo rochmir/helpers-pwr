@@ -9,8 +9,6 @@ os.environ["DATA_DIR"] = tempfile.mkdtemp(prefix="helpersi_test_")
 os.environ["COOKIE_SECURE"] = "0"
 os.environ["ADMIN_SECRET"] = "test-admin-secret"
 os.environ["SECRET_KEY"] = "test-secret-key"
-os.environ.pop("TURNSTILE_SITE_KEY", None)
-os.environ.pop("TURNSTILE_SECRET_KEY", None)
 os.environ.pop("BOOTSTRAP_BOOTHS", None)
 
 import pytest

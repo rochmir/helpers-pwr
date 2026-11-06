@@ -6,7 +6,7 @@ import sqlite3
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
-from .. import auth, captcha, db
+from .. import auth, db
 
 router = APIRouter(prefix="/api/auth")
 
@@ -14,7 +14,6 @@ router = APIRouter(prefix="/api/auth")
 class LoginIn(BaseModel):
     login: str = Field(max_length=64)
     password: str = Field(max_length=256)
-    cf_turnstile: str | None = Field(None, max_length=4096)
 
 
 class BoothIn(BaseModel):
@@ -28,7 +27,6 @@ def _booth_view(conn: sqlite3.Connection, booth_id: str | None) -> dict | None:
 
 @router.post("/login")
 def login(body: LoginIn, response: Response, conn: sqlite3.Connection = Depends(db.get_db)):
-    captcha.require(body.cf_turnstile)
     name = body.login.strip().lower()
     key = "vol:" + name[:64]
     auth.throttle.check(key)

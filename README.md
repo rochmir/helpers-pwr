@@ -18,7 +18,7 @@ Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres doce
 - dokumenty prawne (treść, wersje), partnerów (nazwa i plik logo w `DATA_DIR/partners`).
 
 **Nie zapisujemy:**
-- adresów IP (uvicorn z `--no-access-log`, do Turnstile nie wysyłamy `remoteip`),
+- adresów IP (uvicorn z `--no-access-log`),
 - imienia, nazwiska ani ksywki (certyfikaty rysuje przeglądarka), numeru ani daty legitymacji (wolontariusz ją tylko ogląda).
 
 ## Dokumenty prawne
@@ -101,16 +101,14 @@ Repozytorium na serwerze nie jest potrzebne, wystarczą `docker-compose.yml` i `
    cp .env.example .env
    mkdir -p data && sudo chown 10001 data
    ```
-2. W `.env` uzupełnij `ADMIN_SECRET` (długi, losowy), `TURNSTILE_*` (patrz niżej) i `LEGAL_CONTACT` (kontakt w dokumentach prawnych).
+2. W `.env` uzupełnij `ADMIN_SECRET` (długi, losowy) i `LEGAL_CONTACT` (kontakt w dokumentach prawnych).
    Opcjonalnie `BOOTSTRAP_BOOTHS=c13:Budynek C-13,w4:Budynek W-4` (`id:Nazwa`; stary format `id:Nazwa:PIN` też działa,
    PIN jest ignorowany) utworzy przy starcie brakujące stoiska; potem usuń tę linię.
 3. `docker compose pull && docker compose up -d` — aplikacja nasłuchuje na `127.0.0.1:8010`, dane w `./data`.
 4. Cloudflare, tunel:
    Zero Trust → Networks → Tunnels → istniejący tunel → Public Hostname → dodaj `helpers-pwr.rupary.pl`
    → usługa `http://localhost:8010`.
-5. Cloudflare, captcha: Turnstile → Add widget → domena `helpers-pwr.rupary.pl` → klucze (site key i secret key)
-   do `.env` (`TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`), potem `docker compose up -d`.
-6. Wejdź na `/login` (login `admin`, hasło `ADMIN_SECRET`), **zweryfikuj słownik wydziałów** (seed w `app/seed_dictionary.json` jest tylko
+5. Wejdź na `/login` (login `admin`, hasło `ADMIN_SECRET`), **zweryfikuj słownik wydziałów** (seed w `app/seed_dictionary.json` jest tylko
    punktem wyjścia), dodaj stoiska i konta wolontariuszy, wpisz liczby studentów (stan na 30 listopada 2026, Centrum Kształcenia) do Pucharu Dawcy PWr i sprawdź link do Facebooka w ustawieniach.
 
 ## Aktualizacja
@@ -140,10 +138,10 @@ Wymagany jest tylko Docker. W katalogu repozytorium:
 ```
 
 To samo co `docker compose -f docker-compose.local.yml up --build`. Strona: `http://localhost:8000` (inny port: zmienna `HELPERS_PORT`).
-Panel `/login`: login `admin`, hasło `dev`. Captcha jest wyłączona, ciasteczka bez HTTPS. Katalog `app/` jest podpięty tylko do odczytu
+Panel `/login`: login `admin`, hasło `dev`. Ciasteczka bez HTTPS. Katalog `app/` jest podpięty tylko do odczytu
 z live reloadem: zmiany w HTML, CSS, JS i Pythonie widać po odświeżeniu, bez przebudowy obrazu (statyki bez cache'u,
-`DEV_NO_CACHE=1`). Zmiany w `requirements.txt` lub `Dockerfile` wymagają ponownego `up --build`. Dane trafiają do wolumenu
-`helpers-lokalne-dane`; usuniesz je przez `docker compose -f docker-compose.local.yml down -v`.
+`DEV_NO_CACHE=1`). Zmiany w `requirements.txt` lub `Dockerfile` wymagają ponownego `up --build`. Dane trafiają do folderu
+`data-lokalne/` obok projektu (ignorowany przez git); żeby zacząć od zera, zatrzymaj kontener i usuń ten folder.
 
 ## Testy bez Dockera
 
@@ -162,4 +160,4 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements-dev.txt
 ```
 
 Uruchomienie bez Dockera: `ADMIN_SECRET=dev COOKIE_SECURE=0 DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8000`
-(Windows: ustaw te zmienne w `$env:`). Bez kluczy Turnstile captcha jest wyłączona (w logu pojawia się ostrzeżenie).
+(Windows: ustaw te zmienne w `$env:`).

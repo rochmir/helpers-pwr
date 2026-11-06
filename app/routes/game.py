@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from .. import auth, captcha, config, db, game, qrtoken, testing
+from .. import auth, config, db, game, qrtoken, testing
 
 router = APIRouter()
 SCAN_AGAIN = "Zeskanuj ponownie kod QR ze stoiska."
@@ -23,7 +23,7 @@ class _LimitReached(Exception):
 
 
 class SessionIn(BaseModel):
-    cf_turnstile: str | None = Field(None, max_length=4096)
+    """Puste ciało; nadmiarowe pola (np. dawne ``cf_turnstile`` ze starszego frontendu) są ignorowane."""
 
 
 class RollIn(BaseModel):
@@ -97,11 +97,10 @@ def booth_state(booth_id: str, screen: str | None = None, staff: dict | None = D
 def create_session(body: SessionIn, request: Request, response: Response,
                    sid: str | None = Depends(auth.optional_game_session),
                    conn: sqlite3.Connection = Depends(db.get_db)):
-    if sid is not None:  # ważna sesja, bez captchy
+    if sid is not None:  # ważna sesja zostaje
         token = request.cookies.get(auth.GAME_COOKIE) or request.headers.get("X-Game-Token")
         auth.set_game_cookie(response, token)
     else:
-        captcha.require(body.cf_turnstile)
         sid, token = auth.new_game_token()
         conn.execute("INSERT INTO game_sessions(session_id,created_at) VALUES(?,?)", (sid, config.now_iso()))
         auth.set_game_cookie(response, token)

@@ -64,7 +64,7 @@ Dane z punktów c, d, e (poza danymi laureatów) i f przechowujemy do 6 miesięc
 
 ## 4. Cloudflare
 
-Ruch do strony przechodzi przez Cloudflare (tunel). Używamy też Turnstile, czyli ochrony przed botami. Cloudflare technicznie widzi adres IP i dane żądania. Do weryfikacji Turnstile nie wysyłamy adresu IP.
+Ruch do strony przechodzi przez Cloudflare (tunel). Cloudflare technicznie widzi adres IP i dane żądania.
 
 Odbiorca: Cloudflare, Inc. Dane mogą trafić do USA, na zasadach Data Privacy Framework lub standardowych klauzul umownych, zgodnie z umową powierzenia Cloudflare. Nie weryfikowaliśmy sami certyfikacji Cloudflare.
 
@@ -81,7 +81,6 @@ Przycisk „Udostępnij” przekazuje obraz do aplikacji, którą wybierzesz na 
 - **hp_game** (localStorage): token sesji symulatora.
 - W przeglądarce administratora klucz hp_admin_section przechowuje ostatnio wybraną sekcję panelu.
 - **hp_consent** (localStorage): zapamiętana zgoda razem z datą ostatniej zmiany dokumentów, którą zaakceptowano. Gdy dokumenty się zmienią, zapytamy o zgodę ponownie.
-- Cookies Turnstile, jeśli Cloudflare je ustawi.
 
 ## 7. Twoje prawa
 

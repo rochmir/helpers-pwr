@@ -547,9 +547,9 @@ def test_privacy_policy_matches_new_mechanics(client, conn):
     body = conn.execute("SELECT body_md FROM legal_documents WHERE slug='polityka-prywatnosci'").fetchone()[0]
     low = body.lower()
     for needed in ("wybrzeżu wyspiańskiego 27", "token losu", "hp_game", "hp_consent", "hp_staff", "12 godzin", "14 godzin",
-                   "turnstile", "facebook", "{{contact}}", "6 miesięcy"):
+                   "facebook", "{{contact}}", "6 miesięcy"):
         assert needed in low, needed
-    for gone in ("bonus", "rok studiów", "roku studiów", "dodatkowe losy", "{{owner}}", "automatycznie usuwamy", "skrót hmac numeru"):
+    for gone in ("turnstile", "bonus", "rok studiów", "roku studiów", "dodatkowe losy", "{{owner}}", "automatycznie usuwamy", "skrót hmac numeru"):
         assert gone not in low, gone
     assert "nie jest to proces automatyczny" in low
 

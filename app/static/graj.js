@@ -1,4 +1,4 @@
-import { api, $, h, formatDateRange, formatWarsawLong, setMessage, storageGet, storageSet, storageRemove, loadTurnstile, requireToken, sleep, shapeEl, getConfig } from './common.js';
+import { api, $, h, boothText, formatWarsawLong, setMessage, storageGet, storageSet, storageRemove, sleep, shapeEl, getConfig } from './common.js';
 import { renderPlayerCert, renderResultCert, showDownload } from './cert.js';
 import { deviceHashes, deviceHashSupported } from './fingerprint.js';
 import { spinReels, buildReels, showReels, prefersReducedMotion, confetti } from './reels.js';
@@ -11,14 +11,13 @@ const machine = $('#machine');
 const playerEl = $('#player-genotype');
 const targetEl = $('#booth-genotype');
 const MAX_TRIES = 5;
-let ts = null;
 let busy = false;
 let boothGenotype = '';
 let attemptsLeft = null;
 let bestLocal = null; // najlepszy rzut z tej wizyty: { matches, player, booth }
 let won = null; // { genotype, at, token, booth } trafienia 10/10 tej sesji (do certyfikatu)
 let bestOverall = 0; // najlepszy wynik dnia (serwer + rzuty z tej wizyty)
-let needSession = false; // true, gdy trzeba utworzyc sesje (Turnstile)
+let needSession = false; // true, gdy trzeba utworzyc sesje
 let pendingMe = null; // stan sesji (lub null), gdy czekamy na zgode w oknie startowym
 let winShown = false; // ekran wygranej jest widoczny: okno konca nie otwiera sie samo
 
@@ -204,17 +203,10 @@ async function proceed(me0) {
   if (problem && me.attempts_left > 0 && me.pass_booth !== boothId) showScan(problem);
 }
 
-/** Wiersz listy stanowisk: "budynek - nazwa, terminy". */
-function boothLine(b) {
-  const label = (b.building ? b.building + ' - ' : '') + b.name;
-  const range = formatDateRange(b.date_from, b.date_to);
-  return label + (range ? ', ' + range : '');
-}
-
 /** Wspolne wypelnienie listy stanowisk i godzin (lista na /graj i okno konca). */
 function fillBoothList(listEl, hoursEl, booths, hours) {
   listEl.textContent = '';
-  for (const b of booths) listEl.append(h('li', {}, boothLine(b)));
+  for (const b of booths) listEl.append(h('li', {}, boothText(b)));
   if (hours && booths.length) {
     hoursEl.textContent = 'Godziny: ' + hours;
     hoursEl.hidden = false;
@@ -241,7 +233,7 @@ const endDlg = $('#end-dialog');
 const startMsg = $('#start-msg');
 let introMode = null; // 'consent' (obowiazkowe, bez zamykania) albo 'preview' (same zasady)
 
-/** Okno startowe. consent: zasady + zgoda + Turnstile, nie da sie go zamknac bez akceptacji; preview: sam podglad. */
+/** Okno startowe. consent: zasady + zgoda, nie da sie go zamknac bez akceptacji; preview: sam podglad. */
 function openIntro(mode) {
   if (introDlg.open || typeof introDlg.showModal !== 'function') return;
   introMode = mode;
@@ -270,16 +262,13 @@ async function fillConsentDates() {
   } catch (e) { /* daty sa dodatkiem, brak nie blokuje zgody */ }
 }
 
-/** Okno startowe przed gra: withSession = trzeba jeszcze utworzyc sesje (widget Turnstile w oknie). */
+/** Okno startowe przed gra: withSession = trzeba jeszcze utworzyc sesje. */
 async function showStart(withSession) {
   needSession = withSession;
   // Zgoda sprzed zmiany dokumentow nie obowiazuje: zaznaczamy to w oknie (pierwsza wizyta bez zgody: bez tej informacji).
   $('#consent-changed').hidden = !storageGet('hp_consent');
   fillConsentDates();
   openIntro('consent');
-  if (withSession && !ts) {
-    try { ts = await loadTurnstile($('#turnstile')); } catch (err) { setMessage(startMsg, err.message, 'error'); }
-  }
 }
 
 /** Blok „Więcej o akcji” po wejściu ze stanowiska Zajęcia: stała treść z regulaminów plus lista stanowisk. */
@@ -401,8 +390,7 @@ $('#start-btn').addEventListener('click', async () => {
   let me = pendingMe;
   try {
     if (needSession) {
-      const cf = requireToken(ts); // przy wlaczonej captchy rzuca blad, gdy brak tokenu
-      const s = await api('POST', '/api/game/session', { cf_turnstile: cf ?? null });
+      const s = await api('POST', '/api/game/session', {});
       if (s.token) storageSet('hp_game', s.token);
       me = s;
       needSession = false;
@@ -410,7 +398,6 @@ $('#start-btn').addEventListener('click', async () => {
     storageSet('hp_consent', legalUpdatedAt || '1');
   } catch (e) {
     setMessage(startMsg, e.detail || e.message, 'error');
-    if (ts) ts.reset();
     btn.disabled = false;
     busy = false;
     return;
