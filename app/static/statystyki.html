@@ -22,53 +22,42 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki" class="active" aria-current="page">Statystyki</a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span>Graj</span></a><a href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i><span>Wpisz kod</span></a><a href="/statystyki" class="active" aria-current="page"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
-    <p class="eyebrow">Helpers' Generation</p>
-    <h1>Statystyki na żywo</h1><p class="lead" id="stats-status">Ładowanie…</p>
+    <h1>Statystyki na żywo</h1>
+    <p class="live-status" id="stats-status">Ładowanie…</p>
   </div>
 </section>
-<main class="section section-tight">
+<main class="section section-tight stats">
 <div class="container">
-  <section id="total-section" class="card">
-    <p class="title3">Zarejestrowani Dawcy (potencjalni i faktyczni)</p>
+  <section id="total-section" class="stat-block stat-total">
     <div class="total-big" id="total">-</div>
+    <p class="total-caption">zarejestrowanych Dawców, potencjalnych i faktycznych</p>
   </section>
 
-  <section id="faculties-section" class="card">
-    <h2><i class="ti ti-trophy" aria-hidden="true"></i> Wydziały</h2>
+  <section id="faculties-section" class="stat-block">
+    <h2 class="stat-h"><i class="ti ti-trophy" aria-hidden="true"></i> Bitwa Wydziałów</h2>
     <ol class="bars" id="faculties-list"></ol>
     <ul class="legend" aria-label="Legenda wykresu">
-      <li><span class="swatch swatch-potential" aria-hidden="true"></span> Potencjalni Dawcy</li>
-      <li><span class="swatch swatch-actual" aria-hidden="true"></span> Dawcy faktyczni</li>
+      <li><span class="swatch swatch-potential" aria-hidden="true"></span> Potencjalni Dawcy (P)</li>
+      <li><span class="swatch swatch-actual" aria-hidden="true"></span> Dawcy faktyczni (F)</li>
     </ul>
-    <div class="table-wrap">
-    <table class="table" id="faculties-table">
-      <thead><tr><th>Wydział</th><th>Potencjalni</th><th>Faktyczni</th><th>Razem</th></tr></thead>
-      <tbody id="faculties-body"></tbody>
-    </table>
-    </div>
   </section>
 
-  <section id="booths-section" class="card">
-    <h2>Stoiska</h2>
-    <div class="table-wrap">
-    <table class="table" id="booths-table">
-      <thead><tr><th>Stoisko</th><th>Zarejestrowani</th><th>Trafienia 10/10</th><th>Losowania</th></tr></thead>
-      <tbody id="booths-body"></tbody>
-    </table>
-    </div>
+  <section id="booths-section" class="stat-block">
+    <h2 class="stat-h">Stoiska</h2>
+    <ul class="booth-stats" id="booths-list"></ul>
   </section>
 
-  <section id="game-section" class="card">
-    <h2><i class="ti ti-dice-5" aria-hidden="true"></i> Gra</h2>
-    <div class="kpis">
-      <div class="kpi">Gracze<strong id="g-players">-</strong></div>
-      <div class="kpi">Losowania<strong id="g-rolls">-</strong></div>
-      <div class="kpi">Trafienia 10/10<strong id="g-matches">-</strong></div>
-    </div>
+  <section id="game-section" class="stat-block">
+    <h2 class="stat-h"><i class="ti ti-dice-5" aria-hidden="true"></i> Gra</h2>
+    <dl class="figures">
+      <div><dt>Gracze</dt><dd id="g-players">-</dd></div>
+      <div><dt>Losowania</dt><dd id="g-rolls">-</dd></div>
+      <div><dt>Trafienia 10/10</dt><dd id="g-matches">-</dd></div>
+    </dl>
   </section>
 </div>
 </main>
@@ -83,7 +72,7 @@
       </div>
       <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod ze stoiska</a><a href="/statystyki">Statystyki</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod</a><a href="/statystyki">Statystyki</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

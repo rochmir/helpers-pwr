@@ -1,0 +1,30 @@
+# helpersi-pwr — test lokalny. Uruchom: docker compose -f docker-compose.local.yml up --build
+# (albo skryptem lokalnie.ps1 / lokalnie.sh). Strona: http://localhost:8000
+# Panel: http://localhost:8000/admin, hasło: dev. Port zmienisz zmienną HELPERS_PORT.
+services:
+  app:
+    build: .
+    image: helpers-pwr:local
+    ports:
+      - "${HELPERS_PORT:-8000}:8000"
+    environment:
+      ADMIN_SECRET: "${ADMIN_SECRET:-dev}"
+      COOKIE_SECURE: "0"
+      PUBLIC_URL: "http://localhost:${HELPERS_PORT:-8000}"
+      TZ: Europe/Warsaw
+      # Statyki bez cache'u: zmiany w CSS/JS widać po odświeżeniu.
+      DEV_NO_CACHE: "1"
+      # Puste klucze = captcha wyłączona (tylko lokalnie!).
+      TURNSTILE_SITE_KEY: ""
+      TURNSTILE_SECRET_KEY: ""
+      # inotify nie działa na bind mountach z Windowsa.
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      # Zmiany w HTML/CSS/JS i Pythonie działają bez przebudowy obrazu.
+      - ./app:/app/app:ro
+      # Dane w wolumenie nazwanym (bind mount z Windowsa bywa niezapisywalny dla uid 10001).
+      - helpers-lokalne-dane:/app/data
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log", "--reload", "--reload-dir", "app"]
+
+volumes:
+  helpers-lokalne-dane:

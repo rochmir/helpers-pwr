@@ -63,7 +63,7 @@ async def security_headers(request: Request, call_next):
     if is_api:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
-    elif request.url.path.startswith(VERSIONED_PREFIX):
+    elif request.url.path.startswith(VERSIONED_PREFIX) and not config.dev_no_cache():
         # Adres zawiera hash zawartości statyk — można cache'ować na stałe.
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     else:

@@ -223,3 +223,20 @@ export function requireToken(ts) {
   if (!t) throw new Error('Poczekaj chwilę na weryfikację antybotową (pole powyżej) i spróbuj ponownie.');
   return t;
 }
+
+/** Plynne doliczanie liczby w elemencie (ease-out). Bez animacji przy prefers-reduced-motion. */
+export function countUp(el, from, to, ms = 1000, done) {
+  const token = (el._countToken = (el._countToken || 0) + 1);
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced || from === to) { el.textContent = to; if (done) done(to); return; }
+  const t0 = performance.now();
+  const step = (now) => {
+    if (token !== el._countToken) return;
+    const p = Math.min(1, (now - t0) / ms);
+    const v = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+    el.textContent = v;
+    if (p < 1) requestAnimationFrame(step);
+    else if (done) done(to);
+  };
+  requestAnimationFrame(step);
+}

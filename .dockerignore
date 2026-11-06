@@ -8,3 +8,9 @@ __pycache__/
 tests/
 README.md
 PLAN.md
+.github/
+docker-compose*.yml
+lokalnie.*
+.env.example
+DESIGN.md
+requirements-dev.txt

@@ -46,6 +46,11 @@ def cookie_secure() -> bool:
     return os.environ.get("COOKIE_SECURE", "1").strip() != "0"
 
 
+def dev_no_cache() -> bool:
+    """Tryb lokalnego podglądu: statyki bez cache'u (zmiany w CSS/JS widać po odświeżeniu)."""
+    return os.environ.get("DEV_NO_CACHE", "").strip() == "1"
+
+
 def secret_key() -> str:
     """``SECRET_KEY`` ze środowiska albo losowy klucz zapisany w ``DATA_DIR/secret_key``."""
     env = os.environ.get("SECRET_KEY", "").strip()

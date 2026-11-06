@@ -360,6 +360,13 @@ def test_versioned_static(client):
     assert css.status_code == 200 and "immutable" in css.headers["cache-control"]
 
 
+def test_versioned_static_dev_no_cache(client, monkeypatch):
+    from app.main import VERSIONED_PREFIX
+    monkeypatch.setenv("DEV_NO_CACHE", "1")
+    css = client.get(VERSIONED_PREFIX + "style.css")
+    assert css.status_code == 200 and css.headers["cache-control"] == "no-cache"
+
+
 def test_qr(client):
     r = client.get("/api/qr.svg", params={"path": "/graj?stoisko=c13"})
     assert r.status_code == 200 and r.headers["content-type"] == "image/svg+xml" and b"<svg" in r.content
