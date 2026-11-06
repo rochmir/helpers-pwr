@@ -33,6 +33,27 @@ def test_migration_drops_major(tmp_path, monkeypatch):
         conn.close()
 
 
+def test_migration_adds_donor_booth_id(tmp_path, monkeypatch):
+    """Baza produkcyjna sprzed stoiska przy wpisie statystyki: /api/stats/live padał na d.booth_id."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    raw = sqlite3.connect(config.db_path())
+    raw.execute("CREATE TABLE donors_stats(id INTEGER PRIMARY KEY AUTOINCREMENT, faculty TEXT NOT NULL, "
+                "study_year INTEGER NOT NULL, registered_date TEXT NOT NULL)")
+    raw.execute("INSERT INTO donors_stats(faculty,study_year,registered_date) VALUES('W4N',2,'2026-10-01')")
+    raw.commit()
+    raw.close()
+    from app.routes import stats
+    for _ in range(2):  # idempotentnie
+        db.init_db()
+        conn = db.connect()
+        assert "booth_id" in [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")]
+        db.create_booth(conn, f"b{_}", "Stoisko")
+        conn.commit()
+        out = stats.live(conn)
+        assert out["total"] == 1 and all(b["registered"] == 0 for b in out["booths"])
+        conn.close()
+
+
 # --- autoryzacja ----------------------------------------------------------------
 def test_volunteer_and_anonymous_forbidden(client, booth, other_clients):
     from test_api import volunteer
