@@ -1,6 +1,6 @@
 # helpersi-pwr — test lokalny. Uruchom: docker compose -f docker-compose.local.yml up --build
 # (albo skryptem lokalnie.ps1 / lokalnie.sh). Strona: http://localhost:8000
-# Panel: http://localhost:8000/admin, hasło: dev. Port zmienisz zmienną HELPERS_PORT.
+# Panel: http://localhost:8000/login (login admin, hasło dev). Port zmienisz zmienną HELPERS_PORT.
 services:
   app:
     build: .

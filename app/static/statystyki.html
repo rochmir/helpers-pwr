@@ -20,44 +20,57 @@
       <span class="brand-sep" aria-hidden="true"></span>
       <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
     </a>
-    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a></div>
+    <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span>Graj</span></a><a href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i><span>Wpisz kod</span></a><a href="/statystyki" class="active" aria-current="page"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki" class="active" aria-current="page">Statystyki</a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
-    <h1>Statystyki na żywo</h1>
-    <p class="live-status" id="stats-status">Ładowanie…</p>
+    <p class="eyebrow">Helpers' Generation</p>
+    <h1>Statystyki na żywo</h1><p class="lead" id="stats-status">Ładowanie…</p>
   </div>
 </section>
-<main class="section section-tight stats">
+<main class="section section-tight">
 <div class="container">
-  <section id="total-section" class="stat-block stat-total">
+  <section id="total-section" class="card">
+    <p class="title3">Punkty ogółem (nowi dawcy i dawcy faktyczni)</p>
     <div class="total-big" id="total">-</div>
-    <p class="total-caption">zarejestrowanych Dawców, potencjalnych i faktycznych</p>
+    <p class="hint" id="total-kinds"></p>
   </section>
 
-  <section id="faculties-section" class="stat-block">
-    <h2 class="stat-h"><i class="ti ti-trophy" aria-hidden="true"></i> Bitwa Wydziałów</h2>
-    <ol class="bars" id="faculties-list"></ol>
+  <section id="faculties-section" class="card">
+    <h2><i class="ti ti-building" aria-hidden="true"></i> Punkty wg wydziałów</h2>
+    <p class="hint hint-block">To liczby punktów (LD), a nie ranking. Klasyfikacja według Wskaźnika Zaangażowania jest w <a href="/puchar">Pucharze Dawcy PWr</a>.</p>
     <ul class="legend" aria-label="Legenda wykresu">
-      <li><span class="swatch swatch-potential" aria-hidden="true"></span> Potencjalni Dawcy (P)</li>
-      <li><span class="swatch swatch-actual" aria-hidden="true"></span> Dawcy faktyczni (F)</li>
+      <li><span class="swatch swatch-potential" aria-hidden="true"></span>Nowi dawcy</li>
+      <li><span class="swatch swatch-actual" aria-hidden="true"></span>Faktyczni dawcy</li>
     </ul>
+    <ol class="bars" id="faculties-list"></ol>
+    <div class="table-wrap">
+    <table class="table" id="faculties-table">
+      <thead><tr><th>Wydział</th><th>Punkty (LD)</th><th>W tym faktyczni dawcy</th></tr></thead>
+      <tbody id="faculties-body"></tbody>
+    </table>
+    </div>
   </section>
 
-  <section id="booths-section" class="stat-block">
-    <h2 class="stat-h">Stoiska</h2>
-    <ul class="booth-stats" id="booths-list"></ul>
+  <section id="booths-section" class="card">
+    <h2>Stoiska</h2>
+    <div class="table-wrap">
+    <table class="table" id="booths-table">
+      <thead><tr><th>Stoisko</th><th>Wpisane tokeny rejestracyjne</th><th>W tym faktyczni dawcy</th><th>Trafienia 10/10</th><th>Próby</th></tr></thead>
+      <tbody id="booths-body"></tbody>
+    </table>
+    </div>
   </section>
 
-  <section id="game-section" class="stat-block">
-    <h2 class="stat-h"><i class="ti ti-dice-5" aria-hidden="true"></i> Gra</h2>
-    <dl class="figures">
-      <div><dt>Gracze</dt><dd id="g-players">-</dd></div>
-      <div><dt>Losowania</dt><dd id="g-rolls">-</dd></div>
-      <div><dt>Trafienia 10/10</dt><dd id="g-matches">-</dd></div>
-    </dl>
+  <section id="game-section" class="card">
+    <h2><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</h2>
+    <div class="kpis">
+      <div class="kpi">Uczestnicy<strong id="g-players">-</strong></div>
+      <div class="kpi">Próby<strong id="g-rolls">-</strong></div>
+      <div class="kpi">Trafienia 10/10<strong id="g-matches">-</strong></div>
+    </div>
   </section>
 </div>
 </main>
@@ -70,9 +83,9 @@
         <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
         <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
       </div>
-      <p class="footer-text">Helpers' Generation · Politechnika Wrocławska · akcja studencka wspierająca Fundację DKMS</p>
+      <p class="footer-text">Organizator: Samorząd Studencki Politechniki Wrocławskiej, we współpracy z zespołem akcji Helpers' Generation.</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Graj</a><a href="/potwierdz">Wpisz kod</a><a href="/statystyki">Statystyki</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki" aria-current="page">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

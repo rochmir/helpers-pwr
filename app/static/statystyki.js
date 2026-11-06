@@ -1,98 +1,65 @@
-import { api, $, h, facultyLabel, countUp } from './common.js';
+import { api, $, h, facultyLabel } from './common.js';
 
-/** Liczba z doliczaniem tylko gdy wartosc sie zmienila. */
-function setCount(el, value) {
-  const to = Number(value);
-  if (!Number.isFinite(to)) { el.textContent = value ?? '-'; return; }
-  const from = el.dataset.v === undefined ? 0 : Number(el.dataset.v);
-  if (el.dataset.v !== undefined && from === to) return;
-  el.dataset.v = to;
-  countUp(el, from, to, 900);
-}
-
-const rowsByKey = new Map();
-let firstRender = true;
-
-function makeRow() {
-  const potential = h('span', { class: 'seg seg-potential' });
-  const actual = h('span', { class: 'seg seg-actual' });
-  const rank = h('span', { class: 'bar-rank' });
-  const name = h('span', { class: 'bar-label' });
-  const track = h('div', { class: 'stack', role: 'img' }, potential, actual);
-  const count = h('strong', { class: 'bar-count' });
-  const split = h('span', { class: 'bar-split' });
-  const el = h('li', { class: 'bar-row' }, rank, name, track, h('span', { class: 'bar-num' }, count, split));
-  return { el, potential, actual, rank, name, track, count, split };
-}
-
-/** Wykres skumulowany: potencjalni (czerwony) + faktyczni (granatowy). Wiersze aktualizowane po kodzie wydzialu. */
+/** Wykres punktow wydzialow (kolejnosc slownika, bez rankingu). */
 function bars(listEl, rows) {
+  listEl.textContent = '';
   if (!rows.length) {
-    listEl.textContent = '';
-    rowsByKey.clear();
     listEl.append(h('li', { class: 'empty' }, 'Brak danych'));
     return;
   }
-  if (rowsByKey.size === 0) listEl.textContent = '';
-  const max = Math.max(...rows.map((r) => r.total), 1);
-  const seen = new Set();
-  rows.forEach((r, i) => {
-    const key = r.code || facultyLabel(r);
-    seen.add(key);
-    let row = rowsByKey.get(key);
-    if (!row) { row = makeRow(); rowsByKey.set(key, row); }
-    row.rank.textContent = i + 1;
-    row.name.textContent = facultyLabel(r);
-    row.el.classList.toggle('is-first', i === 0 && r.total > 0);
-    row.track.setAttribute('aria-label', facultyLabel(r) + ': potencjalni ' + r.potential + ', faktyczni ' + r.actual + ', razem ' + r.total);
-    row.count.textContent = r.total;
-    row.split.textContent = 'P ' + r.potential + ' · F ' + r.actual;
-    const apply = () => {
-      row.potential.style.width = (r.potential / max * 100) + '%';
-      row.actual.style.width = (r.actual / max * 100) + '%';
-    };
-    if (firstRender) {
-      row.potential.style.width = '0%';
-      row.actual.style.width = '0%';
-      requestAnimationFrame(() => requestAnimationFrame(apply));
-    } else apply();
-    if (listEl.children[i] !== row.el) listEl.insertBefore(row.el, listEl.children[i] || null);
-  });
-  for (const [key, row] of rowsByKey) {
-    if (!seen.has(key)) { row.el.remove(); rowsByKey.delete(key); }
+  const max = Math.max(...rows.map((r) => r.count), 1);
+  for (const r of rows) {
+    const actual = r.actual || 0;
+    const potential = r.count - actual;
+    const group = h('span', { class: 'seg-group' });
+    group.style.width = (r.count / max * 100) + '%';
+    if (potential > 0) {
+      const p = h('span', { class: 'seg seg-potential' });
+      p.style.width = (potential / r.count * 100) + '%';
+      group.append(p);
+    }
+    if (actual > 0) {
+      const a = h('span', { class: 'seg seg-actual' });
+      a.style.width = (actual / r.count * 100) + '%';
+      group.append(a);
+    }
+    const track = h('div', { class: 'stack', role: 'img',
+      'aria-label': facultyLabel(r) + ': ' + r.count + ' pkt, w tym faktyczni dawcy ' + actual }, group);
+    listEl.append(h('li', { class: 'bar-row' },
+      h('span', { class: 'bar-label' }, facultyLabel(r)), track, h('span', { class: 'bar-count' }, r.count),
+      h('span', { class: 'bar-sub' }, actualText(actual))));
   }
-  firstRender = false;
 }
 
-function booths(listEl, rows) {
-  listEl.textContent = '';
-  if (!rows.length) { listEl.append(h('li', { class: 'empty' }, 'Brak danych')); return; }
-  for (const b of rows) {
-    listEl.append(h('li', {},
-      h('span', { class: 'booth-name' }, b.name),
-      h('span', { class: 'booth-figs' },
-        h('span', {}, h('b', {}, b.registered), ' zarejestrowanych'),
-        h('span', {}, h('b', {}, b.matches_count), ' trafień 10/10'),
-        h('span', {}, h('b', {}, b.rolls_count), ' losowań'))));
-  }
+/** Po „w tym”: 1 faktyczny dawca, 2 i więcej faktycznych dawców. */
+const actualText = (n) => 'w tym ' + n + (n === 1 ? ' faktyczny dawca' : ' faktycznych dawców');
+
+function facultyTable(rows) {
+  const body = $('#faculties-body');
+  body.textContent = '';
+  for (const r of rows) body.append(h('tr', {}, h('td', {}, facultyLabel(r)), h('td', {}, r.count), h('td', {}, r.actual || 0)));
 }
 
 async function refresh() {
-  const status = $('#stats-status');
   try {
     const s = await api('GET', '/api/stats/live');
-    setCount($('#total'), s.total);
+    $('#total').textContent = s.total;
+    $('#total-kinds').textContent = 'Wpisane tokeny wg typu: nowi dawcy ' + s.total_potential + ', dawcy faktyczni ' + s.total_actual + '.';
     bars($('#faculties-list'), s.faculties || []);
-    booths($('#booths-list'), s.booths || []);
+    facultyTable(s.faculties || []);
+    const body = $('#booths-body');
+    body.textContent = '';
+    for (const b of s.booths || []) {
+      body.append(h('tr', {}, h('td', {}, b.name), h('td', {}, b.registered), h('td', {}, b.actual || 0), h('td', {}, b.matches_count), h('td', {}, b.rolls_count)));
+    }
+    if (!(s.booths || []).length) body.append(h('tr', {}, h('td', { colspan: 5 }, 'Brak danych')));
     const g = s.game || {};
-    setCount($('#g-players'), g.players ?? '-');
-    setCount($('#g-rolls'), g.rolls ?? '-');
-    setCount($('#g-matches'), g.matches ?? '-');
-    status.classList.remove('is-offline');
-    status.textContent = 'na żywo · ' + new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
+    $('#g-players').textContent = g.players ?? '-';
+    $('#g-rolls').textContent = g.rolls ?? '-';
+    $('#g-matches').textContent = g.matches ?? '-';
+    $('#stats-status').textContent = 'Odświeżane co 10 s. Ostatnia aktualizacja: ' + new Date().toLocaleTimeString('pl-PL');
   } catch (e) {
-    status.classList.add('is-offline');
-    status.textContent = 'Brak połączenia, ponawiam…';
+    $('#stats-status').textContent = 'Brak połączenia, próbuję ponownie…';
   }
   setTimeout(refresh, 10000);
 }

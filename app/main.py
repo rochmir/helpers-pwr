@@ -1,22 +1,21 @@
 """Aplikacja FastAPI: routery, nagłówki bezpieczeństwa, strony statyczne."""
 from __future__ import annotations
 
-import hashlib
+import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import captcha, config, db
-from .routes import admin, admin_test, donor, game, misc, raffle, stats, volunteer
+from . import captcha, config, db, pages
+from .pages import STATIC_DIR, VERSIONED_PREFIX
+from .routes import admin, admin_test, donor, game, legal, login, misc, partners, stats, volunteer
 
 log = logging.getLogger("helpersi")
-STATIC_DIR = Path(__file__).with_name("static")
 
 CSP = ("default-src 'self'; script-src 'self' https://challenges.cloudflare.com; "
        "frame-src https://challenges.cloudflare.com; img-src 'self' data: blob:; "
@@ -25,18 +24,14 @@ CSP = ("default-src 'self'; script-src 'self' https://challenges.cloudflare.com;
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 
-def _asset_version() -> str:
-    """Skrót zawartości katalogu static — zmienia się przy każdej zmianie plików (cache-busting)."""
-    h = hashlib.sha256()
-    for f in sorted(STATIC_DIR.rglob("*")):
-        if f.is_file():
-            h.update(str(f.relative_to(STATIC_DIR)).encode())
-            h.update(f.read_bytes())
-    return h.hexdigest()[:12]
-
-
-ASSET_VERSION = _asset_version()
-VERSIONED_PREFIX = f"/static/v/{ASSET_VERSION}/"
+async def _rotate_salt_hourly():
+    """Sól dobowa rotuje także bez ruchu: klucz urządzenia znika następnego dnia, nawet po zakończeniu akcji."""
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            await asyncio.to_thread(db.rotate_device_salt)
+        except Exception:
+            log.exception("Rotacja soli dobowej nie powiodła się.")
 
 
 @asynccontextmanager
@@ -45,8 +40,13 @@ async def lifespan(_: FastAPI):
     if not captcha.enabled():
         log.warning("Turnstile wyłączony (brak TURNSTILE_SITE_KEY / TURNSTILE_SECRET_KEY).")
     if not config.admin_secret():
-        log.warning("Brak ADMIN_SECRET — logowanie admina jest niemożliwe.")
+        log.warning("Brak ADMIN_SECRET — konto awaryjne admin jest niedostępne.")
+    if not config.legal_contact():
+        log.warning("Brak LEGAL_CONTACT, dokumenty prawne pokażą „[do uzupełnienia]” w miejscu kontaktu.")
+    db.rotate_device_salt()
+    rotation = asyncio.create_task(_rotate_salt_hourly())
     yield
+    rotation.cancel()
 
 
 app = FastAPI(title="helpersi-pwr", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -82,34 +82,63 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": f"Niepoprawne dane{field}."}, status_code=422)
 
 
-for module in (misc, game, volunteer, donor, stats, admin, raffle, admin_test):
+for module in (misc, game, login, volunteer, donor, stats, partners, admin, admin_test, legal):
     app.include_router(module.router)
+app.include_router(legal.admin_router)
 
 # --- strony ---------------------------------------------------------------------
-PAGES = {"/": "index.html", "/graj": "graj.html", "/wolontariusz": "wolontariusz.html",
-         "/potwierdz": "potwierdz.html", "/statystyki": "statystyki.html", "/admin": "admin.html"}
+PAGES = {"/": "index.html", "/graj": "graj.html", "/login": "login.html", "/potwierdz": "potwierdz.html",
+         "/statystyki": "statystyki.html", "/puchar": "puchar.html"}
 
 
 def _page(filename: str):
     def handler():
-        path = STATIC_DIR / filename
-        if not path.is_file():
-            raise HTTPException(404, "Nie znaleziono strony.")
-        html = path.read_text(encoding="utf-8")
-        html = html.replace('src="/static/', f'src="{VERSIONED_PREFIX}').replace('href="/static/', f'href="{VERSIONED_PREFIX}')
-        return HTMLResponse(html)
+        return pages.render(filename)
     return handler
 
 
 for url, filename in PAGES.items():
     app.add_api_route(url, _page(filename), methods=["GET"], include_in_schema=False)
 
+
+@app.get("/bitwa", include_in_schema=False)
+def old_battle():
+    return RedirectResponse("/puchar", status_code=301)
+
+
+@app.get("/admin", include_in_schema=False)
+@app.get("/wolontariusz", include_in_schema=False)
+def old_panels():
+    return RedirectResponse("/login", status_code=302)
+
+
 _stoisko = _page("stoisko.html")
+
+
+# Przeglądarki i systemy często pytają o /favicon.ico wprost.
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC_DIR / "brand" / "favicon-32.png", media_type="image/png")
 
 
 @app.get("/stoisko/{booth_id}", include_in_schema=False)
 def stoisko(booth_id: str):
     if not re.fullmatch(r"[a-z0-9]{1,20}", booth_id):
+        raise HTTPException(404, "Nie znaleziono strony.")
+    return _stoisko()
+
+
+@app.get("/zajecia/{screen_token}", include_in_schema=False)
+def zajecia(screen_token: str):
+    """Statyczny link dla prowadzących zajęcia: ten sam ekran co /stoisko/zajecia, bez logowania. Zły token = 404."""
+    conn = db.connect()
+    try:
+        ok = len(screen_token) <= 64 and db.lecture_token_ok(conn, screen_token)
+    except UnicodeEncodeError:
+        ok = False
+    finally:
+        conn.close()
+    if not ok:
         raise HTTPException(404, "Nie znaleziono strony.")
     return _stoisko()
 

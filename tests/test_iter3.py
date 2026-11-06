@@ -1,4 +1,5 @@
-"""Iteracja 3: najlepszy wynik dnia, bonus za rejestrację, kod QR co minutę, konta wolontariuszy, słownik z „Inne”."""
+"""Iteracja 3 (po zmianach regulaminowych): najlepszy wynik dnia, kod QR co minutę, konta wolontariuszy, słownik z „Inne”,
+tokeny dawców faktycznych bez legitymacji."""
 import random
 import sqlite3
 from datetime import timedelta
@@ -25,7 +26,7 @@ def set_clock(monkeypatch, dt):
 
 
 def test_win_odds_constant():
-    assert game.WIN_ONE_IN == 300
+    assert game.WIN_ONE_IN == 150
 
 
 # --- najlepszy wynik dnia -------------------------------------------------------
@@ -50,67 +51,107 @@ def test_best_today_win_is_ten_and_resets_next_day(client, booth, monkeypatch):
     assert client.get("/api/game/me").json()["best_today"] == 0
 
 
-# --- bonus za rejestrację -------------------------------------------------------
-def test_register_bonus_with_session(admin, booth, other_clients):
+# --- dodatkowe próby: udział w Pucharze (+10 / +20) i kod promo (+5) ------------
+def test_cup_vote_gives_bonus_to_existing_session(admin, booth, other_clients):
     p = other_clients()
     new_session(p)
-    d = register(p, make_code(admin, booth_id=booth)).json()
-    assert d["bonus_attempts_granted"] == 10 and d["attempts_left"] == 15 and d["token"]
-    assert d["play_path"].startswith("/graj?stoisko=c13&t=") and qrtoken.valid("c13", d["play_path"].split("t=")[1])
-    me = p.get("/api/game/me").json()
-    assert me["attempts_left"] == 15 and me["bonus_attempts"] == 10
-    # sumuje się: drugi kod = kolejne +10
-    assert register(p, make_code(admin, booth_id=booth)).json()["attempts_left"] == 25
-
-
-def test_register_bonus_without_session_creates_one(admin, booth, other_clients):
-    p = other_clients()
     r = register(p, make_code(admin, booth_id=booth))
     d = r.json()
-    assert d["attempts_left"] == 15 and d["token"] and "hp_game" in r.headers["set-cookie"]
-    assert p.get("/api/game/me").json()["bonus_attempts"] == 10  # cookie ustawione
-    # token z odpowiedzi działa jako nagłówek
-    q = other_clients()
-    assert q.get("/api/game/me", headers={"X-Game-Token": d["token"]}).json()["attempts_left"] == 15
+    assert r.status_code == 200 and d["kind"] == "potential"
+    assert d["bonus_attempts_granted"] == config.CUP_VOTE_BONUS == 10 and d["attempts_left"] == 15 and d["token"]
+    me = p.get("/api/game/me").json()
+    assert me["attempts_left"] == 15 and me["bonus_attempts"] == 10
 
 
-def test_failed_register_gives_no_bonus(admin, booth, other_clients):
+def test_cup_vote_without_session_creates_one(admin, booth, other_clients):
     p = other_clients()
-    new_session(p)
-    assert register(p, "C13-ZZZZ").status_code == 404
-    assert register(p, make_code(admin, booth_id=booth), faculty="XX").status_code == 422
-    assert p.get("/api/game/me").json()["attempts_left"] == 5
+    r = register(p, make_code(admin, booth_id=booth))
+    assert r.status_code == 200 and r.json()["token"] and "hp_game" in r.headers.get("set-cookie", "")
+    me = p.get("/api/game/me")
+    assert me.status_code == 200 and me.json()["bonus_attempts"] == 10 and me.json()["attempts_left"] == 15
+    conn = db.connect()
+    assert conn.execute("SELECT COUNT(*) FROM game_sessions").fetchone()[0] == 1
+    conn.close()
 
 
-def test_daily_pool_used_before_bonus_and_bonus_survives_midnight(admin, booth, other_clients, monkeypatch):
+def test_bonus_is_spent_after_the_daily_pool_then_429(admin, booth, other_clients, monkeypatch):
     p = other_clients()
     new_session(p, booth)
-    register(p, make_code(admin, booth_id=booth))  # 5 dziennych + 10 bonusu
-    for i in range(5):
+    register(p, make_code(admin, booth_id=booth))   # +10
+    seen = []
+    for i in range(15):
         d = roll(p, booth).json()
-        assert d["bonus_attempts"] == 10 and d["attempts_left"] == 14 - i  # dzienne schodzą pierwsze
-    d = roll(p, booth).json()
-    assert d["bonus_attempts"] == 9 and d["attempts_left"] == 9
-    # kolejny dzień: znowu 5 dziennych + 9 bonusu (bonus nie wygasa)
-    monkeypatch.setattr(config, "today", lambda: "2099-01-01")
-    me = p.get("/api/game/me").json()
-    assert me["attempts_left"] == 14 and me["bonus_attempts"] == 9 and me["best_today"] == 0
-    # wyczerpanie wszystkiego
-    for _ in range(14):
-        assert roll(p, booth).status_code == 200
+        seen.append((d["attempts_left"], d["booth_left"], d["bonus_attempts"]))
+    assert seen[0] == (14, 4, 10) and seen[4] == (10, 0, 10) and seen[5] == (9, 0, 9) and seen[-1] == (0, 0, 0)
     r = roll(p, booth)
     assert r.status_code == 429 and r.json()["attempts_left"] == 0
-    assert p.get("/api/game/me").json()["bonus_attempts"] == 0
+    # kolejny dzień: pula 5 wraca, a zużyty bonus nie
+    monkeypatch.setattr(config, "today", lambda: "2099-01-01")
+    enter(p, booth)
+    assert p.get("/api/game/me").json()["attempts_left"] == 5
+    for _ in range(5):
+        assert roll(p, booth).status_code == 200
+    assert roll(p, booth).status_code == 429
 
 
-def test_best_today_counts_bonus_rolls(admin, booth, other_clients, monkeypatch):
-    force_matches(monkeypatch, [5] * 5 + [9])
+def test_actual_vote_gives_twenty(admin, booth, other_clients):
+    p = other_clients()
+    d = register(p, make_code(admin, booth_id=booth, kind="actual")).json()
+    assert d["kind"] == "actual" and d["bonus_attempts_granted"] == config.CUP_VOTE_BONUS_ACTUAL == 20
+    assert p.get("/api/game/me").json()["bonus_attempts"] == 20
+    conn = db.connect()  # typ dawcy nie trafia do donors_stats ani do sesji poza samą liczbą prób
+    assert [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")] == ["id", "faculty", "created_at", "device_hash"]
+    conn.close()
+
+
+def test_bonus_accumulates_across_votes_and_promo(admin, booth, other_clients):
     p = other_clients()
     new_session(p, booth)
     register(p, make_code(admin, booth_id=booth))
-    for _ in range(5):
-        roll(p, booth)
-    assert roll(p, booth).json()["best_today"] == 9  # próba z puli bonusowej też liczy się do rekordu
+    code = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).json()["code"]
+    d = p.post("/api/donor/redeem-promo", json={"code": code}).json()
+    assert d["bonus_attempts_granted"] == config.PROMO_BONUS == 5 and d["attempts_left"] == 20
+    assert p.get("/api/game/me").json()["bonus_attempts"] == 15
+
+
+def test_rejected_votes_give_no_bonus(admin, booth, other_clients):
+    p = other_clients()
+    new_session(p)
+    code = make_code(admin, booth_id=booth)
+    assert register(p, code, device="aa" * 32).status_code == 200            # +10
+    assert register(p, code).status_code == 410                              # token zużyty
+    assert register(p, "C13-ZZZZ").status_code == 404
+    assert register(p, make_code(admin, booth_id=booth), faculty="XXX").status_code == 422
+    code2 = make_code(admin, booth_id=booth)
+    assert register(p, code2, device="aa" * 32).status_code == 409           # drugi głos z urządzenia
+    assert p.get("/api/game/me").json()["bonus_attempts"] == 10
+    q = other_clients()                                                      # 409 bez sesji: sesja nie powstaje
+    assert register(q, code2, device="aa" * 32).status_code == 409
+    assert q.get("/api/game/me").status_code == 401
+    conn = db.connect()
+    assert conn.execute("SELECT COUNT(*) FROM game_sessions").fetchone()[0] == 1
+    assert conn.execute("SELECT status FROM registration_codes WHERE code=?", (code2,)).fetchone()[0] == "ACTIVE"
+    conn.close()
+
+
+def test_closed_cup_410_gives_no_bonus(admin, booth, other_clients, monkeypatch):
+    p = other_clients()
+    new_session(p)
+    code = make_code(admin, booth_id=booth)
+    monkeypatch.setattr(config, "cup_closed", lambda: True)
+    assert register(p, code).status_code == 410
+    assert p.get("/api/game/me").json()["bonus_attempts"] == 0
+
+
+def test_new_session_from_vote_has_coarse_created_at(admin, booth, other_clients):
+    """Sesja założona przy głosie nie ma znacznika czasu z chwili głosu (nic nie wiąże jej z wpisem w donors_stats)."""
+    p = other_clients()
+    register(p, make_code(admin, booth_id=booth))
+    conn = db.connect()
+    sess = conn.execute("SELECT created_at FROM game_sessions").fetchone()[0]
+    vote = conn.execute("SELECT created_at FROM donors_stats").fetchone()[0]
+    conn.close()
+    assert sess == config.day_bounds(config.today())[0] and sess != vote
 
 
 # --- kod QR i przepustka --------------------------------------------------------
@@ -171,12 +212,13 @@ def test_expired_qr_token_rejected_at_enter(client, booth, monkeypatch):
     assert r.status_code == 403 and "Zeskanuj ponownie" in r.json()["detail"]
 
 
-def test_exhausted_player_gets_429_not_403(client, booth, monkeypatch):
+def test_expired_pass_gives_403_even_when_exhausted(client, booth, monkeypatch):
     new_session(client, booth)
     for _ in range(5):
         roll(client, booth)
-    set_clock(monkeypatch, config.now() + timedelta(minutes=config.PASS_MINUTES + 5))
     assert roll(client, booth).status_code == 429
+    set_clock(monkeypatch, config.now() + timedelta(minutes=config.PASS_MINUTES + 5))
+    assert roll(client, booth).status_code == 403  # przepustka sprawdzana przed limitem
 
 
 def test_booth_state_play_path_only_for_staff(admin, booth, other_clients):
@@ -206,6 +248,7 @@ def test_old_pin_cookie_session_no_longer_valid(booth, other_clients):
     v = other_clients()
     v.cookies.set(auth.STAFF_COOKIE, auth._staff_serializer().dumps({"role": "volunteer", "booth": "c13", "ph": "abcdefgh"}))
     assert v.get("/api/volunteer/me").status_code == 401
+    assert v.get("/api/auth/me").status_code == 401
 
 
 # --- konta wolontariuszy --------------------------------------------------------
@@ -216,7 +259,7 @@ def test_volunteer_account_lifecycle(admin, booth, other_clients):
     assert d["login"] == "ania-c13" and len(d["password"]) == 12
     assert not set(d["password"]) & set("0O1lI")
     lst = admin.get("/api/admin/volunteers").json()
-    assert [x["login"] for x in lst] == ["ania-c13", "tester"] and all(set(x) == {"login", "created_at"} for x in lst)
+    assert [x["login"] for x in lst] == ["ania-c13", "tester"] and all(set(x) == {"login", "role", "created_at"} for x in lst)
     assert d["password"] not in str(lst)
     v = volunteer(other_clients, login="ania-c13", password=d["password"])
     assert v.get("/api/volunteer/me").status_code == 200
@@ -239,7 +282,7 @@ def test_reset_password_invalidates_session(admin, booth, other_clients):
     assert r.status_code == 200 and len(r.json()["password"]) == 12
     assert v.get("/api/volunteer/me").status_code == 401
     other = other_clients()
-    assert other.post("/api/volunteer/auth", json={"login": "tester", "password": "tajne-haslo1", "booth_id": booth}).status_code == 401
+    assert other.post("/api/auth/login", json={"login": "tester", "password": "tajne-haslo1"}).status_code == 401
     assert volunteer(other_clients, password=r.json()["password"]).get("/api/volunteer/me").status_code == 200
     assert admin.post("/api/admin/volunteers/tester/reset-password", json={"password": "x"}).status_code == 422
     assert admin.post("/api/admin/volunteers/nikt/reset-password", json={}).status_code == 404
@@ -321,11 +364,11 @@ def test_migration_from_iteration_2(tmp_path, monkeypatch):
         db.init_db()
         conn = db.connect()
         cols = lambda t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}
-        assert {"bonus_attempts", "pass_booth", "pass_until"} <= cols("game_sessions")
+        assert {"pass_booth", "pass_until"} <= cols("game_sessions") and "bonus_attempts" in cols("game_sessions")
         assert "best" in cols("game_attempts") and "pin_hash" in cols("booths")
         assert conn.execute("SELECT COUNT(*) FROM volunteers").fetchone()[0] == 0
         s = conn.execute("SELECT * FROM game_sessions").fetchone()
-        assert (s["has_won"], s["bonus_attempts"], s["pass_booth"]) == (1, 0, None)
+        assert (s["has_won"], s["pass_booth"]) == (1, None)
         a = conn.execute("SELECT * FROM game_attempts").fetchone()
         assert (a["attempts"], a["best"]) == (4, 0)
         b = conn.execute("SELECT * FROM booths").fetchone()
@@ -336,109 +379,67 @@ def test_migration_from_iteration_2(tmp_path, monkeypatch):
         conn.close()
 
 
-# --- dawca faktyczny (legitymacja) ----------------------------------------------
-def actual_code(c, booth, number="AB 12-34", day="2020-05-17", **kw):
-    return c.post("/api/volunteer/generate-code",
-                  json={"booth_id": booth, "kind": "actual", "card_number": number, "card_date": day, **kw})
+# --- dawca faktyczny: legitymację tylko oglądamy (Puchar §3.4) -------------------
+def actual_code(c, booth, **kw):
+    return c.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "actual", **kw})
 
 
-def test_actual_code_requires_card_data(admin, booth):
-    for body in ({"kind": "actual"}, {"kind": "actual", "card_number": "A1"}, {"kind": "actual", "card_date": "2020-01-01"},
-                 {"kind": "actual", "card_number": " - ", "card_date": "2020-01-01"},
-                 {"kind": "actual", "card_number": "A" * 41, "card_date": "2020-01-01"},
-                 {"kind": "actual", "card_number": "A1", "card_date": "nie-data"},
-                 {"kind": "inny"}):
-        r = admin.post("/api/volunteer/generate-code", json={"booth_id": booth, **body})
-        assert r.status_code == 422, body
+def test_actual_code_needs_no_card_data(admin, booth):
     r = actual_code(admin, booth)
     assert r.status_code == 200 and r.json()["kind"] == "actual"
-    assert make_code(admin, booth_id=booth)  # domyślnie potencjalny
+    assert admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "inny"}).status_code == 422
+    assert admin.post("/api/volunteer/generate-code", json={"booth_id": booth, "kind": "promo"}).status_code == 200
+    assert make_code(admin, booth_id=booth)  # domyślnie nowy dawca
+    # kilka tokenów dawcy faktycznego z rzędu: bez blokady po numerze legitymacji
+    assert actual_code(admin, booth).status_code == 200 and actual_code(admin, booth).status_code == 200
 
 
-def test_actual_card_blocks_duplicates(admin, booth, other_clients):
-    assert actual_code(admin, booth).status_code == 200
-    r = actual_code(admin, booth, number=" ab1234 ")  # inna pisownia, ta sama legitymacja
-    assert r.status_code == 409 and r.json()["detail"] == "Dla tej legitymacji jest już aktywny kod."
-    assert actual_code(admin, booth, day="2020-05-18").status_code == 200  # inna data = inna legitymacja
-    code = actual_code(admin, booth, number="zz9").json()["code"]
+def test_actual_register_and_no_card_tables(admin, booth, other_clients, conn):
     p = other_clients()
-    assert p.get(f"/api/donor/check-code?kod={code}").json()["kind"] == "actual"
-    assert register(p, code).status_code == 200
-    r = actual_code(admin, booth, number="ZZ-9")
-    assert r.status_code == 409 and r.json()["detail"] == "Ta legitymacja jest już zarejestrowana w systemie."
-
-
-def test_actual_card_reusable_after_expiry_or_cancel(admin, booth, monkeypatch):
     code = actual_code(admin, booth).json()["code"]
-    assert admin.post(f"/api/admin/codes/{code}/cancel", json={}).status_code == 200
-    code2 = actual_code(admin, booth).json()["code"]
-    set_clock(monkeypatch, config.now() + timedelta(minutes=config.code_ttl_minutes() + 1))
-    assert actual_code(admin, booth).status_code == 200
-    assert code2
+    assert p.get(f"/api/donor/check-code?kod={code}").json()["kind"] == "actual"
+    d = register(p, code).json()
+    assert d["kind"] == "actual" and d["bonus_attempts_granted"] == 20
+    assert conn.execute("SELECT kind, status FROM registration_codes WHERE code=?", (code,)).fetchone()[:] == ("actual", "USED")
+    assert conn.execute("SELECT name FROM sqlite_master WHERE name='actual_donor_cards'").fetchone() is None
+    assert "card_hash" not in {r[1] for r in conn.execute("PRAGMA table_info(registration_codes)")}
 
 
-def test_actual_bonus_is_20_and_sums(admin, booth, other_clients):
-    p = other_clients()
-    new_session(p)
-    d = register(p, actual_code(admin, booth).json()["code"]).json()
-    assert d["kind"] == "actual" and d["bonus_attempts_granted"] == 20 and d["attempts_left"] == 25
-    d = register(p, make_code(admin, booth_id=booth)).json()
-    assert d["bonus_attempts_granted"] == 10 and d["attempts_left"] == 35
-
-
-def test_register_actual_race_second_card_is_409(admin, booth, other_clients, conn):
-    """Dwa kody z tą samą legitymacją (np. wygenerowane przed rejestracją) nie dają dwóch rejestracji."""
-    c1 = actual_code(admin, booth).json()["code"]
-    conn.execute("UPDATE registration_codes SET status='EXPIRED' WHERE code=?", (c1,))
-    c2 = actual_code(admin, booth).json()["code"]
-    conn.execute("UPDATE registration_codes SET status='ACTIVE' WHERE code=?", (c1,))
-    assert register(other_clients(), c1).status_code == 200
-    r = register(other_clients(), c2)
-    assert r.status_code == 409
-    assert conn.execute("SELECT status FROM registration_codes WHERE code=?", (c2,)).fetchone()[0] == "ACTIVE"
-    assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 1
+def test_card_fields_from_old_clients_are_ignored(admin, booth, other_clients, conn):
+    """Stary formularz mógł jeszcze wysłać numer legitymacji: serwer go nie zapisuje nigdzie."""
+    r = actual_code(admin, booth, card_number="LEG-998877", card_date="2019-03-04")
+    assert r.status_code == 200
+    register(other_clients(), r.json()["code"])
+    blob = "\n".join(str([tuple(x) for x in conn.execute(f"SELECT * FROM {t}")])
+                     for (t,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall())
+    assert "998877" not in blob and "2019-03-04" not in blob
 
 
 def test_stats_potential_actual(admin, booth, client):
-    register(client, make_code(admin, booth_id=booth), "W4N", 1)
-    register(client, make_code(admin, booth_id=booth), "W4N", 2)
-    register(client, actual_code(admin, booth).json()["code"], "W4N", 3)
-    register(client, actual_code(admin, booth, number="X2").json()["code"], "W3", 3)
+    """Typ i stoisko liczymy ze zużytych tokenów, bo donors_stats ich nie trzyma (Puchar §3.4)."""
+    register(client, make_code(admin, booth_id=booth), "W4N")
+    register(client, make_code(admin, booth_id=booth), "W4N")
+    register(client, actual_code(admin, booth).json()["code"], "W4N")
+    register(client, actual_code(admin, booth).json()["code"], "W3")
     s = client.get("/api/stats/live").json()
-    top = s["faculties"][0]
-    assert (top["code"], top["potential"], top["actual"], top["total"]) == ("W4N", 2, 1, 3)
-    w3 = next(f for f in s["faculties"] if f["code"] == "W3")
-    assert (w3["potential"], w3["actual"], w3["total"]) == (0, 1, 1)
+    by = {f["code"]: f["count"] for f in s["faculties"]}
+    assert by["W4N"] == 3 and by["W3"] == 1
     assert s["total"] == 4 and s["total_actual"] == 2 and s["total_potential"] == 2
+    assert s["booths"][0]["registered"] == 4
     me = volunteer_me(admin, booth)
     assert me["registered_count"] == 4 and me["registered_potential"] == 2 and me["registered_actual"] == 2
     sm = admin.get("/api/admin/summary?date=all").json()
-    assert sm["registered"] == 4 and sm["podium"][0]["total"] == 3
+    assert sm["registered"] == 4 and sm["podium"][0] == {"code": "W4N", "name": "Wydział Informatyki i Telekomunikacji", "count": 3}
 
 
 def volunteer_me(c, booth):
     return c.get(f"/api/volunteer/me?booth_id={booth}").json()
 
 
-def test_card_number_never_stored_in_plain(admin, booth, client, conn):
-    number, day = "LEG-998877", "2019-03-04"
-    code = actual_code(admin, booth, number=number, day=day).json()["code"]
-    register(client, code)
-    dump = []
-    for (t,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall():
-        dump.append(str([tuple(r) for r in conn.execute(f"SELECT * FROM {t}")]))
-    blob = "\n".join(dump)
-    assert "998877" not in blob and "LEG998877" not in blob and day not in blob
-    h = conn.execute("SELECT card_hash FROM actual_donor_cards").fetchone()[0]
-    from app import cards
-    assert h == cards.card_hash("leg 998-877", day) and len(h) == 64
-    assert conn.execute("SELECT kind FROM donors_stats").fetchone()[0] == "actual"
-
-
 def test_fake_registrations_include_actual(admin, booth):
     admin.post("/api/admin/test/fake-registrations", json={"count": 500})
     s = admin.get("/api/stats/live").json()
-    assert s["total"] == 500 and 0 < s["total_actual"] < 500
+    assert s["total"] == 500 and 0 < s["total_actual"] < 500 and s["total_actual"] + s["total_potential"] == 500
 
 
 # --- terminy stanowisk (/graj bez stoiska) ---------------------------------------
@@ -482,9 +483,10 @@ def test_migration_adds_iteration3b_columns(tmp_path, monkeypatch):
         conn = db.connect()
         cols = lambda t: {r[1] for r in conn.execute(f"PRAGMA table_info({t})")}
         assert {"building", "date_from", "date_to"} <= cols("booths")
-        assert {"kind", "card_hash"} <= cols("registration_codes") and "kind" in cols("donors_stats")
-        assert conn.execute("SELECT kind, card_hash FROM registration_codes").fetchone()[:] == ("potential", None)
-        assert conn.execute("SELECT kind FROM donors_stats").fetchone()[0] == "potential"
+        assert "kind" in cols("registration_codes") and "card_hash" not in cols("registration_codes")
+        assert cols("donors_stats") == {"id", "faculty", "created_at", "device_hash"}
+        assert conn.execute("SELECT kind FROM registration_codes").fetchone()[0] == "potential"
+        assert conn.execute("SELECT faculty FROM donors_stats").fetchone()[0] == "W1"
         assert conn.execute("SELECT building, date_from FROM booths").fetchone()[:] == ("", None)
-        assert conn.execute("SELECT COUNT(*) FROM actual_donor_cards").fetchone()[0] == 0
+        assert conn.execute("SELECT name FROM sqlite_master WHERE name='actual_donor_cards'").fetchone() is None
         conn.close()

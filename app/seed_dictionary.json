@@ -61,35 +61,5 @@
       "code": "INNE",
       "name": "Inne"
     }
-  ],
-  "study_years": [
-    {
-      "value": 1,
-      "label": "1 rok"
-    },
-    {
-      "value": 2,
-      "label": "2 rok"
-    },
-    {
-      "value": 3,
-      "label": "3 rok"
-    },
-    {
-      "value": 4,
-      "label": "4 rok"
-    },
-    {
-      "value": 5,
-      "label": "5 rok"
-    },
-    {
-      "value": 6,
-      "label": "Szkoła Doktorska"
-    },
-    {
-      "value": 7,
-      "label": "Pracownik PWr"
-    }
   ]
 }

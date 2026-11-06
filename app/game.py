@@ -9,7 +9,7 @@ ALPHABET = "0123"
 LENGTH = 10
 # k zgodnych pozycji -> waga w procentach
 MATCH_WEIGHTS = {5: 25, 6: 35, 7: 25, 8: 10, 9: 5}
-WIN_ONE_IN = 300
+WIN_ONE_IN = 150
 
 
 def count_matches(a: str, b: str) -> int:
@@ -47,7 +47,7 @@ def make_match(target: str, k: int, rng: random.Random) -> str:
 
 
 def is_win(rng: random.Random | None = None) -> bool:
-    """Szansa 1/300 na trafienie całego genotypu."""
+    """Szansa 1/150 na trafienie całego genotypu."""
     if rng is not None:
         return rng.randrange(WIN_ONE_IN) == 0
     return secrets.randbelow(WIN_ONE_IN) == 0
