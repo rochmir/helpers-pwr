@@ -17,8 +17,6 @@ CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; tokeny losu
 CUP_CATEGORIES = ("nowy", "zarejestrowany", "faktyczny")
 QR_CATEGORIES = CUP_CATEGORIES + ("post",)
 CATEGORY_BONUS = {"nowy": 10, "zarejestrowany": 10, "faktyczny": 20, "post": 5}   # dodatkowe próby za kategorię
-CUP_QR_TTL_SECONDS = 60     # ważność kodu QR do głosu / postu
-CUP_QR_LEEWAY_SECONDS = 5   # tolerancja na różnice zegarów i czas skanowania
 CUP_CLAIM_MINUTES = 10      # tyle czasu po zeskanowaniu kodu na oddanie głosu (wybór wydziału i roku)
 STUDY_YEARS = [("I1", "I st., 1. rok"), ("I2", "I st., 2. rok"), ("I3", "I st., 3. rok"), ("I4", "I st., 4. rok"),
                ("II1", "II st., 1. rok"), ("II2", "II st., 2. rok"), ("dr", "Szkoła doktorska"),

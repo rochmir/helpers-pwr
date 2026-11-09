@@ -212,13 +212,13 @@ def test_cup_closes_at_deadline_boundary(admin, booth, client, other_clients, mo
     set_clock(monkeypatch, deadline - timedelta(seconds=30))
     token = cup_token_now(booth)
     set_clock(monkeypatch, deadline - timedelta(seconds=1))
-    assert v.get("/api/volunteer/cup-qr?category=nowy").status_code == 200
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 200
     assert claim(client, booth, "nowy", t=token).status_code == 200
     set_clock(monkeypatch, deadline)
     msg = "Zliczanie punktów zakończone 11 grudnia 2026 o 16:30."
-    r = v.get("/api/volunteer/cup-qr?category=nowy")
+    r = v.post("/api/volunteer/cup-qr", json={"category": "nowy"})
     assert r.status_code == 410 and r.json()["detail"] == msg
-    assert v.get("/api/volunteer/cup-qr?category=post").status_code == 200  # post nie zależy od terminu
+    assert v.post("/api/volunteer/cup-qr", json={"category": "post"}).status_code == 200  # post nie zależy od terminu
     r = client.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
     assert r.status_code == 410 and r.json()["detail"] == msg
 
@@ -234,7 +234,7 @@ def test_deadline_env_override_and_surfaces(admin, booth, client, monkeypatch, c
     assert claim(client, booth).status_code == 410
     assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 0  # nic nie zapisano
     msg = "Zliczanie punktów zakończone 2 stycznia 2020 o 09:05."
-    assert admin.get(f"/api/volunteer/cup-qr?category=nowy&booth_id={booth}").json()["detail"] == msg
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": booth}).json()["detail"] == msg
     me = admin.get("/api/volunteer/me?booth_id=c13").json()
     assert me["cup_closed"] is True and me["cup_closed_message"] == msg
     cup = client.get("/api/stats/cup").json()
@@ -501,11 +501,11 @@ def test_privacy_policy_matches_new_mechanics(client, conn):
     body = conn.execute("SELECT body_md FROM legal_documents WHERE slug='polityka-prywatnosci'").fetchone()[0]
     low = body.lower()
     for needed in ("wybrzeżu wyspiańskiego 27", "tokenem losu", "hp_game", "hp_consent", "hp_staff", "fingerprint",
-                   "facebook", "cloudflare", "ważnego 60 sekund", "rok studiów", "kategorię", "bez powiązania z sesją",
-                   "„post”", "kodów qr nie zapisujemy"):
+                   "facebook", "cloudflare", "jednorazowego kodu qr", "rok studiów", "kategorię", "bez powiązania z sesją",
+                   "„post”", "wyłącznie informację o wygenerowaniu"):
         assert needed in low, needed
     for gone in ("turnstile", "dodatkowe losy", "{{owner}}", "automatycznie usuwamy", "skrót hmac numeru",
-                 "skrót urządzenia", "jednorazowego kodu qr", "localstorage): token sesji"):
+                 "skrót urządzenia", "ważnego 60 sekund", "kodów qr nie zapisujemy", "localstorage): token sesji"):
         assert gone not in low, gone
 
 

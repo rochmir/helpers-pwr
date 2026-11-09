@@ -27,7 +27,7 @@
 <section class="hero hero-small">
   <div class="container">
     <h1>Głos w Pucharze Dawcy PWr</h1>
-    <p class="lead" id="lead-text">Kod QR dostajesz od wolontariusza po weryfikacji na stoisku. Wybierz wydział i rok studiów, a wydział dostanie punkt w Pucharze Dawcy PWr. Każda osoba oddaje jeden głos.</p>
+    <p class="lead" id="lead-text">Wybierz wydział i rok studiów, a Twój wydział dostanie punkt w Pucharze Dawcy PWr. Jeden głos na osobę.</p>
   </div>
 </section>
 <main class="section section-tight">
@@ -35,20 +35,34 @@
   <div class="narrow">
   <div id="state-msg" class="msg" hidden></div>
 
-  <form id="vote-form" class="card" novalidate hidden>
-    <p class="title3" id="vote-label"></p>
-    <label for="faculty">Wydział <span class="req">*</span></label>
-    <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
+  <form id="vote-form" class="card vote-card" novalidate hidden>
+    <p class="status-badge cat-badge" id="vote-label" data-kind="ok"><i class="ti ti-droplet" id="vote-icon" aria-hidden="true"></i> <span id="vote-label-text"></span></p>
 
-    <label for="study-year">Rok studiów <span class="req">*</span></label>
-    <select id="study-year" name="study_year" required><option value="">Wybierz rok studiów</option></select>
+    <fieldset class="pick">
+      <legend>Wydział <span class="req">*</span></legend>
+      <div class="chip-grid faculty-grid" id="faculty-grid" role="radiogroup" aria-label="Wydział"></div>
+      <p class="picked" id="faculty-picked" role="status">Dotknij swojego wydziału.</p>
+      <input type="hidden" id="faculty" name="faculty" value="">
+    </fieldset>
 
-    <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
-    <input type="text" id="donor-name" maxlength="80" autocomplete="off">
-    <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
+    <fieldset class="pick">
+      <legend>Rok studiów <span class="req">*</span></legend>
+      <div id="year-groups" class="year-groups"></div>
+      <input type="hidden" id="study-year" name="study_year" value="">
+    </fieldset>
 
-    <p class="consent-text" id="consent-text">Oddając głos, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu Dawcy PWr</a> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a>. Zapisujemy wydział, rok studiów, kategorię, stoisko i czas głosu, bez danych osobowych. Jeden głos na przeglądarkę pilnuje ciasteczko sesji.</p>
-    <button class="btn btn-primary btn-lg" type="submit" id="submit-btn"><i class="ti ti-circle-check" aria-hidden="true"></i> Oddaj głos</button>
+    <details class="more">
+      <summary><i class="ti ti-certificate" aria-hidden="true"></i> Imię na certyfikacie (opcjonalnie)</summary>
+      <label for="donor-name" class="sr-only">Imię i nazwisko na certyfikacie</label>
+      <input type="text" id="donor-name" maxlength="80" autocomplete="off" placeholder="Imię i nazwisko">
+      <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
+    </details>
+
+    <div class="consent-text" id="consent-text">Oddając głos, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu</a> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a>.
+      <details class="more inline-more"><summary>Szczegóły</summary>Zapisujemy wydział, rok studiów, kategorię, stoisko i czas głosu, bez danych osobowych. Jeden głos na przeglądarkę pilnuje ciasteczko sesji.</details></div>
+    <div class="sticky-submit">
+      <button class="btn btn-primary btn-lg btn-block" type="submit" id="submit-btn" disabled><i class="ti ti-circle-check" aria-hidden="true"></i> Oddaj głos</button>
+    </div>
   </form>
 
   <section id="post-done" class="card" hidden>

@@ -56,7 +56,7 @@ def reset_my_game(sid: str | None = Depends(auth.optional_game_session), _: dict
         conn.execute("DELETE FROM booth_plays WHERE session_id=?", (sid,))
         conn.execute("UPDATE game_sessions SET has_won=0, bonus_attempts=0, won_genotype=NULL, won_at=NULL, won_token=NULL, "
                      "cup_voted=0, cup_claim_booth=NULL, cup_claim_category=NULL, cup_claim_until=NULL, "
-                     "post_bonus_date=NULL WHERE session_id=?", (sid,))
+                     "cup_claim_code=NULL, post_bonus_date=NULL WHERE session_id=?", (sid,))
     return {"ok": True, "attempts_left": _attempts_left(conn, sid)}
 
 
@@ -90,7 +90,7 @@ def wipe(body: WipeIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Conn
     with db.tx(conn):
         # Dokumentów prawnych (legal_*) nie ruszamy: to treść regulaminów, nie dane testowe.
         for table in ("donors_stats", "registration_codes", "promo_codes", "game_sessions", "game_attempts", "booth_plays",
-                      "genotype_history", "wins"):
+                      "genotype_history", "wins", "cup_qr_codes"):
             conn.execute(f"DELETE FROM {table}")
         conn.execute("UPDATE booths SET matches_count=0, rolls_count=0")
         for r in conn.execute("SELECT id FROM booths").fetchall():

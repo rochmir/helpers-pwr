@@ -59,8 +59,8 @@ PREVIOUS_SEED_SHA256 = {
 }
 SEED_UPDATE_AUTHOR = "system"
 # Wersja treści seedu (pliki app/legal/*.md). Baza z niższą wartością w settings.legal_seed_version dostaje jednorazowo
-# treść z plików (v3: bez fingerprintingu, trzy kategorie głosu w Pucharze, kod QR ważny 60 s).
-LEGAL_SEED_VERSION = 3
+# treść z plików (v3: bez fingerprintingu, trzy kategorie głosu; v4: jednorazowy kod QR ważny do zeskanowania).
+LEGAL_SEED_VERSION = 4
 LEGAL_SEED_KEY = "legal_seed_version"
 
 
@@ -98,7 +98,7 @@ def seed(conn: sqlite3.Connection) -> None:
 
 
 def upgrade_seed_version(conn: sqlite3.Connection) -> None:
-    """Jednorazowe (idempotentne) podniesienie dokumentów bazowych do treści z plików seedu v3: stara treść trafia do
+    """Jednorazowe (idempotentne) podniesienie dokumentów bazowych do treści z plików seedu (aktualna wersja LEGAL_SEED_VERSION): stara treść trafia do
     ``legal_document_versions`` (autor „system”), wersja +1, ``updated_at`` teraz, więc symulator poprosi o ponowną zgodę.
     Po ustawieniu flagi późniejsze edycje z panelu admina nie są nadpisywane. Świeża baza: treść już zgodna, tylko flaga."""
     from . import db

@@ -1,7 +1,7 @@
 # helpersi-pwr
 
 Aplikacja na akcję rejestracji dawców szpiku (DKMS) na Politechnice Wrocławskiej: symulator HLA „HLA Match Maker – Sprawdź Parametry”
-i towarzyszący konkurs, dynamiczne kody QR (ważne 60 s) pokazywane przez wolontariuszy do głosu w Pucharze Dawcy PWr, statystyki, Puchar oraz wspólny panel personelu.
+i towarzyszący konkurs, jednorazowe kody QR (ważne do zeskanowania) pokazywane przez wolontariuszy do głosu w Pucharze Dawcy PWr, statystyki, Puchar oraz wspólny panel personelu.
 Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres docelowy: https://helpers-pwr.rupary.pl. Specyfikacja techniczna: `PLAN.md`.
 
 ## Prywatność
@@ -13,7 +13,7 @@ Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres doce
 - sesje symulatora (losowy identyfikator w ciasteczku `hp_game`, liczba prób na dzień i stanowisko w `booth_plays`, flaga „wygrał”, czas zgody, dodatkowe próby,
   flaga „oddał głos” `cup_voted`, tymczasowy claim kodu QR na 10 minut, data odebrania bonusu „post”, token i wzór własnego trafienia do odtworzenia certyfikatu),
 - głosy w Pucharze (`donors_stats`): wydział, kategoria (nowy / zarejestrowany / faktyczny), rok studiów, stoisko i znacznik czasu. **Bez powiązania z sesją**, bez urządzenia, bez danych osobowych,
-- kodów QR **nie zapisujemy**: token jest bezstanowy (podpisany HMAC identyfikator stoiska, kategoria i czas wygenerowania, ważny 60 s),
+- jednorazowe kody QR Pucharu zapisujemy w `cup_qr_codes` (losowy identyfikator, stoisko, kategoria, konto wolontariusza, czasy wygenerowania, zeskanowania i oddania głosu), bez powiązania z sesją studenta,
 - historyczne tabele `registration_codes` i `promo_codes` (z wersji sprzed v3) zostają w starszych bazach, ale nic w nie nie piszemy; czyści je tylko „wipe” w narzędziach testowych,
 - dokumenty prawne (treść, wersje), partnerów (nazwa i plik logo w `DATA_DIR/partners`).
 
@@ -73,8 +73,8 @@ Po `CONTEST_DEADLINE` ekran 10/10 pokazuje, że zgłoszenia są zamknięte.
 ## Puchar Dawcy PWr
 
 Wolontariusz po weryfikacji wybiera w panelu `/login` kategorię (nowy dawca, zarejestrowany dawca, faktyczny dawca lub „post / story”), klika „Pokaż kod QR” i pokazuje go osobie na jej telefonie.
-Kod (`/potwierdz?t=...`) odświeża się co 60 s i jest ważny 60 s (serwer dodaje 5 s tolerancji); można go zeskanować kilka razy w tym czasie. Po terminie: „Kod wygasł. Podejdź do stanowiska po nowy kod”.
-Skan = `POST /api/cup/claim` (sesja dostaje claim na 10 minut), potem `POST /api/cup/vote` z wydziałem i rokiem studiów. Jeden głos na sesję (drugi: 409). Kategoria „post” daje od razu +5 prób (raz dziennie), bez głosu.
+Kod (`/potwierdz?t=<id>`) jest **jednorazowy**, nie wygasa z czasem i nie odświeża się: działa do pierwszego zeskanowania. Nowy kod unieważnia poprzednie niezeskanowane kody tego wolontariusza na stoisku. Panel odpytuje `GET /api/volunteer/cup-qr/{id}` i po zeskanowaniu przyciemnia kod (stany: active, scanned, voted, granted, revoked); kolejny kod wymaga ponownego wyboru kategorii. Drugi skan: 410 „Kod został już wykorzystany”.
+Skan = `POST /api/cup/claim` (kod zużywany dopiero po sprawdzeniu sesji; sesja dostaje claim na 10 minut), potem `POST /api/cup/vote` z wydziałem i rokiem studiów. Jeden głos na sesję (drugi: 409). Kategoria „post” daje od razu +5 prób (raz dziennie), bez głosu.
 Publiczny ekran `/stoisko/{id}` (kod QR do gry) wymaga zalogowania personelu.
 Ranking `/puchar`: Wskaźnik Zaangażowania `WZ = LD / LS * 100` (LD = suma trzech równorzędnych kategorii, LS liczba studentów wpisana przez admina, `GET/PUT /api/admin/students`), remis decyduje LD.
 Wydziały bez LS oraz „Inne” są poza klasyfikacją. Po terminie Pucharu skan kodu głosu, głos i kod QR w panelu zwracają 410 (kategoria „post” działa dalej).

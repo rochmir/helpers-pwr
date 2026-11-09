@@ -96,11 +96,11 @@ def test_lecture_screen_admin_only(booth, other_clients):
 # --- brak wolontariusza -----------------------------------------------------------
 def test_cup_qr_and_delete_are_409_for_lecture_booth(admin, booth):
     for category in ("nowy", "zarejestrowany", "faktyczny", "post"):
-        r = admin.get(f"/api/volunteer/cup-qr?category={category}&booth_id=zajecia")
+        r = admin.post("/api/volunteer/cup-qr", json={"category": category, "booth_id": "zajecia"})
         assert r.status_code == 409, category
     assert admin.delete("/api/admin/booths/zajecia", headers=JSON).status_code == 409
     assert any(b["id"] == "zajecia" for b in admin.get("/api/admin/booths").json())
-    assert admin.get(f"/api/volunteer/cup-qr?category=nowy&booth_id={booth}").status_code == 200  # zwykłe stoisko działa
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": booth}).status_code == 200  # zwykłe stoisko działa
 
 
 # --- po zeskanowaniu --------------------------------------------------------------
@@ -165,9 +165,9 @@ def test_documents_contain_new_clauses(client):
     assert "Limit, o którym mowa w ust. 2, nie obejmuje prób dodatkowych." in k
     p = client.get("/dokumenty/regulamin-pucharu").text
     assert "Oddanie głosu uprawnia do dodatkowych prób w symulatorze HLA Match Maker" in p
-    assert "ważny przez 60 sekund" in p and "rok studiów" in p
+    assert "Kod jest ważny do momentu zeskanowania" in p and "rok studiów" in p
     pol = client.get("/dokumenty/polityka-prywatnosci").text
-    assert "hp_game" in pol and "fingerprint" in pol.lower() and "Kodów QR nie zapisujemy" in pol
+    assert "hp_game" in pol and "fingerprint" in pol.lower() and "wyłącznie informację o wygenerowaniu jednorazowego kodu QR" in pol
 
 
 # --- /statystyki: kategorie dawców ------------------------------------------------

@@ -308,9 +308,9 @@ def test_login_roles_and_me(admin, booth, other_clients):
 
 
 def test_admin_can_pick_booth_and_act_on_it(admin, booth):
-    assert admin.get("/api/volunteer/cup-qr?category=nowy").status_code == 400
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 400
     assert admin.post("/api/auth/booth", json={"booth_id": booth}).json()["booth"]["id"] == booth
-    assert admin.get("/api/volunteer/cup-qr?category=nowy").status_code == 200
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 200
     assert admin.get("/api/volunteer/me").json()["booth"]["id"] == booth
 
 

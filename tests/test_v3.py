@@ -11,7 +11,9 @@ from app import config, db, legal, qrtoken
 from test_api import claim, cup_token, enter, new_session, vote, vote_new, volunteer, voter
 from test_iter3 import roll, set_clock
 
-EXPIRED = "Kod wygasł. Podejdź do stanowiska po nowy kod"
+USED = "Kod został już wykorzystany. Podejdź do stanowiska po nowy kod."
+REVOKED = "Ten kod jest już nieaktualny. Podejdź do stanowiska po nowy kod."
+CLAIM_EXPIRED = "Czas na oddanie głosu minął. Podejdź do stanowiska po nowy kod."
 BAD = "Nieprawidłowy kod QR. Podejdź do stanowiska po nowy kod."
 
 
@@ -54,46 +56,128 @@ def test_cookie_only_and_flags(client, booth, monkeypatch):
     assert other.get("/api/game/me", headers={"X-Game-Token": token}).status_code == 401
 
 
-# --- token QR Pucharu ---------------------------------------------------------------
-def test_cup_token_window(admin, booth, monkeypatch):
-    t0 = config.now()
-    set_clock(monkeypatch, t0)
-    tok = cup_token(booth, "nowy")
-    for sec in (0, 60, 65):
-        set_clock(monkeypatch, t0 + timedelta(seconds=sec))
-        assert voter().post("/api/cup/claim", json={"t": tok}).status_code == 200, sec
-    set_clock(monkeypatch, t0 + timedelta(seconds=66))
-    r = voter().post("/api/cup/claim", json={"t": tok})
-    assert r.status_code == 410 and r.json()["detail"] == EXPIRED
+# --- jednorazowy kod QR Pucharu ------------------------------------------------------
+def issue(v, category="nowy", **extra):
+    r = v.post("/api/volunteer/cup-qr", json={"category": category, **extra})
+    assert r.status_code == 200, r.text
+    return r.json()
 
 
-def test_cup_token_tampered_and_foreign(admin, booth, monkeypatch):
-    tok = cup_token(booth, "nowy")
-    parts = tok.split(".")
-    for bad in (tok[:-1] + ("A" if tok[-1] != "A" else "B"), ".".join([parts[0], "f", *parts[2:]]), "x", "", "a.b.c.d.e",
-                qrtoken.current(booth), tok + "x" * 100):
+def status(v, code):
+    return v.get(f"/api/volunteer/cup-qr/{code}").json()["status"]
+
+
+def test_cup_code_single_use(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    code = issue(v, "zarejestrowany")
+    assert code["status"] == "active" and code["path"] == f"/potwierdz?t={code['id']}" and len(code["id"]) >= 20
+    first = voter()
+    assert claim(first, booth, t=code["id"]).status_code == 200
+    r = claim(voter(), booth, t=code["id"])
+    assert r.status_code == 410 and r.json()["detail"] == USED
+    assert status(v, code["id"]) == "scanned"
+    assert first.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "II1"}).status_code == 200
+    assert status(v, code["id"]) == "voted"
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM cup_qr_codes WHERE id=?", (code["id"],)).fetchone()
+    assert row["scanned_at"] and row["voted_at"] and row["issued_by"] == "tester" and row["booth_id"] == booth
+    assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 1
+    assert conn.execute("SELECT cup_claim_code FROM game_sessions WHERE cup_voted=1").fetchone()[0] is None
+    conn.close()
+
+
+def test_cup_code_new_code_revokes_old(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    old, scanned = issue(v, "nowy"), issue(v, "post")
+    assert claim(voter(), booth, t=scanned["id"]).status_code == 200      # zeskanowany przed nowym kodem
+    new = issue(v, "nowy")
+    assert status(v, old["id"]) == "revoked" and status(v, new["id"]) == "active"
+    assert status(v, scanned["id"]) == "granted"                           # zeskanowanych nie ruszamy
+    r = claim(voter(), booth, t=old["id"])
+    assert r.status_code == 410 and r.json()["detail"] == REVOKED
+    assert claim(voter(), booth, t=new["id"]).status_code == 200
+
+
+def test_cup_code_unknown_and_garbage(admin, booth):
+    for bad in ("x", "", "a.b.c.d", "A" * 150, qrtoken.current(booth)):
         r = voter().post("/api/cup/claim", json={"t": bad})
         assert r.status_code == 400 and r.json()["detail"] == BAD, bad
-    # przyszłość o więcej niż 5 s
-    real = config.now()
-    set_clock(monkeypatch, real + timedelta(seconds=30))
-    future = cup_token(booth, "nowy")
-    set_clock(monkeypatch, real)
-    assert voter().post("/api/cup/claim", json={"t": future}).status_code == 400
-    # nieznane stoisko i stoisko zajęć
-    assert voter().post("/api/cup/claim", json={"t": qrtoken.cup_issue("nope", "nowy")[0]}).status_code == 404
-    assert voter().post("/api/cup/claim", json={"t": qrtoken.cup_issue("zajecia", "nowy")[0]}).status_code == 404
 
 
-def test_cup_token_multi_use_two_sessions(admin, booth):
-    tok = cup_token(booth, "zarejestrowany")
-    for _ in range(2):
-        c = voter()
-        assert c.post("/api/cup/claim", json={"t": tok}).status_code == 200
-        assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I2"}).status_code == 200
-    conn = db.connect()
-    assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 2
-    conn.close()
+def test_cup_code_booth_gone_or_lecture(admin, booth):
+    assert claim(voter(), "nope", t=cup_token("nope", "nowy")).status_code == 404
+    assert claim(voter(), "zajecia", t=cup_token("zajecia", "nowy")).status_code == 404
+
+
+def test_cup_code_no_time_expiry(admin, booth, monkeypatch):
+    code = cup_token(booth, "nowy")
+    set_clock(monkeypatch, config.now() + timedelta(hours=2))
+    assert claim(voter(), booth, t=code).status_code == 200
+
+
+def test_cup_code_not_burned_by_session_rejection(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    c = voter()
+    assert vote(c, booth).status_code == 200                              # sesja już głosowała
+    code = issue(v, "faktyczny")["id"]
+    r = claim(c, booth, t=code)
+    assert r.status_code == 409
+    assert status(v, code) == "active"                                    # kod nie przepadł
+    assert claim(voter(), booth, t=code).status_code == 200
+    # post: drugi raz tego samego dnia
+    p = voter()
+    assert claim(p, booth, "post").status_code == 200
+    code = issue(v, "post")["id"]
+    assert claim(p, booth, t=code).status_code == 409 and status(v, code) == "active"
+    assert claim(voter(), booth, t=code).status_code == 200 and status(v, code) == "granted"
+
+
+def test_cup_code_status_transitions_and_auth(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    code = issue(v, "nowy")["id"]
+    assert status(v, code) == "active"
+    c = voter()
+    claim(c, booth, t=code)
+    assert status(v, code) == "scanned"
+    c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    d = v.get(f"/api/volunteer/cup-qr/{code}").json()
+    assert d["status"] == "voted" and d["category"] == "nowy" and d["scanned_at"] and d["voted_at"]
+    # dostęp: anonim 401, wolontariusz z innego stoiska 404, nieznany kod 404, admin widzi wszystko
+    admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
+    admin.post("/api/admin/volunteers", json={"login": "drugi", "password": "tajne-haslo2"})
+    other = other_clients()
+    other.post("/api/auth/login", json={"login": "drugi", "password": "tajne-haslo2"})
+    other.post("/api/auth/booth", json={"booth_id": "w4"})
+    assert other_clients().get(f"/api/volunteer/cup-qr/{code}").status_code == 401
+    assert other.get(f"/api/volunteer/cup-qr/{code}").status_code == 404
+    assert v.get("/api/volunteer/cup-qr/nieistnieje").status_code == 404
+    assert admin.get(f"/api/volunteer/cup-qr/{code}").status_code == 200
+
+
+def test_cup_code_post_granted(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    code = issue(v, "post")["id"]
+    d = claim(voter(), booth, t=code).json()
+    assert d["kind"] == "post" and d["bonus_attempts_granted"] == 5
+    assert status(v, code) == "granted"
+
+
+def test_claim_window_message_after_11_min(admin, booth, monkeypatch):
+    c = voter()
+    assert claim(c, booth).status_code == 200
+    set_clock(monkeypatch, config.now() + timedelta(minutes=11))
+    r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    assert r.status_code == 403 and r.json()["detail"] == CLAIM_EXPIRED
+
+
+def test_wipe_and_delete_booth_remove_codes(admin, booth, conn):
+    cup_token(booth, "nowy")
+    assert admin.delete(f"/api/admin/booths/{booth}", headers={"Content-Type": "application/json"}).status_code == 200
+    assert conn.execute("SELECT COUNT(*) FROM cup_qr_codes").fetchone()[0] == 0
+    admin.post("/api/admin/booths", json={"id": "c13", "name": "x"})
+    cup_token("c13", "nowy")
+    assert admin.post("/api/admin/test/wipe", json={"confirm": "USUŃ"}).status_code == 200
+    assert conn.execute("SELECT COUNT(*) FROM cup_qr_codes").fetchone()[0] == 0
 
 
 def test_vote_bonuses_and_errors(admin, booth, monkeypatch):
@@ -109,7 +193,7 @@ def test_vote_bonuses_and_errors(admin, booth, monkeypatch):
     real = config.now()
     set_clock(monkeypatch, real + timedelta(minutes=config.CUP_CLAIM_MINUTES + 1))
     r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
-    assert r.status_code == 403 and r.json()["detail"] == EXPIRED
+    assert r.status_code == 403 and r.json()["detail"] == CLAIM_EXPIRED
     set_clock(monkeypatch, real)
     c = voter()
     claim(c, booth)
@@ -124,7 +208,7 @@ def test_cup_deadline_blocks_vote_not_post(admin, booth, monkeypatch):
     monkeypatch.setattr(config, "cup_closed", lambda: True)
     assert claim(voter(), booth, "nowy").status_code == 410
     assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 410
-    assert admin.get(f"/api/volunteer/cup-qr?category=faktyczny&booth_id={booth}").status_code == 410
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "faktyczny", "booth_id": booth}).status_code == 410
     assert claim(voter(), booth, "post").status_code == 200
 
 
@@ -145,17 +229,19 @@ def test_post_bonus_once_per_day(admin, booth, monkeypatch, conn):
 # --- kod QR w panelu wolontariusza -------------------------------------------------
 def test_cup_qr_endpoint(admin, booth, other_clients):
     anon = other_clients()
-    assert anon.get("/api/volunteer/cup-qr?category=nowy").status_code == 401
-    assert admin.get("/api/volunteer/cup-qr?category=nowy").status_code == 400
+    assert anon.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 401
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 400
     v = volunteer(other_clients)
-    assert v.get("/api/volunteer/cup-qr?category=zly").status_code == 422
-    assert v.get("/api/volunteer/cup-qr?category=nowy&booth_id=zzz").status_code == 403
-    r = v.get("/api/volunteer/cup-qr?category=faktyczny").json()
-    assert r["valid_seconds"] == 60 and r["booth"]["id"] == booth and r["expires_at"] - r["issued_at"] == 60
-    assert r["path"].startswith("/potwierdz?t=")
-    assert qrtoken.cup_verify(r["path"].split("t=")[1]) == (booth, "faktyczny")
-    assert admin.get("/api/volunteer/cup-qr?category=post&booth_id=zajecia").status_code == 409
-    assert admin.get("/api/volunteer/cup-qr?category=nowy&booth_id=nope").status_code == 404
+    assert v.get("/api/volunteer/cup-qr?category=nowy").status_code == 405      # stary GET usunięty
+    assert v.post("/api/volunteer/cup-qr", json={"category": "zly"}).status_code == 422
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": "zzz"}).status_code == 403
+    r = v.post("/api/volunteer/cup-qr", json={"category": "faktyczny"}).json()
+    assert r["booth"]["id"] == booth and r["category"] == "faktyczny" and r["status"] == "active"
+    assert "expires_at" not in r and r["path"].startswith("/potwierdz?t=")
+    adm = admin.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": booth}).json()
+    assert db.connect().execute("SELECT issued_by FROM cup_qr_codes WHERE id=?", (adm["id"],)).fetchone()[0] == "admin"
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "post", "booth_id": "zajecia"}).status_code == 409
+    assert admin.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": "nope"}).status_code == 404
 
 
 # --- ekran stoiska tylko dla personelu ---------------------------------------------
@@ -239,7 +325,7 @@ def test_deadlines_in_admin_settings(admin, booth, client, other_clients):
 def test_legal_upgrade_v3(client, conn):
     slug = "regulamin-pucharu"
     row = conn.execute("SELECT * FROM legal_documents WHERE slug=?", (slug,)).fetchone()
-    assert row["version"] == 1 and db.get_setting(conn, "legal_seed_version") == "3"   # świeża baza: bez podbicia
+    assert row["version"] == 1 and db.get_setting(conn, "legal_seed_version") == "4"   # świeża baza: bez podbicia
     conn.execute("UPDATE legal_documents SET body_md='Stara treść v2.\n', title='Stary' WHERE slug=?", (slug,))
     conn.execute("DELETE FROM settings WHERE key='legal_seed_version'")
     legal.seed(conn)
@@ -247,7 +333,7 @@ def test_legal_upgrade_v3(client, conn):
     assert new["version"] == 2 and new["body_md"] == row["body_md"] and new["updated_at"] >= row["updated_at"]
     hist = conn.execute("SELECT * FROM legal_document_versions WHERE slug=?", (slug,)).fetchall()
     assert [(h["version"], h["saved_by"], h["body_md"]) for h in hist] == [(1, "system", "Stara treść v2.\n")]
-    assert db.get_setting(conn, "legal_seed_version") == "3"
+    assert db.get_setting(conn, "legal_seed_version") == "4"
     legal.seed(conn)   # drugi raz nic nie zmienia
     assert tuple(conn.execute("SELECT * FROM legal_documents WHERE slug=?", (slug,)).fetchone()) == tuple(new)
     # późniejsza edycja admina nie jest nadpisywana
@@ -307,6 +393,8 @@ def test_migration_from_pre_v3(tmp_path, monkeypatch):
         assert [tuple(r) for r in conn.execute("SELECT name, sort_order FROM partners ORDER BY sort_order")] == [("A", 1), ("B", 2)]
         assert conn.execute("SELECT bonus_attempts FROM game_sessions").fetchone()[0] == 7
         assert conn.execute("SELECT COUNT(*) FROM booth_plays").fetchone()[0] == 0
+        assert cols("cup_qr_codes") >= {"id", "booth_id", "category", "issued_by", "created_at", "scanned_at", "voted_at", "revoked_at"}
+        assert "cup_claim_code" in cols("game_sessions")
         conn.close()
 
 

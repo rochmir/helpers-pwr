@@ -307,3 +307,21 @@ export function categorySplit(r) {
   });
   return h('span', {}, ...parts);
 }
+
+/** Tabele `.table`: każda komórka dostaje data-label z nagłówka kolumny (na telefonie wiersze są kartami). */
+function labelTable(table) {
+  const heads = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+  for (const tr of table.querySelectorAll('tbody tr')) {
+    [...tr.children].forEach((td, i) => {
+      if (td.tagName === 'TD' && heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i];
+    });
+  }
+}
+function watchTables() {
+  for (const table of document.querySelectorAll('table.table')) {
+    labelTable(table);
+    new MutationObserver(() => labelTable(table)).observe(table, { childList: true, subtree: true });
+  }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchTables);
+else watchTables();

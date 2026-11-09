@@ -154,6 +154,7 @@ def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sql
         if used:
             raise HTTPException(409, "Stoisko ma zapisane głosy w Pucharze, więc nie można go usunąć.")
         conn.execute("DELETE FROM genotype_history WHERE booth_id=?", (booth_id,))
+        conn.execute("DELETE FROM cup_qr_codes WHERE booth_id=?", (booth_id,))
         conn.execute("DELETE FROM booths WHERE id=?", (booth_id,))
     return {"ok": True}
 

@@ -1,27 +1,49 @@
-// Czesc panelu dla wolontariusza (liczniki stoiska i dynamiczny kod QR do Pucharu). Logowanie i wybor stoiska robi login.js.
+// Czesc panelu dla wolontariusza (liczniki stoiska i jednorazowy kod QR do Pucharu). Logowanie i wybor stoiska robi login.js.
 import { api, $, setMessage, qrUrl } from './common.js';
 
 const msg = $('#panel-msg');
-const CAT_LABEL = {
-  nowy: 'Nowy dawca',
-  zarejestrowany: 'Zarejestrowany dawca',
-  faktyczny: 'Faktyczny dawca',
-  post: 'Post / story (+5 prób)',
+const CATS = {
+  nowy: { label: 'Nowy dawca', icon: 'ti-user-plus' },
+  zarejestrowany: { label: 'Zarejestrowany dawca', icon: 'ti-id-badge' },
+  faktyczny: { label: 'Faktyczny dawca', icon: 'ti-droplet' },
+  post: { label: 'Post / story (+5 prób)', icon: 'ti-brand-instagram' },
 };
+// Stan kodu -> wyglad plakietki, naklejki na kodzie i to, czy kod jest przyciemniony.
+const STATES = {
+  active: { badge: 'Czeka na zeskanowanie', icon: 'ti-clock', kind: 'wait', dim: false },
+  scanned: { badge: 'Zeskanowano, student wybiera wydział', icon: 'ti-scan', kind: 'wait', dim: true,
+    overlay: 'Zeskanowano: student wybiera wydział' },
+  voted: { badge: 'Zużyty, głos oddany', icon: 'ti-circle-check', kind: 'ok', dim: true, overlay: 'Zużyty: głos oddany' },
+  granted: { badge: 'Zużyty, przyznano +5 prób', icon: 'ti-circle-check', kind: 'ok', dim: true,
+    overlay: 'Zużyty: przyznano +5 prób' },
+  revoked: { badge: 'Nieaktualny', icon: 'ti-ban', kind: 'off', dim: true, overlay: 'Nieaktualny' },
+};
+const POLL_MS = 2000;
+const POLL_MAX_MS = 15 * 60 * 1000; // tyle czekamy na głos po zeskanowaniu
+const FINAL = new Set(['voted', 'granted', 'revoked']);
+
 let refreshTimer = null;
-let qrTimer = null; // następne pobranie kodu
-let tickTimer = null; // odliczanie "Kod zmieni się za N s"
-let qrVisible = false;
-let qrExpiresAt = 0; // ms
+let pollTimer = null;
+let code = null; // { id, status, scannedAt }
 let ctx = { role: 'volunteer', boothId: '' };
 let wired = false;
 let cupClosed = false;
 
+const radios = () => [...document.querySelectorAll('input[name="qr-cat"]')];
 const meUrl = () => '/api/volunteer/me' + (ctx.role === 'admin' && ctx.boothId ? '?booth_id=' + encodeURIComponent(ctx.boothId) : '');
 const selectedCategory = () => {
   const r = document.querySelector('input[name="qr-cat"]:checked');
-  return r ? r.value : 'nowy';
+  return r ? r.value : '';
 };
+
+function syncShowButton() {
+  $('#qr-show').disabled = !selectedCategory();
+}
+
+function clearSelection() {
+  for (const r of radios()) r.checked = false;
+  syncShowButton();
+}
 
 async function refresh() {
   clearTimeout(refreshTimer);
@@ -50,78 +72,112 @@ function applyClosed(closed, text) {
   const note = $('#cup-closed-note');
   note.hidden = !closed;
   note.textContent = closed ? text : '';
-  for (const r of document.querySelectorAll('input[name="qr-cat"]')) {
-    if (r.value !== 'post') r.disabled = closed;
+  for (const r of radios()) {
+    if (r.value !== 'post') {
+      r.disabled = closed;
+      if (closed && r.checked) r.checked = false;
+    }
   }
-  if (closed && selectedCategory() !== 'post') {
-    const post = document.querySelector('input[name="qr-cat"][value="post"]');
-    if (post) post.checked = true;
-    if (qrVisible) fetchQr();
-  }
+  syncShowButton();
 }
 
-function stopQrTimers() {
-  clearTimeout(qrTimer);
-  clearInterval(tickTimer);
-  qrTimer = null;
-  tickTimer = null;
+function stopPoll() {
+  clearTimeout(pollTimer);
+  pollTimer = null;
 }
 
 function hideQr() {
-  qrVisible = false;
-  stopQrTimers();
+  stopPoll();
+  code = null;
   $('#qr-box').hidden = true;
-  $('#qr-hide').hidden = true;
-  $('#qr-show').hidden = false;
   $('#cup-qr').removeAttribute('src');
 }
 
-function tick() {
-  const left = Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000));
-  $('#qr-left').textContent = 'Kod zmieni się za ' + left + ' s';
+function paint(status) {
+  const s = STATES[status] || STATES.active;
+  $('#qr-stage').dataset.state = status;
+  const overlay = $('#qr-overlay');
+  overlay.hidden = !s.overlay;
+  overlay.dataset.kind = s.kind;
+  $('#qr-overlay-text').textContent = s.overlay || '';
+  $('#qr-overlay-icon').className = 'ti ' + s.icon;
+  const badge = $('#qr-status');
+  badge.dataset.kind = s.kind;
+  badge.querySelector('i').className = 'ti ' + s.icon;
+  badge.querySelector('span').textContent = s.badge;
+  $('#qr-hint').hidden = status !== 'active';
 }
 
-/** Pobiera świeży kod dla wybranej kategorii i planuje następne pobranie po ``valid_seconds``. */
-async function fetchQr() {
-  stopQrTimers();
-  if (!qrVisible || !ctx.boothId) return;
-  const category = selectedCategory();
+/** Kod zeskanowany: wolontariusz ma wybrać kategorię od nowa, żeby dostać kolejny kod. */
+function onConsumed() {
+  clearSelection();
+  refresh();
+}
+
+function schedulePoll() {
+  stopPoll();
+  if (!code || FINAL.has(code.status) || document.hidden) return;
+  pollTimer = setTimeout(poll, POLL_MS);
+}
+
+async function poll() {
+  const mine = code;
+  if (!mine) return;
   try {
-    const q = '?category=' + encodeURIComponent(category) + (ctx.role === 'admin' ? '&booth_id=' + encodeURIComponent(ctx.boothId) : '');
-    const r = await api('GET', '/api/volunteer/cup-qr' + q);
-    if (!qrVisible || category !== selectedCategory()) return; // w międzyczasie zmieniono kategorię albo ukryto kod
+    const r = await api('GET', '/api/volunteer/cup-qr/' + encodeURIComponent(mine.id));
+    if (code !== mine) return; // w międzyczasie wystawiono inny kod albo ukryto ten
+    if (r.status !== mine.status) {
+      const wasActive = mine.status === 'active';
+      mine.status = r.status;
+      if (r.status === 'scanned') mine.scannedAt = Date.now();
+      paint(r.status);
+      if (wasActive && r.status !== 'revoked') onConsumed();
+      else if (FINAL.has(r.status)) refresh();
+    }
+    if (mine.status === 'scanned' && Date.now() - mine.scannedAt > POLL_MAX_MS) return;
+  } catch (e) {
+    if (e.status === 401) { location.reload(); return; }
+    if (e.status === 404) { hideQr(); return; }
+  }
+  schedulePoll();
+}
+
+/** Wystawia nowy jednorazowy kod dla wybranej kategorii (poprzedni niezeskanowany kod serwer unieważnia). */
+async function showCode() {
+  const category = selectedCategory();
+  if (!category || !ctx.boothId) return;
+  const btn = $('#qr-show');
+  btn.disabled = true;
+  try {
+    const r = await api('POST', '/api/volunteer/cup-qr', ctx.role === 'admin' ? { category, booth_id: ctx.boothId } : { category });
+    stopPoll();
     setMessage(msg, '');
-    $('#qr-cat-label').textContent = CAT_LABEL[r.category] || r.category;
+    code = { id: r.id, status: 'active', scannedAt: 0 };
+    $('#qr-cat-label').textContent = CATS[r.category] ? CATS[r.category].label : r.category;
+    $('#qr-cat-icon').className = 'ti ' + (CATS[r.category] ? CATS[r.category].icon : 'ti-qrcode');
     $('#cup-qr').src = qrUrl(r.path);
+    paint('active');
     $('#qr-box').hidden = false;
-    qrExpiresAt = Date.now() + r.valid_seconds * 1000;
-    tick();
-    tickTimer = setInterval(tick, 500);
-    qrTimer = setTimeout(fetchQr, r.valid_seconds * 1000);
+    $('#qr-box').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    schedulePoll();
   } catch (e) {
     if (e.status === 401) { location.reload(); return; }
     setMessage(msg, e.detail || e.message, 'error');
-    if (e.status === 410) { $('#qr-box').hidden = true; return; } // termin Pucharu minął
-    qrTimer = setTimeout(fetchQr, 5000);
+  } finally {
+    syncShowButton();
   }
 }
 
 function wire() {
   if (wired) return;
   wired = true;
-  $('#qr-show').addEventListener('click', () => {
-    qrVisible = true;
-    $('#qr-show').hidden = true;
-    $('#qr-hide').hidden = false;
-    fetchQr();
-  });
+  $('#qr-show').addEventListener('click', showCode);
   $('#qr-hide').addEventListener('click', hideQr);
-  for (const r of document.querySelectorAll('input[name="qr-cat"]')) {
-    r.addEventListener('change', () => { if (qrVisible) fetchQr(); });
-  }
-  // Ekran telefonu wraca z uśpienia: stary kod mógł już wygasnąć, więc odświeżamy od razu.
+  for (const r of radios()) r.addEventListener('change', syncShowButton);
+  // Karta w tle nie odpytuje serwera; po powrocie sprawdzamy stan od razu.
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && qrVisible) fetchQr();
+    if (document.hidden) stopPoll();
+    else if (code && !FINAL.has(code.status)) poll();
   });
 }
 
@@ -129,7 +185,7 @@ function wire() {
 export function initVolunteer(me) {
   wire();
   const boothId = me && me.booth ? me.booth.id : '';
-  if (boothId !== ctx.boothId) hideQr();
+  if (boothId !== ctx.boothId) { hideQr(); clearSelection(); }
   ctx = { role: me ? me.role : 'volunteer', boothId };
   if (!boothId) {
     clearTimeout(refreshTimer);

@@ -1,11 +1,13 @@
-"""Wolontariusz: liczniki stoiska i dynamiczny kod QR do głosu w Pucharze (4 kategorie, ważny 60 s)."""
+"""Wolontariusz: liczniki stoiska i jednorazowy kod QR do głosu w Pucharze (4 kategorie, ważny do zeskanowania)."""
 from __future__ import annotations
 
+import secrets
 import sqlite3
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
-from .. import auth, config, db, qrtoken
+from .. import auth, config, db
 
 router = APIRouter(prefix="/api/volunteer")
 
@@ -34,21 +36,52 @@ def me(booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer
             "matches_count": booth["matches_count"], "rolls_count": booth["rolls_count"], **_cup_info()}
 
 
-@router.get("/cup-qr")
-def cup_qr(category: str, booth_id: str | None = None, staff: dict = Depends(auth.require_volunteer),
-           conn: sqlite3.Connection = Depends(db.get_db)):
-    """Świeży kod QR (token ważny 60 s) dla wybranej kategorii; wolontariusz pokazuje go dawcy na jego telefonie."""
-    if category not in config.QR_CATEGORIES:
+class CupQrIn(BaseModel):
+    category: str = Field(max_length=20)
+    booth_id: str | None = Field(None, max_length=40)
+
+
+def code_status(row: sqlite3.Row) -> str:
+    """active | scanned (zeskanowany, głos jeszcze nie oddany) | voted | granted (post) | revoked."""
+    if row["voted_at"]:
+        return "granted" if row["category"] == "post" else "voted"
+    if row["scanned_at"]:
+        return "scanned"
+    if row["revoked_at"]:
+        return "revoked"
+    return "active"
+
+
+@router.post("/cup-qr")
+def cup_qr(body: CupQrIn, staff: dict = Depends(auth.require_volunteer), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Nowy jednorazowy kod QR (bez daty ważności) dla wybranej kategorii. Poprzednie niezeskanowane kody tego
+    wolontariusza na tym stoisku są unieważniane. Kod traci ważność dopiero po zeskanowaniu."""
+    if body.category not in config.QR_CATEGORIES:
         raise HTTPException(422, "Niepoprawna kategoria.")
-    bid = auth.resolve_booth(staff, booth_id)
+    bid = auth.resolve_booth(staff, body.booth_id)
     booth = conn.execute("SELECT id, name, is_lecture FROM booths WHERE id=?", (bid,)).fetchone()
     if booth is None:
         raise HTTPException(404, "Nie ma takiego stoiska.")
     if booth["is_lecture"]:
         raise HTTPException(409, "Na stanowisku Zajęcia nie ma wolontariusza, więc nie wystawia się tam kodów QR.")
-    if category != "post" and config.cup_closed():
+    if body.category != "post" and config.cup_closed():
         raise HTTPException(410, config.cup_closed_message())
-    token, iat = qrtoken.cup_issue(booth["id"], category)
-    return {"category": category, "path": f"/potwierdz?t={token}", "issued_at": iat,
-            "expires_at": iat + config.CUP_QR_TTL_SECONDS, "valid_seconds": config.CUP_QR_TTL_SECONDS,
-            "booth": {"id": booth["id"], "name": booth["name"]}}
+    code, now = secrets.token_urlsafe(16), config.now_iso()
+    with db.tx(conn):
+        conn.execute("UPDATE cup_qr_codes SET revoked_at=? WHERE issued_by=? AND booth_id=? AND scanned_at IS NULL "
+                     "AND revoked_at IS NULL", (now, staff["login"], booth["id"]))
+        conn.execute("INSERT INTO cup_qr_codes(id,booth_id,category,issued_by,created_at) VALUES(?,?,?,?,?)",
+                     (code, booth["id"], body.category, staff["login"], now))
+    return {"id": code, "path": f"/potwierdz?t={code}", "category": body.category, "created_at": now,
+            "status": "active", "booth": {"id": booth["id"], "name": booth["name"]}}
+
+
+@router.get("/cup-qr/{code_id}")
+def cup_qr_status(code_id: str, staff: dict = Depends(auth.require_volunteer),
+                  conn: sqlite3.Connection = Depends(db.get_db)):
+    """Stan kodu do odpytywania przez panel wolontariusza (tylko kody ze stoiska, którym wolno zarządzać)."""
+    row = conn.execute("SELECT * FROM cup_qr_codes WHERE id=?", (code_id,)).fetchone()
+    if row is None or (staff["role"] == "volunteer" and row["booth_id"] != staff["booth"]):
+        raise HTTPException(404, "Nie ma takiego kodu.")
+    return {"id": row["id"], "category": row["category"], "status": code_status(row), "created_at": row["created_at"],
+            "scanned_at": row["scanned_at"], "voted_at": row["voted_at"]}

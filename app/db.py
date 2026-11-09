@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS game_sessions(
   bonus_attempts INTEGER NOT NULL DEFAULT 0, pass_booth TEXT NULL, pass_until TEXT NULL,
   won_genotype TEXT NULL, won_at TEXT NULL, won_token TEXT NULL,
   consent_at TEXT NULL, cup_voted INTEGER NOT NULL DEFAULT 0, cup_claim_booth TEXT NULL,
-  cup_claim_category TEXT NULL, cup_claim_until TEXT NULL, post_bonus_date TEXT NULL);
+  cup_claim_category TEXT NULL, cup_claim_until TEXT NULL, post_bonus_date TEXT NULL,
+  cup_claim_code TEXT NULL);
 CREATE TABLE IF NOT EXISTS game_attempts(
   session_id TEXT, date TEXT, attempts INTEGER NOT NULL DEFAULT 0, best INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(session_id, date));
@@ -53,6 +54,12 @@ CREATE TABLE IF NOT EXISTS donors_stats(
   id INTEGER PRIMARY KEY AUTOINCREMENT, faculty TEXT NOT NULL, created_at TEXT NOT NULL,
   category TEXT NOT NULL DEFAULT 'nowy' CHECK(category IN ('nowy','zarejestrowany','faktyczny')),
   study_year TEXT NULL, booth_id TEXT NULL);
+-- Jednorazowy kod QR wolontariusza (Puchar/post): bez daty ważności, traci ważność po zeskanowaniu albo unieważnieniu.
+CREATE TABLE IF NOT EXISTS cup_qr_codes(
+  id TEXT PRIMARY KEY, booth_id TEXT NOT NULL,
+  category TEXT NOT NULL CHECK(category IN ('nowy','zarejestrowany','faktyczny','post')),
+  issued_by TEXT NULL, created_at TEXT NOT NULL, scanned_at TEXT NULL, voted_at TEXT NULL, revoked_at TEXT NULL);
+CREATE INDEX IF NOT EXISTS idx_cup_qr_issuer ON cup_qr_codes(issued_by, booth_id);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS volunteers(
   login TEXT PRIMARY KEY, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -163,6 +170,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _migrate_cup_contest(conn)
     _backfill_wins(conn)
     _migrate_v3(conn)
+    _migrate_v3b(conn)
     row = conn.execute("SELECT value FROM settings WHERE key='dictionary'").fetchone()
     if row:
         d = json.loads(row["value"])
@@ -247,6 +255,15 @@ def _migrate_v3(conn: sqlite3.Connection) -> None:
     conn.execute("DELETE FROM settings WHERE key IN ('device_salt','device_tolerance')")
     if _add_column(conn, "partners", "sort_order", "INTEGER NOT NULL DEFAULT 0"):
         conn.execute("UPDATE partners SET sort_order=id")
+
+
+def _migrate_v3b(conn: sqlite3.Connection) -> None:
+    """v3b: jednorazowe kody QR Pucharu zapisywane w ``cup_qr_codes``; powiązanie kodu z claimem w sesji. Idempotentna."""
+    conn.execute("CREATE TABLE IF NOT EXISTS cup_qr_codes(id TEXT PRIMARY KEY, booth_id TEXT NOT NULL, "
+                 "category TEXT NOT NULL CHECK(category IN ('nowy','zarejestrowany','faktyczny','post')), "
+                 "issued_by TEXT NULL, created_at TEXT NOT NULL, scanned_at TEXT NULL, voted_at TEXT NULL, revoked_at TEXT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cup_qr_issuer ON cup_qr_codes(issued_by, booth_id)")
+    _add_column(conn, "game_sessions", "cup_claim_code", "TEXT NULL")
 
 
 def _backfill_wins(conn: sqlite3.Connection) -> None:

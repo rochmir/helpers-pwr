@@ -1,9 +1,18 @@
-import { api, $, h, setMessage, facultyLabel } from './common.js';
+import { api, $, h, setMessage } from './common.js';
 import { renderDonorCert, showDownload, makeGraphic } from './cert.js';
 
 const msg = $('#state-msg');
 const form = $('#vote-form');
 const LABELS = { nowy: 'Nowy dawca', zarejestrowany: 'Zarejestrowany dawca', faktyczny: 'Faktyczny dawca' };
+const ICONS = { nowy: 'ti-user-plus', zarejestrowany: 'ti-id-badge', faktyczny: 'ti-droplet' };
+// Kody lat studiów z /api/dictionary/faculties -> układ przycisków (stopień: numery lat; reszta: pojedyncze przyciski).
+const YEAR_LAYOUT = [
+  { title: 'I st.', items: [['I1', '1'], ['I2', '2'], ['I3', '3'], ['I4', '4']] },
+  { title: 'II st.', items: [['II1', '1'], ['II2', '2']] },
+  { title: '', items: [['dr', 'Doktorat'], ['inny', 'Inne']] },
+];
+const submitBtn = $('#submit-btn');
+const picks = { faculty: '', year: '' };
 let busy = false;
 let claimInfo = null; // { category, booth_name }
 
@@ -20,7 +29,8 @@ function showState(text, kind = 'info') {
 function showForm(info) {
   claimInfo = info;
   setMessage(msg, '');
-  $('#vote-label').textContent = (LABELS[info.category] || info.category) + (info.booth_name ? ', stoisko: ' + info.booth_name : '');
+  $('#vote-label-text').textContent = (LABELS[info.category] || info.category) + (info.booth_name ? ', stoisko: ' + info.booth_name : '');
+  $('#vote-icon').className = 'ti ' + (ICONS[info.category] || 'ti-droplet');
   showOnly('vote-form');
 }
 
@@ -32,6 +42,54 @@ function showPost(r) {
   showOnly('post-done');
 }
 
+function syncSubmit() {
+  submitBtn.disabled = busy || !(picks.faculty && picks.year);
+}
+
+/** Zaznacza jeden przycisk w grupie (aria-checked) i ustawia ukryte pole formularza. */
+function choose(group, btn, key, value, hidden) {
+  for (const b of group.querySelectorAll('[role="radio"]')) {
+    b.setAttribute('aria-checked', String(b === btn));
+    b.classList.toggle('on', b === btn);
+  }
+  picks[key] = value;
+  hidden.value = value;
+  syncSubmit();
+}
+
+function buildFaculties(faculties) {
+  const grid = $('#faculty-grid');
+  const picked = $('#faculty-picked');
+  for (const f of faculties) {
+    const other = f.code === 'INNE';
+    const btn = h('button', { type: 'button', class: 'chip' + (other ? ' chip-other' : ''), role: 'radio', 'aria-checked': 'false',
+      title: f.name },
+      h('b', {}, other ? 'Inne' : f.code), other ? '' : h('small', {}, f.name));
+    btn.addEventListener('click', () => {
+      choose(grid, btn, 'faculty', f.code, $('#faculty'));
+      picked.textContent = 'Wybrano: ' + (other ? f.name : f.code + ': ' + f.name);
+    });
+    grid.append(btn);
+  }
+}
+
+function buildYears(years) {
+  const known = new Set(years.map((y) => y.code));
+  const box = $('#year-groups');
+  for (const g of YEAR_LAYOUT) {
+    const items = g.items.filter(([code]) => known.has(code));
+    if (!items.length) continue;
+    const row = h('div', { class: 'chip-grid year-row', role: 'radiogroup', 'aria-label': g.title || 'Rok studiów' });
+    if (g.title) row.append(h('span', { class: 'year-title' }, g.title));
+    for (const [code, text] of items) {
+      const btn = h('button', { type: 'button', class: 'chip chip-year', role: 'radio', 'aria-checked': 'false' }, text);
+      btn.addEventListener('click', () => choose(box, btn, 'year', code, $('#study-year')));
+      row.append(btn);
+    }
+    box.append(row);
+  }
+}
+
 async function init() {
   let dict = { faculties: [], study_years: [] };
   try {
@@ -39,8 +97,8 @@ async function init() {
   } catch (e) {
     setMessage(msg, 'Nie udało się pobrać listy wydziałów: ' + e.detail, 'error');
   }
-  for (const f of dict.faculties) $('#faculty').append(h('option', { value: f.code }, facultyLabel(f)));
-  for (const y of dict.study_years || []) $('#study-year').append(h('option', { value: y.code }, y.label));
+  buildFaculties(dict.faculties);
+  buildYears(dict.study_years || []);
 
   const t = new URLSearchParams(location.search).get('t');
   try {
@@ -68,10 +126,10 @@ async function init() {
 form.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if (busy) return;
-  if (!form.checkValidity()) { form.reportValidity(); return; }
+  if (!picks.faculty || !picks.year) { setMessage(msg, 'Wybierz wydział i rok studiów.', 'error'); return; }
   busy = true;
   const name = $('#donor-name').value; // tylko lokalnie
-  const btn = $('#submit-btn');
+  const btn = submitBtn;
   btn.disabled = true;
   setMessage(msg, '');
   (async () => {
@@ -82,8 +140,8 @@ form.addEventListener('submit', (ev) => {
       // Błąd z serwera pokazujemy dosłownie (m.in. „Kod wygasł…”, termin Pucharu, drugi głos).
       if (e.status === 403 || e.status === 409 || e.status === 410) showState(e.detail || e.message, 'error');
       else setMessage(msg, e.detail || e.message, 'error');
-      btn.disabled = false;
       busy = false;
+      syncSubmit();
       return;
     }
     showOnly('done-section');

@@ -63,43 +63,51 @@
     </div>
 
   <div id="volunteer-part" hidden>
-    <div class="card">
-      <h2 id="vol-booth-name"></h2>
+    <div class="card vol-card">
+      <p class="booth-chip"><i class="ti ti-map-pin" aria-hidden="true"></i> <span id="vol-booth-name"></span></p>
+      <p id="cup-closed-note" class="msg msg-error" hidden></p>
+      <fieldset class="cat-picker">
+        <legend class="sr-only">Kategoria kodu QR</legend>
+        <div class="cat-grid">
+          <label class="cat-card"><input class="sr-only" type="radio" name="qr-cat" value="nowy">
+            <span class="cat-body"><i class="ti ti-user-plus cat-icon" aria-hidden="true"></i><strong>Nowy dawca</strong><small>wymaz + formularz</small></span>
+            <i class="ti ti-circle-check-filled cat-check" aria-hidden="true"></i></label>
+          <label class="cat-card"><input class="sr-only" type="radio" name="qr-cat" value="zarejestrowany">
+            <span class="cat-body"><i class="ti ti-id-badge cat-icon" aria-hidden="true"></i><strong>Zarejestrowany dawca</strong><small>e-mail lub karta DKMS</small></span>
+            <i class="ti ti-circle-check-filled cat-check" aria-hidden="true"></i></label>
+          <label class="cat-card"><input class="sr-only" type="radio" name="qr-cat" value="faktyczny">
+            <span class="cat-body"><i class="ti ti-droplet cat-icon" aria-hidden="true"></i><strong>Faktyczny dawca</strong><small>legitymacja Dawcy Przeszczepu</small></span>
+            <i class="ti ti-circle-check-filled cat-check" aria-hidden="true"></i></label>
+          <label class="cat-card"><input class="sr-only" type="radio" name="qr-cat" value="post">
+            <span class="cat-body"><i class="ti ti-brand-instagram cat-icon" aria-hidden="true"></i><strong>Post / story</strong><small>post/relacja, +5 prób</small></span>
+            <i class="ti ti-circle-check-filled cat-check" aria-hidden="true"></i></label>
+        </div>
+      </fieldset>
+      <button class="btn btn-primary btn-lg btn-block" id="qr-show" type="button" disabled><i class="ti ti-qrcode" aria-hidden="true"></i> Pokaż kod</button>
+
+      <div id="qr-box" class="qr-panel" hidden>
+        <p class="qr-cat-badge"><i class="ti" id="qr-cat-icon" aria-hidden="true"></i> <span id="qr-cat-label"></span></p>
+        <div class="qr-stage" id="qr-stage" data-state="active">
+          <img class="qr" id="cup-qr" alt="Jednorazowy kod QR do głosu w Pucharze Dawcy PWr" width="320" height="320">
+          <p class="qr-overlay" id="qr-overlay" hidden><i class="ti" id="qr-overlay-icon" aria-hidden="true"></i><span id="qr-overlay-text"></span></p>
+        </div>
+        <p class="status-badge" id="qr-status" role="status"><i class="ti ti-clock" aria-hidden="true"></i> <span>Czeka na zeskanowanie</span></p>
+        <p class="hint" id="qr-hint">Kod jest jednorazowy i nie wygasa z czasem. Po zeskanowaniu wybierz kategorię ponownie, żeby pokazać nowy.</p>
+        <button class="btn btn-inverted btn-block" id="qr-hide" type="button"><i class="ti ti-eye-off" aria-hidden="true"></i> Ukryj</button>
+      </div>
+    </div>
+
+    <details class="card vol-details">
+      <summary><i class="ti ti-chart-bar" aria-hidden="true"></i> Liczniki stoiska</summary>
       <div class="counters">
-        <div class="counter">Nowi dawcy (głosy)<strong id="c-nowy">0</strong></div>
-        <div class="counter">Zarejestrowani dawcy (głosy)<strong id="c-zarejestrowany">0</strong></div>
-        <div class="counter">Faktyczni dawcy (głosy)<strong id="c-faktyczny">0</strong></div>
+        <div class="counter">Nowi<strong id="c-nowy">0</strong></div>
+        <div class="counter">Zarejestrowani<strong id="c-zarejestrowany">0</strong></div>
+        <div class="counter">Faktyczni<strong id="c-faktyczny">0</strong></div>
         <div class="counter">Trafienia 10/10<strong id="c-matches">0</strong></div>
         <div class="counter">Próby<strong id="c-rolls">0</strong></div>
       </div>
-
-      <p class="link-row"><a id="booth-screen-link" href="/" target="_blank" rel="noopener"><i class="ti ti-device-tv" aria-hidden="true"></i> Otwórz ekran stoiska</a> (z kodem QR do symulatora; wymaga zalogowania w tej przeglądarce)</p>
-    </div>
-
-    <div class="card">
-      <h3>Kod QR dla osoby po weryfikacji</h3>
-      <p id="cup-closed-note" class="msg msg-error" hidden></p>
-      <p class="hint">Wybierz kategorię, kliknij „Pokaż kod QR” i pokaż go osobie na jej telefonie. Kod odświeża się co 60 sekund i jest ważny 60 sekund. Niczego nie zapisujemy: ani numeru legitymacji, ani posta.</p>
-      <div class="qr-cats" role="radiogroup" aria-label="Kategoria kodu QR">
-        <label class="qr-cat"><input type="radio" name="qr-cat" value="nowy" checked>
-          <span><strong>Nowy dawca</strong><small>Wymaz i wypełniony formularz.</small></span></label>
-        <label class="qr-cat"><input type="radio" name="qr-cat" value="zarejestrowany">
-          <span><strong>Zarejestrowany dawca</strong><small>E-mail powitalny lub karta DKMS.</small></span></label>
-        <label class="qr-cat"><input type="radio" name="qr-cat" value="faktyczny">
-          <span><strong>Faktyczny dawca</strong><small>Legitymacja „Dawca Przeszczepu” lub „Zasłużony Dawca Przeszczepu”. Numeru nie zapisujemy.</small></span></label>
-        <label class="qr-cat"><input type="radio" name="qr-cat" value="post">
-          <span><strong>Post / story (+5 prób)</strong><small>Post lub relacja z oznaczeniem Samorządu i dkms_pl.</small></span></label>
-      </div>
-      <div class="row">
-        <button class="btn btn-primary btn-lg" id="qr-show" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Pokaż kod QR</button>
-        <button class="btn btn-inverted btn-lg" id="qr-hide" type="button" hidden><i class="ti ti-eye-off" aria-hidden="true"></i> Ukryj</button>
-      </div>
-      <div id="qr-box" class="code-box" hidden>
-        <p class="title3" id="qr-cat-label"></p>
-        <img class="qr" id="cup-qr" alt="Kod QR do głosu w Pucharze Dawcy PWr" width="320" height="320">
-        <p id="qr-left" class="hint" role="status"></p>
-      </div>
-    </div>
+      <p class="link-row"><a id="booth-screen-link" href="/" target="_blank" rel="noopener"><i class="ti ti-device-tv" aria-hidden="true"></i> Otwórz ekran stoiska</a> (kod QR do symulatora; wymaga zalogowania w tej przeglądarce)</p>
+    </details>
 
   </div>
   <div id="admin-part" hidden>
@@ -118,7 +126,7 @@
       </div>
       <div id="lecture-box" class="inline-form" hidden>
         <h3>Zajęcia: link dla prowadzących</h3>
-        <p class="hint">Stanowisko „Zajęcia” służy do promocji akcji na wykładach, także przed jej rozpoczęciem. Nie ma wolontariusza, więc nie wystawia się tam kodów QR, a stanowisko nie jest widoczne w wykazach. Prowadzący otwiera ten link na ekranie sali, bez logowania. Ekran pokazuje rotujący kod QR do symulatora.</p>
+        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Stanowisko „Zajęcia” służy do promocji akcji na wykładach, także przed jej rozpoczęciem. Nie ma wolontariusza, więc nie wystawia się tam kodów QR, a stanowisko nie jest widoczne w wykazach. Prowadzący otwiera ten link na ekranie sali, bez logowania. Ekran pokazuje rotujący kod QR do symulatora.</p></details>
         <label for="lecture-url">Link do ekranu Zajęć</label>
         <input type="text" id="lecture-url" readonly>
         <div class="copy-row">
@@ -156,7 +164,7 @@
 
     <section id="volunteers-section" class="card">
       <h2>Konta i rangi</h2>
-      <p class="hint">Wolontariusz loguje się na stronie /login swoim loginem i hasłem, a stoisko wybiera po zalogowaniu. Administrator ma dostęp do wszystkich sekcji. Zmiana rangi działa od razu, a reset hasła i usunięcie konta wylogowują użytkownika.</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Wolontariusz loguje się na stronie /login swoim loginem i hasłem, a stoisko wybiera po zalogowaniu. Administrator ma dostęp do wszystkich sekcji. Zmiana rangi działa od razu, a reset hasła i usunięcie konta wylogowują użytkownika.</p></details>
       <div class="table-wrap">
       <table class="table" id="vol-table">
         <thead><tr><th>Login</th><th>Ranga</th><th>Utworzone</th><th>Akcje</th></tr></thead>
@@ -190,7 +198,7 @@
 
     <section id="dictionary-section" class="card">
       <h2>Słownik wydziałów</h2>
-      <p class="hint">Format: {"faculties": [{"code": "...", "name": "..."}]}. Kolejność listy jest zachowana. Wydziału z punktami nie można usunąć, a pozycja „Inne” (kod INNE) zawsze zostaje na końcu.</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Format: {"faculties": [{"code": "...", "name": "..."}]}. Kolejność listy jest zachowana. Wydziału z punktami nie można usunąć, a pozycja „Inne” (kod INNE) zawsze zostaje na końcu.</p></details>
       <textarea id="dictionary" rows="18" spellcheck="false" aria-label="Słownik wydziałów (JSON)"></textarea>
       <button class="btn btn-primary" id="dict-save" type="button"><i class="ti ti-device-floppy" aria-hidden="true"></i> Zapisz</button>
       <div id="dict-msg" class="msg" hidden></div>
@@ -198,7 +206,7 @@
 
     <section id="students-section" class="card">
       <h2>Liczby studentów</h2>
-      <p class="hint">Liczby (LS) służą do obliczenia Wskaźnika Zaangażowania w Pucharze Dawcy PWr. Wpisz oficjalną liczbę studentów według stanu na 30 listopada 2026, podaną przez Centrum Kształcenia PWr. Wydział bez wpisanej liczby (puste pole) jest poza klasyfikacją. Źródło danych jest wyświetlane publicznie na stronie Pucharu.</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Liczby (LS) służą do obliczenia Wskaźnika Zaangażowania w Pucharze Dawcy PWr. Wpisz oficjalną liczbę studentów według stanu na 30 listopada 2026, podaną przez Centrum Kształcenia PWr. Wydział bez wpisanej liczby (puste pole) jest poza klasyfikacją. Źródło danych jest wyświetlane publicznie na stronie Pucharu.</p></details>
       <form id="students-form">
         <div class="table-wrap">
         <table class="table" id="students-table">
@@ -229,7 +237,7 @@
 
     <section id="token-section" class="card">
       <h2>Weryfikacja Tokenu Losu</h2>
-      <p class="hint">Dla Komisji Konkursowej (§6.2 regulaminu konkursu). Wpisz token z grafiki certyfikatu w zgłoszeniu. Wielkość liter i spacje nie mają znaczenia. Tokeny z narzędzi testowych są traktowane jak nieistniejące.</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Dla Komisji Konkursowej (§6.2 regulaminu konkursu). Wpisz token z grafiki certyfikatu w zgłoszeniu. Wielkość liter i spacje nie mają znaczenia. Tokeny z narzędzi testowych są traktowane jak nieistniejące.</p></details>
       <form id="token-form" class="inline-form">
         <label for="token-input">Token Losu</label>
         <input type="text" id="token-input" placeholder="HG-XXXX-XXXX" autocomplete="off" spellcheck="false" autocapitalize="characters" required>
@@ -252,7 +260,7 @@
 
     <section id="legal-section" class="card">
       <h2>Regulaminy i dokumenty</h2>
-      <p class="hint">Treści w formacie Markdown (bez surowego HTML). Zapis zmiany tytułu lub treści zwiększa numer wersji i ustawia datę ostatniej zmiany, którą widzą odwiedzający. Dokumenty bazowe (oba regulaminy i polityka prywatności) nie mogą być usunięte ani ukryte. Miejsce {{CONTACT}} w treści zastępuje adres kontaktowy z konfiguracji serwera.</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Treści w formacie Markdown (bez surowego HTML). Zapis zmiany tytułu lub treści zwiększa numer wersji i ustawia datę ostatniej zmiany, którą widzą odwiedzający. Dokumenty bazowe (oba regulaminy i polityka prywatności) nie mogą być usunięte ani ukryte. Miejsce {{CONTACT}} w treści zastępuje adres kontaktowy z konfiguracji serwera.</p></details>
       <div class="table-wrap">
       <table class="table" id="legal-table">
         <thead><tr><th>Dokument</th><th>Adres</th><th>Wersja</th><th>Ostatnia zmiana</th><th>Opublikowany</th><th>Akcje</th></tr></thead>
@@ -293,7 +301,7 @@
 
     <section id="partners-section" class="card">
       <h2>Partnerzy</h2>
-      <p class="hint">Loga partnerów pojawiają się na pasku nad czerwonym pasem w certyfikatach i grafikach. Gdy lista jest pusta, paska nie ma. Pliki PNG, JPG, WebP lub SVG do 1,5 MB (SVG musi mieć width i height).</p>
+      <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Loga partnerów pojawiają się na pasku nad czerwonym pasem w certyfikatach i grafikach. Gdy lista jest pusta, paska nie ma. Pliki PNG, JPG, WebP lub SVG do 1,5 MB (SVG musi mieć width i height).</p></details>
       <ul class="partner-grid" id="partners-list"></ul>
       <p id="partners-empty" class="hint" hidden>Brak partnerów.</p>
       <form id="partner-form" class="inline-form">
@@ -315,7 +323,7 @@
         <label for="set-contest-deadline">Koniec przyjmowania zgłoszeń do konkursu HLA</label>
         <input type="datetime-local" id="set-contest-deadline" step="60">
         <p class="hint" id="set-contest-deadline-hint"></p>
-        <p class="hint">Czas Europe/Warsaw. Puste pole = wartość domyślna (zmienne CUP_DEADLINE i CONTEST_DEADLINE albo termin z regulaminu). Po terminie Pucharu nie da się oddać głosu, a kategoria „post” działa dalej.</p>
+        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Czas Europe/Warsaw. Puste pole = wartość domyślna (zmienne CUP_DEADLINE i CONTEST_DEADLINE albo termin z regulaminu). Po terminie Pucharu nie da się oddać głosu, a kategoria „post” działa dalej.</p></details>
         <label for="set-facebook">Adres profilu Facebook Samorządu (miejsce zgłoszeń konkursowych)</label>
         <input type="url" id="set-facebook" placeholder="https://www.facebook.com/..." autocomplete="off" spellcheck="false">
         <p class="hint">Musi zaczynać się od https://. Pusty adres = gracze zobaczą instrukcję bez linku.</p>
@@ -386,7 +394,7 @@
       <div class="test-block">
         <h3>Sesja gry w tej przeglądarce</h3>
         <p class="status-line" id="t-status">-</p>
-        <p class="hint">Sesję gry tworzy się, otwierając link do symulatora w tej przeglądarce i klikając „Zaakceptuj i sprawdź parametry”. Linki są ważne ok. 2 minut, a przepustka na stoisko 30 minut.</p>
+        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Sesję gry tworzy się, otwierając link do symulatora w tej przeglądarce i klikając „Zaakceptuj i sprawdź parametry”. Linki są ważne ok. 2 minut, a przepustka na stoisko 30 minut.</p></details>
         <button class="btn btn-small" id="t-refresh" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Odśwież status</button>
       </div>
 

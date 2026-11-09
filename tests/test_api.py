@@ -33,8 +33,17 @@ def volunteer(other_clients, booth="c13", login="tester", password="tajne-haslo1
 
 
 def cup_token(booth, category="nowy"):
-    from app import qrtoken
-    return qrtoken.cup_issue(booth, category)[0]
+    """Jednorazowy kod QR wstawiony prosto do bazy (jak po POST /api/volunteer/cup-qr); zwraca jego id."""
+    import secrets
+    from app import config, db
+    code = secrets.token_urlsafe(16)
+    conn = db.connect()
+    try:
+        conn.execute("INSERT INTO cup_qr_codes(id,booth_id,category,issued_by,created_at) VALUES(?,?,?,?,?)",
+                     (code, booth, category, "test-helper", config.now_iso()))
+    finally:
+        conn.close()
+    return code
 
 
 def claim(c, booth, category="nowy", t=None):
@@ -144,7 +153,7 @@ def test_volunteer_auth(booth, other_clients):
     assert v.get("/api/auth/me").json() == {"login": "tester", "role": "volunteer", "booth": None}
     # bez stoiska akcje na stoisku dają 409
     assert v.get("/api/volunteer/me").status_code == 409
-    assert v.get("/api/volunteer/cup-qr?category=nowy").status_code == 409
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 409
     assert v.post("/api/auth/booth", json={"booth_id": "zzz"}).status_code == 404
     r = v.post("/api/auth/booth", json={"booth_id": "c13"})
     assert r.status_code == 200 and r.json()["booth"] == {"id": "c13", "name": "Budynek C-13"}
@@ -168,8 +177,8 @@ def test_volunteer_throttle(booth, other_clients):
 def test_volunteer_permissions(admin, booth, other_clients):
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
     v = volunteer(other_clients)
-    assert v.get("/api/volunteer/cup-qr?category=nowy&booth_id=w4").status_code == 403
-    assert v.get("/api/volunteer/cup-qr?category=nowy").status_code == 200
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy", "booth_id": "w4"}).status_code == 403
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 200
     for path in ("/api/admin/booths", "/api/admin/wins", "/api/admin/settings", "/api/admin/students", "/api/admin/dictionary",
                  "/api/admin/summary", "/api/admin/days", "/api/admin/export-csv", "/api/admin/volunteers"):
         assert v.get(path).status_code == 403, path
