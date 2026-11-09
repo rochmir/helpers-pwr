@@ -24,6 +24,10 @@ function showState(s) {
   $('#rolls-count').textContent = s.rolls_count;
   // Ważny link do gry dostaje tylko zalogowany personel; bez sesji pokazujemy zachętę do logowania.
   $('#qr-login').hidden = !!s.play_path;
+  if (!isLectureScreen) {
+    $('#qr-login a').href = '/login?next=' + encodeURIComponent(location.pathname);
+    $('#qr-login a').lastChild.textContent = ' Wybierz to stoisko w panelu wolontariusza';
+  }
   if (isLectureScreen && !s.play_path) {
     // Link został zmieniony przez administratora: logowanie nic tu nie da, trzeba nowego linku.
     $('.qr-login-title').textContent = 'Ten link do ekranu nie działa';

@@ -58,6 +58,10 @@ PREVIOUS_SEED_SHA256 = {
                              "2bff634c64ab4280617fa265e9bad38453060685107aabfc65e541dc4687cf15"),
 }
 SEED_UPDATE_AUTHOR = "system"
+# Wersja treści seedu (pliki app/legal/*.md). Baza z niższą wartością w settings.legal_seed_version dostaje jednorazowo
+# treść z plików (v3: bez fingerprintingu, trzy kategorie głosu w Pucharze, kod QR ważny 60 s).
+LEGAL_SEED_VERSION = 3
+LEGAL_SEED_KEY = "legal_seed_version"
 
 
 def _update_untouched(conn: sqlite3.Connection, slug: str, title: str, body: str) -> None:
@@ -90,6 +94,35 @@ def seed(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO legal_documents(slug,title,body_md,published,sort,version,created_at,updated_at) "
                      "VALUES(?,?,?,?,?,?,?,?)", (slug, title, body, 1, sort, 1, now, now))
         log.info("Dodano dokument %s", slug)
+    upgrade_seed_version(conn)
+
+
+def upgrade_seed_version(conn: sqlite3.Connection) -> None:
+    """Jednorazowe (idempotentne) podniesienie dokumentów bazowych do treści z plików seedu v3: stara treść trafia do
+    ``legal_document_versions`` (autor „system”), wersja +1, ``updated_at`` teraz, więc symulator poprosi o ponowną zgodę.
+    Po ustawieniu flagi późniejsze edycje z panelu admina nie są nadpisywane. Świeża baza: treść już zgodna, tylko flaga."""
+    from . import db
+    try:
+        current = int(db.get_setting(conn, LEGAL_SEED_KEY, "0") or 0)
+    except ValueError:
+        current = 0
+    if current >= LEGAL_SEED_VERSION:
+        return
+    with db.tx(conn):
+        for slug in BASE_SLUGS:
+            row = conn.execute("SELECT title, body_md, version FROM legal_documents WHERE slug=?", (slug,)).fetchone()
+            if row is None:
+                continue
+            title, body = split_title((LEGAL_DIR / f"{slug}.md").read_text(encoding="utf-8"))
+            if (row["title"], row["body_md"]) == (title, body):
+                continue
+            now = config.now_iso()
+            conn.execute("INSERT OR IGNORE INTO legal_document_versions(slug,version,title,body_md,saved_at,saved_by) "
+                         "VALUES(?,?,?,?,?,?)", (slug, row["version"], row["title"], row["body_md"], now, SEED_UPDATE_AUTHOR))
+            conn.execute("UPDATE legal_documents SET title=?, body_md=?, version=?, updated_at=? WHERE slug=?",
+                         (title, body, row["version"] + 1, now, slug))
+            log.info("Podniesiono dokument %s do treści seedu v%s (wersja %s)", slug, LEGAL_SEED_VERSION, row["version"] + 1)
+        db.set_setting(conn, LEGAL_SEED_KEY, str(LEGAL_SEED_VERSION))
 
 
 def format_updated(iso_ts: str) -> str:

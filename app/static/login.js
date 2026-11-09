@@ -23,7 +23,7 @@ function wireAdminNav() {
   const sections = [...document.querySelectorAll('#admin-part > section.card')];
   const slug = (sec) => sec.id.replace(/-section$/, '');
   const panel = $('#panel');
-  sel.append(h('option', { value: BOOTH_SECTION }, 'Stoisko i tokeny'));
+  sel.append(h('option', { value: BOOTH_SECTION }, 'Stoisko i kody QR'));
   for (const sec of sections) {
     sel.append(h('option', { value: slug(sec) }, sec.querySelector('h2').textContent.trim()));
   }
@@ -74,14 +74,14 @@ async function showPanel(me) {
   $('#who-role').textContent = ROLE_PL[me.role] || me.role;
   $('#login-title').textContent = me.role === 'admin' ? 'Panel administratora' : 'Panel wolontariusza';
   $('#login-lead').textContent = me.role === 'admin'
-    ? 'Stoiska, konta, liczby studentów, weryfikacja Tokenu Losu, regulaminy i dokumenty, partnerzy, ustawienia, grafiki i narzędzia testowe, a także generowanie tokenów rejestracyjnych.'
-    : 'Wybierz stoisko i wygeneruj token rejestracyjny dla osoby po weryfikacji na stoisku.';
+    ? 'Stoiska, konta, liczby studentów, weryfikacja Tokenu Losu, regulaminy i dokumenty, partnerzy, ustawienia, grafiki i narzędzia testowe, a także kody QR do Pucharu Dawcy PWr.'
+    : 'Wybierz stoisko, kategorię i pokaż kod QR osobie po weryfikacji na stoisku.';
   await loadBoothChoices();
   const booth = me.booth && me.booth.id ? me.booth : null;
   $('#booth-pick').value = booth ? booth.id : '';
   $('#booth-hint').textContent = booth
-    ? 'Tokeny i liczniki dotyczą wybranego stoiska. Możesz je zmienić w dowolnej chwili.'
-    : 'Wybierz stoisko, przy którym dziś pracujesz. Dopiero wtedy pojawią się tokeny i liczniki.';
+    ? 'Kody QR i liczniki dotyczą wybranego stoiska. Możesz je zmienić w dowolnej chwili.'
+    : 'Wybierz stoisko, przy którym dziś pracujesz. Dopiero wtedy pojawią się kody QR i liczniki.';
   $('#volunteer-part').hidden = !booth;
   await initVolunteer({ role: me.role, booth });
   $('#admin-part').hidden = me.role !== 'admin';
@@ -94,9 +94,34 @@ async function showPanel(me) {
   }
 }
 
+/** Docelowa strona po logowaniu: tylko ekran stoiska (/stoisko/{id}), nic spoza tej witryny. */
+function nextPath() {
+  const n = new URLSearchParams(location.search).get('next') || '';
+  return /^\/stoisko\/[a-z0-9]{1,20}$/.test(n) ? n : null;
+}
+
+/** Jest ?next=/stoisko/{id}: wolontariusz z innym stoiskiem dostaje je wybrane, potem przechodzimy na ekran. */
+async function maybeRedirect(me) {
+  const next = nextPath();
+  if (!next) return false;
+  const id = next.split('/').pop();
+  try {
+    if (me.role === 'volunteer' && (!me.booth || me.booth.id !== id)) {
+      await api('POST', '/api/auth/booth', { booth_id: id });
+    }
+  } catch (e) {
+    setMessage(msg, e.detail || e.message, 'error');
+    return false;
+  }
+  location.replace(next);
+  return true;
+}
+
 async function init() {
   try {
-    await showPanel(await api('GET', '/api/auth/me'));
+    const me = await api('GET', '/api/auth/me');
+    if (await maybeRedirect(me)) return;
+    await showPanel(me);
   } catch (e) {
     if (e.status === 401) await showLogin();
     else setMessage(msg, e.detail || e.message, 'error');
@@ -112,7 +137,9 @@ $('#login-form').addEventListener('submit', async (ev) => {
       password: $('#password').value,
     });
     $('#password').value = '';
-    await showPanel(await api('GET', '/api/auth/me'));
+    const me = await api('GET', '/api/auth/me');
+    if (await maybeRedirect(me)) return;
+    await showPanel(me);
   } catch (e) {
     setMessage(msg, e.status === 401 ? 'Błędny login lub hasło.' : (e.detail || e.message), 'error');
   }

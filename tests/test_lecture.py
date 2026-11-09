@@ -3,7 +3,7 @@ a także aktualizacja seedu dokumentów prawnych i nowe ustępy regulaminów."""
 import hashlib
 
 from app import config, db, legal
-from test_api import JSON, enter, make_code, new_session
+from test_api import JSON, enter, new_session, vote_new
 from test_iter4 import roll
 
 
@@ -94,13 +94,13 @@ def test_lecture_screen_admin_only(booth, other_clients):
 
 
 # --- brak wolontariusza -----------------------------------------------------------
-def test_codes_and_delete_are_409_for_lecture_booth(admin, booth):
-    for kind in ("potential", "actual", "promo"):
-        r = admin.post("/api/volunteer/generate-code", json={"booth_id": "zajecia", "kind": kind})
-        assert r.status_code == 409, kind
+def test_cup_qr_and_delete_are_409_for_lecture_booth(admin, booth):
+    for category in ("nowy", "zarejestrowany", "faktyczny", "post"):
+        r = admin.get(f"/api/volunteer/cup-qr?category={category}&booth_id=zajecia")
+        assert r.status_code == 409, category
     assert admin.delete("/api/admin/booths/zajecia", headers=JSON).status_code == 409
     assert any(b["id"] == "zajecia" for b in admin.get("/api/admin/booths").json())
-    assert make_code(admin, booth_id=booth)  # zwykłe stoisko działa
+    assert admin.get(f"/api/volunteer/cup-qr?category=nowy&booth_id={booth}").status_code == 200  # zwykłe stoisko działa
 
 
 # --- po zeskanowaniu --------------------------------------------------------------
@@ -161,27 +161,23 @@ def test_previous_seed_hashes_are_not_the_current_text():
 # --- treść dokumentów -------------------------------------------------------------
 def test_documents_contain_new_clauses(client):
     k = client.get("/dokumenty/regulamin-konkursu").text
-    assert "na jedno urządzenie na każdym stanowisku, z zastrzeżeniem ust. 4." in k
+    assert "na jedną sesję przeglądarki na każdym stanowisku, z zastrzeżeniem ust. 5." in k
     assert "Limit, o którym mowa w ust. 2, nie obejmuje prób dodatkowych." in k
-    assert "Jednym ze stanowisk jest stanowisko „Zajęcia”" in k
     p = client.get("/dokumenty/regulamin-pucharu").text
-    assert "prowadzony jest zbiorczy licznik liczby faktycznych dawców na Wydział" in p
     assert "Oddanie głosu uprawnia do dodatkowych prób w symulatorze HLA Match Maker" in p
+    assert "ważny przez 60 sekund" in p and "rok studiów" in p
     pol = client.get("/dokumenty/polityka-prywatnosci").text
-    assert "na każdym stanowisku" in pol and "hp_admin_section" in pol
-    assert "Nie zapisujemy posta, linku ani nazwy konta w mediach społecznościowych." in pol
-    assert "bonus" not in pol.lower()
+    assert "hp_game" in pol and "fingerprint" in pol.lower() and "Kodów QR nie zapisujemy" in pol
 
 
-# --- /statystyki: faktyczni dawcy -------------------------------------------------
-def test_live_stats_split_actual_donors(admin, booth, client):
-    from test_api import register
-    register(client, make_code(admin, booth_id=booth, kind="actual"), "W4N")
-    register(client, make_code(admin, booth_id=booth), "W4N")
+# --- /statystyki: kategorie dawców ------------------------------------------------
+def test_live_stats_split_categories(admin, booth, client):
+    vote_new(booth, "faktyczny", "W4N")
+    vote_new(booth, "nowy", "W4N")
     s = client.get("/api/stats/live").json()
     w4 = next(f for f in s["faculties"] if f["code"] == "W4N")
-    assert (w4["count"], w4["actual"], w4["potential"]) == (2, 1, 1)
-    assert s["booths"][0]["registered"] == 2 and s["booths"][0]["actual"] == 1
+    assert (w4["count"], w4["faktyczny"], w4["nowy"], w4["zarejestrowany"]) == (2, 1, 1, 0)
+    assert s["booths"][0]["registered"] == 2 and s["booths"][0]["faktyczny"] == 1
     conn = db.connect()
-    assert {r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")} == {"id", "faculty", "created_at", "device_hash"}
+    assert {r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")} == {"id", "faculty", "created_at", "category", "study_year", "booth_id"}
     conn.close()

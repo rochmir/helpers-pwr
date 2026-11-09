@@ -5,7 +5,7 @@ import pytest
 
 from app import config, db, testing
 
-from test_api import new_session, make_code, register
+from test_api import new_session, vote
 
 OLD_DONORS = ("CREATE TABLE donors_stats(id INTEGER PRIMARY KEY AUTOINCREMENT, booth_id TEXT NOT NULL, "
               "faculty TEXT NOT NULL, major TEXT NOT NULL, study_year INTEGER NOT NULL, registered_date TEXT NOT NULL)")
@@ -26,9 +26,9 @@ def test_migration_drops_major(tmp_path, monkeypatch):
         db.init_db()
         conn = db.connect()
         cols = [r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")]
-        assert cols == ["id", "faculty", "created_at", "device_hash"]
+        assert cols == ["id", "faculty", "created_at", "category", "study_year", "booth_id"]
         row = conn.execute("SELECT * FROM donors_stats").fetchone()
-        assert (row["faculty"], row["device_hash"]) == ("W4N", None)
+        assert (row["faculty"], row["category"], row["study_year"], row["booth_id"]) == ("W4N", "nowy", None, None)
         assert config.warsaw_date(row["created_at"]) == "2026-10-01"  # doba z dawnego registered_date zostaje
         assert db.get_dictionary(conn) == {"_note": "n", "faculties": [{"code": "W4N", "name": "Informatyki"}, {"code": "INNE", "name": "Inne"}]}
         conn.close()
@@ -109,7 +109,10 @@ def test_reset_my_game(admin, booth, monkeypatch):
     assert admin.post("/api/game/roll", json={"booth_id": booth}).json()["has_won"] is True
     me = admin.get("/api/game/me").json()
     assert me["attempts_left"] == 4 and me["has_won"] is True and me["best_today"] == 10
+    # reset czyści też głos, claim i dzienny bonus za post
+    assert vote(admin, booth).status_code == 200
     assert admin.post("/api/admin/test/reset-my-game", json={}).json() == {"ok": True, "attempts_left": 5}
+    assert admin.get("/api/cup/me").json()["voted"] is False
     me = admin.get("/api/game/me").json()
     assert me["attempts_left"] == 5 and me["has_won"] is False and me["best_today"] == 0
 
@@ -124,12 +127,11 @@ def test_fake_registrations(admin, booth):
     assert conn.execute("SELECT COUNT(*) FROM donors_stats").fetchone()[0] == 35
     start, end = config.day_bounds("2020-01-01")
     rows = conn.execute("SELECT * FROM donors_stats WHERE created_at>=? AND created_at<?", (start, end)).fetchall()
-    assert len(rows) == 5 and all(x["device_hash"] is None for x in rows)
-    # każdy punkt ma zużyty token na stoisku (zestawienia per stoisko i typ liczą się z registration_codes)
-    used = conn.execute("SELECT booth_id, kind FROM registration_codes WHERE status='USED' AND used_at>=? AND used_at<?",
-                        (start, end)).fetchall()
-    assert len(used) == 5 and all(x["booth_id"] == booth and x["kind"] in ("potential", "actual") for x in used)
-    assert conn.execute("SELECT COUNT(*) FROM registration_codes WHERE status='USED'").fetchone()[0] == 35
+    years = {c for c, _ in config.STUDY_YEARS}
+    assert len(rows) == 5 and all(x["booth_id"] == booth and x["category"] in config.CUP_CATEGORIES
+                                  and x["study_year"] in years for x in rows)
+    # zapisuje wyłącznie donors_stats (historyczne tabele kodów zostają puste)
+    assert conn.execute("SELECT COUNT(*) FROM registration_codes").fetchone()[0] == 0
     codes = {f["code"] for f in db.get_dictionary(conn)["faculties"]}
     assert all(x["faculty"] in codes for x in conn.execute("SELECT faculty FROM donors_stats"))
     conn.close()
@@ -149,7 +151,7 @@ def test_wipe(admin, booth, client, monkeypatch):
     monkeypatch.setattr(game, "is_win", lambda rng=None: True)
     new_session(admin, booth)
     admin.post("/api/game/roll", json={"booth_id": booth})
-    assert register(client, make_code(admin, booth_id=booth)).status_code == 200
+    assert vote(client, booth).status_code == 200
     admin.post("/api/admin/test/arm-win", json={})
     before = admin.get(f"/api/booth/{booth}/state").json()
     dict_before = admin.get("/api/admin/dictionary").json()

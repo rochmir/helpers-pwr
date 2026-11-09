@@ -1,141 +1,113 @@
-import { api, $, h, setMessage, facultyLabel, getConfig, storageSet } from './common.js';
-import { renderDonorCert, showDownload } from './cert.js';
-import { deviceHashes, deviceHashSupported } from './fingerprint.js';
+import { api, $, h, setMessage, facultyLabel } from './common.js';
+import { renderDonorCert, showDownload, makeGraphic } from './cert.js';
 
-const msg = $('#confirm-msg');
-const codeEl = $('#code');
+const msg = $('#state-msg');
+const form = $('#vote-form');
+const LABELS = { nowy: 'Nowy dawca', zarejestrowany: 'Zarejestrowany dawca', faktyczny: 'Faktyczny dawca' };
 let busy = false;
-let closed = false; // zliczanie punktow zakonczone (CUP_DEADLINE); nie dotyczy kodu dodatkowych prob
-let closedText = '';
-let noHash = false; // brak skrotu urzadzenia: bez niego nie ma glosu w Pucharze (kod dodatkowych prob go nie wymaga)
-let codeKind = 'potential';
-const LEAD_DONOR = $('#lead-text').textContent;
-const CONSENT_DONOR = $('#consent-text').innerHTML;
-const LEAD_PROMO = 'Kod dodatkowych prób dostajesz od wolontariusza po pokazaniu posta lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl. Wpisz go, a dostaniesz 5 dodatkowych prób w symulatorze HLA.';
-const CONSENT_PROMO = 'Kod dodatkowych prób dodaje próby do Twojej sesji gry. Nie zapisujemy ani posta, ani Twoich kont w mediach społecznościowych.';
+let claimInfo = null; // { category, booth_name }
 
-function normCode() { return codeEl.value.trim().toUpperCase(); }
-
-/** Kod dodatkowych prob nie dotyczy Pucharu: ukrywa pola dawcy (i ich walidacje) oraz niezalezy od terminu i skrotu urzadzenia. */
-function applyKind(kind) {
-  codeKind = kind;
-  const promo = kind === 'promo';
-  $('#donor-fields').hidden = promo;
-  $('#faculty').disabled = promo;
-  $('#lead-text').textContent = promo ? LEAD_PROMO : LEAD_DONOR;
-  $('#consent-text').innerHTML = promo ? '' : CONSENT_DONOR;
-  if (promo) $('#consent-text').textContent = CONSENT_PROMO;
-  $('#submit-btn').disabled = !promo && (closed || noHash);
-  if (closed) {
-    if (!promo) showClosedMessage();
-    else if (msg.dataset.closed === '1') { setMessage(msg, ''); msg.dataset.closed = ''; }
-  }
+function showOnly(id) {
+  for (const x of ['vote-form', 'post-done', 'done-section']) $('#' + x).hidden = x !== id;
 }
 
-function showClosedMessage() {
-  setMessage(msg, closedText, 'error');
-  msg.dataset.closed = '1';
+/** Komunikat w polu stanu; bez formularza (nic do zrobienia). */
+function showState(text, kind = 'info') {
+  showOnly(null);
+  setMessage(msg, text, kind);
 }
 
-/** Sprawdza token na serwerze i pokazuje wynik; zwraca odpowiedz (null przy bledzie sieci). */
-async function checkCode() {
-  const code = normCode();
-  const st = $('#code-status');
-  if (!code) { st.textContent = ''; return null; }
-  try {
-    const r = await api('GET', '/api/donor/check-code?kod=' + encodeURIComponent(code));
-    applyKind(r.valid && r.kind === 'promo' ? 'promo' : 'potential');
-    st.textContent = r.valid
-      ? (r.kind === 'promo' ? 'Kod dodatkowych prób poprawny' + (r.booth_name ? ', stoisko: ' + r.booth_name : '') + '. Dostaniesz ' + r.bonus + ' dodatkowych prób w symulatorze HLA.'
-        : (r.kind === 'actual' ? 'Token dawcy faktycznego. Dziękujemy za Twój dar! ' : '')
-          + 'Token poprawny' + (r.booth_name ? ', stoisko: ' + r.booth_name : '') + '. Za udział w Pucharze Dawcy PWr dostaniesz ' + r.bonus + ' dodatkowych prób w symulatorze HLA.')
-      : 'Ten token jest nieprawidłowy, już użyty albo wygasł. Poproś wolontariusza o nowy.';
-    return r;
-  } catch (e) {
-    st.textContent = '';
-    return null;
-  }
+function showForm(info) {
+  claimInfo = info;
+  setMessage(msg, '');
+  $('#vote-label').textContent = (LABELS[info.category] || info.category) + (info.booth_name ? ', stoisko: ' + info.booth_name : '');
+  showOnly('vote-form');
 }
 
-/** Po terminie zliczania punktow formularz jest wylaczony i pokazuje komunikat z serwera. */
-function showClosed(text) {
-  closed = true;
-  closedText = text;
-  applyKind(codeKind);
+function showPost(r) {
+  setMessage(msg, '');
+  $('#post-text').textContent = 'Masz ' + r.bonus_attempts_granted + ' dodatkowych prób w HLA Match Maker'
+    + (r.booth_name ? ' (stoisko: ' + r.booth_name + ')' : '') + '. Dodatkowe próby wykorzystujesz po wyczerpaniu 5 prób na dobę na danym stanowisku i nie znikają o północy.';
+  if (r.play_path) $('#post-play').href = r.play_path;
+  showOnly('post-done');
 }
 
 async function init() {
-  const q = new URLSearchParams(location.search).get('kod');
-  if (q) { codeEl.value = q.trim().toUpperCase(); checkCode(); }
+  let dict = { faculties: [], study_years: [] };
   try {
-    const dict = await api('GET', '/api/dictionary/faculties');
-    for (const f of dict.faculties) $('#faculty').append(h('option', { value: f.code }, facultyLabel(f)));
+    dict = await api('GET', '/api/dictionary/faculties');
   } catch (e) {
     setMessage(msg, 'Nie udało się pobrać listy wydziałów: ' + e.detail, 'error');
   }
+  for (const f of dict.faculties) $('#faculty').append(h('option', { value: f.code }, facultyLabel(f)));
+  for (const y of dict.study_years || []) $('#study-year').append(h('option', { value: y.code }, y.label));
+
+  const t = new URLSearchParams(location.search).get('t');
   try {
-    const cfg = await getConfig();
-    if (cfg && cfg.cup_deadline && Date.now() >= new Date(cfg.cup_deadline).getTime()) {
-      const info = await api('GET', '/api/stats/cup');
-      showClosed(info.cup_closed_message || 'Zliczanie punktów zostało zakończone.');
+    if (t) {
+      let r;
+      try {
+        r = await api('POST', '/api/cup/claim', { t });
+      } finally {
+        // Token ma zniknąć z paska adresu zawsze (historia, zrzuty ekranu, udostępnianie linku).
+        try { history.replaceState(null, '', '/potwierdz'); } catch (e) { /* ignoruj */ }
+      }
+      if (r.kind === 'post') showPost(r);
+      else showForm({ category: r.category, booth_name: r.booth_name });
+      return;
     }
-  } catch (e) { /* termin sprawdzi tez serwer przy wysylce */ }
-  if (!deviceHashSupported()) {
-    setMessage(msg, 'Ta przeglądarka nie pozwala obliczyć skrótu urządzenia, a bez niego nie można oddać głosu (wymagane jest bezpieczne połączenie HTTPS). Otwórz stronę w aktualnej przeglądarce, np. Chrome lub Safari.', 'error');
-    noHash = true;
-    applyKind(codeKind);
+    const me = await api('GET', '/api/cup/me');
+    if (me.voted) showState('Twój głos w Pucharze został już oddany. Dziękujemy!', 'ok');
+    else if (me.claim) showForm({ category: me.claim.category, booth_name: me.claim.booth_name });
+    else showState('Zeskanuj kod QR u wolontariusza na stoisku Helpers\' Generation', 'info');
+  } catch (e) {
+    showState(e.detail || e.message, 'error');
   }
 }
 
-codeEl.addEventListener('change', checkCode);
-
-$('#confirm-form').addEventListener('submit', async (ev) => {
+form.addEventListener('submit', (ev) => {
   ev.preventDefault();
-  if (busy || (codeKind !== 'promo' && (closed || noHash))) return;
+  if (busy) return;
+  if (!form.checkValidity()) { form.reportValidity(); return; }
   busy = true;
-  setMessage(msg, '');
   const name = $('#donor-name').value; // tylko lokalnie
-  try {
-    const chk = await checkCode();
-    if (chk && !chk.valid) throw Object.assign(new Error(), { detail: 'Ten token jest nieprawidłowy, już użyty albo wygasł. Poproś wolontariusza o nowy.' });
-    if (!$('#confirm-form').checkValidity()) { $('#confirm-form').reportValidity(); return; }
-    const promo = codeKind === 'promo';
-    const { base, ext } = promo ? {} : await deviceHashes();
-    const r = promo
-      ? await api('POST', '/api/donor/redeem-promo', { code: normCode() })
-      : await api('POST', '/api/donor/register', {
-        code: normCode(),
-        faculty: $('#faculty').value,
-        device: base,
-        device_ext: ext,
-      });
-    $('#confirm-form').hidden = true;
-    msg.hidden = true;
-    $('#done-section').hidden = false;
-    if (r.token) storageSet('hp_game', r.token);
+  const btn = $('#submit-btn');
+  btn.disabled = true;
+  setMessage(msg, '');
+  (async () => {
+    let r;
+    try {
+      r = await api('POST', '/api/cup/vote', { faculty: $('#faculty').value, study_year: $('#study-year').value });
+    } catch (e) {
+      // Błąd z serwera pokazujemy dosłownie (m.in. „Kod wygasł…”, termin Pucharu, drugi głos).
+      if (e.status === 403 || e.status === 409 || e.status === 410) showState(e.detail || e.message, 'error');
+      else setMessage(msg, e.detail || e.message, 'error');
+      btn.disabled = false;
+      busy = false;
+      return;
+    }
+    showOnly('done-section');
+    $('#done-text').textContent = 'Głos przyjęty' + (r.booth_name ? ' (stoisko: ' + r.booth_name + ')' : '')
+      + '. Punkt został przyznany Twojemu wydziałowi w Pucharze Dawcy PWr. Poniżej Twój certyfikat.';
     if (r.bonus_attempts_granted) {
       $('#bonus-title').textContent = 'Masz ' + r.bonus_attempts_granted + ' dodatkowych prób w HLA Match Maker';
-      $('#bonus-text').textContent = (promo ? 'Dziękujemy za pomoc w promocji akcji. ' : 'To podziękowanie za udział w Pucharze Dawcy PWr. ')
-        + 'Dodatkowe próby wykorzystujesz po wyczerpaniu 5 prób na dobę na danym stanowisku i nie znikają o północy.';
+      $('#bonus-text').textContent = 'To podziękowanie za udział w Pucharze Dawcy PWr. Dodatkowe próby wykorzystujesz po wyczerpaniu 5 prób na dobę na danym stanowisku i nie znikają o północy.';
       if (r.play_path) $('#bonus-play').href = r.play_path;
       $('#bonus-box').hidden = false;
     }
-    if (promo) {
-      $('#done-title').textContent = 'Dodatkowe próby odebrane!';
-      $('#done-text').textContent = 'Kod przyjęty' + (r.booth_name ? ' (stoisko: ' + r.booth_name + ')' : '') + '.';
-      return;
+    // Certyfikat: błąd rysowania nie może cofać już oddanego głosu.
+    const out = $('#cert-output');
+    let errEl = $('#cert-error');
+    if (!errEl) {
+      errEl = h('p', { class: 'msg', id: 'cert-error', role: 'alert', hidden: true });
+      out.before(errEl);
     }
-    $('#done-text').textContent = (r.kind === 'actual' ? 'Token dawcy faktycznego przyjęty' : 'Token przyjęty') + (r.booth_name ? ' (stoisko: ' + r.booth_name + ')' : '')
-      + '. Punkt został przyznany Twojemu wydziałowi w Pucharze Dawcy PWr. Poniżej Twój certyfikat.';
-    const canvas = await renderDonorCert({ name, facultyName: r.faculty === 'INNE' ? '' : r.faculty_name, kind: r.kind });
-    await showDownload(canvas, $('#cert-output'), 'certyfikat-dawcy-pwr.png');
-  } catch (e) {
-    if (e.status === 410 && /Zliczanie/.test(e.detail || '')) showClosed(e.detail);
-    else setMessage(msg, e.status === 404 ? 'Nie znamy takiego tokenu. Sprawdź, czy został przepisany poprawnie.'
-      : e.status === 422 ? 'Wybrany wydział jest nieprawidłowy. Wybierz go ponownie z listy.' : (e.detail || e.message), 'error');
-  } finally {
+    await makeGraphic(null, out, errEl, async () => {
+      const canvas = await renderDonorCert({ name, facultyName: r.faculty === 'INNE' ? '' : r.faculty_name, category: r.category });
+      await showDownload(canvas, out, 'certyfikat-dawcy-pwr.png');
+    });
     busy = false;
-  }
+  })();
 });
 
 init();

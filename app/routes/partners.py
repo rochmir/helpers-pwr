@@ -22,6 +22,10 @@ SVG_FORBIDDEN_TAGS = {"script", "foreignobject", "iframe", "embed", "object", "a
 SVG_EXTERNAL_RE = re.compile(r"@import|url\(\s*[\"']?\s*(?!#)|javascript:", re.I)
 
 
+class OrderIn(BaseModel):
+    ids: list[int] = Field(max_length=200)
+
+
 class PartnerIn(BaseModel):
     name: str = Field(max_length=80)
     filename: str = Field(max_length=120)
@@ -79,7 +83,19 @@ def sniff(raw: bytes) -> str | None:
 @router.get("/api/partners")
 def list_partners(conn: sqlite3.Connection = Depends(db.get_db)):
     return [{"id": r["id"], "name": r["name"], "url": f"/partners/{r['filename']}"}
-            for r in conn.execute("SELECT id, name, filename FROM partners ORDER BY id")]
+            for r in conn.execute("SELECT id, name, filename FROM partners ORDER BY sort_order, id")]
+
+
+@router.put("/api/admin/partners/order")
+def order_partners(body: OrderIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Nowa kolejność partnerów (certyfikaty, grafiki, strony): lista musi zawierać każde id dokładnie raz."""
+    with db.tx(conn):
+        existing = sorted(r[0] for r in conn.execute("SELECT id FROM partners"))
+        if sorted(body.ids) != existing:
+            raise HTTPException(422, "Lista musi zawierać każdego partnera dokładnie raz.")
+        for pos, pid in enumerate(body.ids, 1):
+            conn.execute("UPDATE partners SET sort_order=? WHERE id=?", (pos, pid))
+    return list_partners(conn)
 
 
 @router.get("/partners/{filename}", include_in_schema=False)
@@ -108,7 +124,8 @@ def add_partner(body: PartnerIn, _: dict = Depends(auth.require_admin), conn: sq
         raise HTTPException(422, "Dozwolone pliki: PNG, JPG, WebP albo bezpieczne SVG z width i height.")
     filename = f"{secrets.token_hex(16)}.{ext}"
     (partners_dir() / filename).write_bytes(raw)
-    cur = conn.execute("INSERT INTO partners(name,filename) VALUES(?,?)", (name, filename))
+    cur = conn.execute("INSERT INTO partners(name,filename,sort_order) "
+                       "VALUES(?,?,(SELECT COALESCE(MAX(sort_order),0)+1 FROM partners))", (name, filename))
     return {"id": cur.lastrowid, "name": name, "url": f"/partners/{filename}"}
 
 

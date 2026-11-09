@@ -1,36 +1,27 @@
-// Czesc panelu dla wolontariusza (tokeny rejestracyjne i liczniki stoiska). Logowanie i wybor stoiska robi login.js.
-import { api, $, h, icon, setMessage, formatTime, formatDateTime, qrUrl } from './common.js';
+// Czesc panelu dla wolontariusza (liczniki stoiska i dynamiczny kod QR do Pucharu). Logowanie i wybor stoiska robi login.js.
+import { api, $, setMessage, qrUrl } from './common.js';
 
 const msg = $('#panel-msg');
-const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
-const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny', promo: 'dodatkowe próby' };
-const CODE_LABEL = { potential: 'Token rejestracyjny (kod OTP)', actual: 'Token rejestracyjny: dawca faktyczny (kod OTP)', promo: 'Kod dodatkowych prób' };
+const CAT_LABEL = {
+  nowy: 'Nowy dawca',
+  zarejestrowany: 'Zarejestrowany dawca',
+  faktyczny: 'Faktyczny dawca',
+  post: 'Post / story (+5 prób)',
+};
 let refreshTimer = null;
+let qrTimer = null; // następne pobranie kodu
+let tickTimer = null; // odliczanie "Kod zmieni się za N s"
+let qrVisible = false;
+let qrExpiresAt = 0; // ms
 let ctx = { role: 'volunteer', boothId: '' };
 let wired = false;
-let lastClosed = false; // po CUP_DEADLINE token rejestracyjny jest zablokowany, kod dodatkowych prob nie
-
-function show(id, on) { $('#' + id).hidden = !on; }
-
-function renderCodes(codes) {
-  const body = $('#vcodes-body');
-  body.textContent = '';
-  $('#vcodes-empty').hidden = codes.length > 0;
-  for (const c of codes) {
-    const cancel = c.status === 'ACTIVE'
-      ? h('button', { class: 'btn btn-small', type: 'button', 'data-cancel': c.code }, icon('ti-x'), 'Anuluj')
-      : '';
-    body.append(h('tr', { class: 'code-' + c.status.toLowerCase() },
-      h('td', { class: 'mono' }, c.code),
-      h('td', {}, KIND_PL[c.kind] || c.kind),
-      h('td', {}, h('span', { class: 'status-tag tag-' + c.status.toLowerCase() }, STATUS_PL[c.status] || c.status)),
-      h('td', {}, formatDateTime(c.created_at)),
-      h('td', {}, formatTime(c.expires_at)),
-      h('td', {}, cancel)));
-  }
-}
+let cupClosed = false;
 
 const meUrl = () => '/api/volunteer/me' + (ctx.role === 'admin' && ctx.boothId ? '?booth_id=' + encodeURIComponent(ctx.boothId) : '');
+const selectedCategory = () => {
+  const r = document.querySelector('input[name="qr-cat"]:checked');
+  return r ? r.value : 'nowy';
+};
 
 async function refresh() {
   clearTimeout(refreshTimer);
@@ -39,16 +30,12 @@ async function refresh() {
     const me = await api('GET', meUrl());
     $('#vol-booth-name').textContent = me.booth ? me.booth.name : '';
     $('#booth-screen-link').href = me.booth ? '/stoisko/' + encodeURIComponent(me.booth.id) : '/';
-    $('#c-potential').textContent = me.registered_potential ?? 0;
-    $('#c-actual').textContent = me.registered_actual ?? 0;
+    $('#c-nowy').textContent = me.registered_nowy ?? 0;
+    $('#c-zarejestrowany').textContent = me.registered_zarejestrowany ?? 0;
+    $('#c-faktyczny').textContent = me.registered_faktyczny ?? 0;
     $('#c-matches').textContent = me.matches_count ?? 0;
     $('#c-rolls').textContent = me.rolls_count ?? 0;
-    renderCodes(me.codes || []);
-    const note = $('#cup-closed-note');
-    note.hidden = !me.cup_closed;
-    note.textContent = me.cup_closed ? me.cup_closed_message : '';
-    lastClosed = !!me.cup_closed;
-    $('#gen-btn').disabled = lastClosed;
+    applyClosed(!!me.cup_closed, me.cup_closed_message);
     refreshTimer = setTimeout(refresh, 15000);
   } catch (e) {
     if (e.status === 401) { location.reload(); return; }
@@ -57,46 +44,84 @@ async function refresh() {
   }
 }
 
+/** Po terminie Pucharu trzy kategorie głosu są wyłączone; „post” zostaje. */
+function applyClosed(closed, text) {
+  cupClosed = closed;
+  const note = $('#cup-closed-note');
+  note.hidden = !closed;
+  note.textContent = closed ? text : '';
+  for (const r of document.querySelectorAll('input[name="qr-cat"]')) {
+    if (r.value !== 'post') r.disabled = closed;
+  }
+  if (closed && selectedCategory() !== 'post') {
+    const post = document.querySelector('input[name="qr-cat"][value="post"]');
+    if (post) post.checked = true;
+    if (qrVisible) fetchQr();
+  }
+}
+
+function stopQrTimers() {
+  clearTimeout(qrTimer);
+  clearInterval(tickTimer);
+  qrTimer = null;
+  tickTimer = null;
+}
+
+function hideQr() {
+  qrVisible = false;
+  stopQrTimers();
+  $('#qr-box').hidden = true;
+  $('#qr-hide').hidden = true;
+  $('#qr-show').hidden = false;
+  $('#cup-qr').removeAttribute('src');
+}
+
+function tick() {
+  const left = Math.max(0, Math.ceil((qrExpiresAt - Date.now()) / 1000));
+  $('#qr-left').textContent = 'Kod zmieni się za ' + left + ' s';
+}
+
+/** Pobiera świeży kod dla wybranej kategorii i planuje następne pobranie po ``valid_seconds``. */
+async function fetchQr() {
+  stopQrTimers();
+  if (!qrVisible || !ctx.boothId) return;
+  const category = selectedCategory();
+  try {
+    const q = '?category=' + encodeURIComponent(category) + (ctx.role === 'admin' ? '&booth_id=' + encodeURIComponent(ctx.boothId) : '');
+    const r = await api('GET', '/api/volunteer/cup-qr' + q);
+    if (!qrVisible || category !== selectedCategory()) return; // w międzyczasie zmieniono kategorię albo ukryto kod
+    setMessage(msg, '');
+    $('#qr-cat-label').textContent = CAT_LABEL[r.category] || r.category;
+    $('#cup-qr').src = qrUrl(r.path);
+    $('#qr-box').hidden = false;
+    qrExpiresAt = Date.now() + r.valid_seconds * 1000;
+    tick();
+    tickTimer = setInterval(tick, 500);
+    qrTimer = setTimeout(fetchQr, r.valid_seconds * 1000);
+  } catch (e) {
+    if (e.status === 401) { location.reload(); return; }
+    setMessage(msg, e.detail || e.message, 'error');
+    if (e.status === 410) { $('#qr-box').hidden = true; return; } // termin Pucharu minął
+    qrTimer = setTimeout(fetchQr, 5000);
+  }
+}
+
 function wire() {
   if (wired) return;
   wired = true;
-
-  // kind: 'potential' (nowy dawca), 'actual' (dawca faktyczny z okazana legitymacja; numeru nie zapisujemy)
-  // albo 'promo' (przycisk Dodatkowe proby)
-  async function generate(kind) {
-    const buttons = [$('#gen-btn'), $('#promo-btn')];
-    buttons.forEach((b) => { b.disabled = true; });
-    setMessage(msg, '');
-    try {
-      const body = ctx.role === 'admin' ? { booth_id: ctx.boothId } : {};
-      body.kind = kind;
-      const r = await api('POST', '/api/volunteer/generate-code', body);
-      $('#code-big').textContent = r.code;
-      $('#code-qr').src = qrUrl(r.confirm_path);
-      $('#code-expires').textContent = formatTime(r.expires_at);
-      $('#code-kind-label').textContent = CODE_LABEL[r.kind] || CODE_LABEL.potential;
-      show('code-box', true);
-      await refresh();
-    } catch (e) {
-      setMessage(msg, e.detail || e.message, 'error');
-    } finally {
-      buttons.forEach((b) => { b.disabled = false; });
-      if (lastClosed) $('#gen-btn').disabled = true;
-    }
+  $('#qr-show').addEventListener('click', () => {
+    qrVisible = true;
+    $('#qr-show').hidden = true;
+    $('#qr-hide').hidden = false;
+    fetchQr();
+  });
+  $('#qr-hide').addEventListener('click', hideQr);
+  for (const r of document.querySelectorAll('input[name="qr-cat"]')) {
+    r.addEventListener('change', () => { if (qrVisible) fetchQr(); });
   }
-
-  $('#gen-btn').addEventListener('click', () => generate($('#code-kind').value));
-  $('#promo-btn').addEventListener('click', () => generate('promo'));
-
-  $('#vcodes-body').addEventListener('click', async (ev) => {
-    const btn = ev.target.closest && ev.target.closest('[data-cancel]');
-    if (!btn) return;
-    try {
-      await api('POST', '/api/volunteer/codes/' + encodeURIComponent(btn.getAttribute('data-cancel')) + '/cancel');
-      await refresh();
-    } catch (e) {
-      setMessage(msg, e.detail, 'error');
-    }
+  // Ekran telefonu wraca z uśpienia: stary kod mógł już wygasnąć, więc odświeżamy od razu.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && qrVisible) fetchQr();
   });
 }
 
@@ -104,7 +129,7 @@ function wire() {
 export function initVolunteer(me) {
   wire();
   const boothId = me && me.booth ? me.booth.id : '';
-  if (boothId !== ctx.boothId) show('code-box', false);
+  if (boothId !== ctx.boothId) hideQr();
   ctx = { role: me ? me.role : 'volunteer', boothId };
   if (!boothId) {
     clearTimeout(refreshTimer);
@@ -115,6 +140,6 @@ export function initVolunteer(me) {
 
 export function stopVolunteer() {
   clearTimeout(refreshTimer);
-  show('code-box', false);
+  hideQr();
   ctx = { role: 'volunteer', boothId: '' };
 }

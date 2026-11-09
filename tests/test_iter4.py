@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from app import config, db, game
-from test_api import DEVICE, JSON, enter, make_code, new_session, register, volunteer
+from test_api import JSON, enter, new_session, vote_new, volunteer
 
 TOKEN_RE = re.compile(r"^HG-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}-[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$")
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
@@ -14,11 +14,6 @@ SVG_OK = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect w
 
 def roll(c, booth):
     return c.post("/api/game/roll", json={"booth_id": booth})
-
-
-def set_tolerance(admin, n):
-    r = admin.put("/api/admin/settings", json={"device_tolerance": n, "facebook_url": ""})
-    assert r.status_code == 200, r.text
 
 
 def exhaust(c, booth, n=5):
@@ -30,50 +25,25 @@ def always_win(monkeypatch):
     monkeypatch.setattr(game, "is_win", lambda rng=None: True)
 
 
-# --- limit prób na urządzenie i hash urządzenia ---------------------------------
-def test_limit_five_per_device_same_hash_two_sessions_tolerance_one(admin, booth, other_clients):
-    set_tolerance(admin, 1)
-    a, b = other_clients(), other_clients()
-    new_session(a, booth)
-    new_session(b, booth)  # ten sam hash urządzenia w innej przeglądarce
-    exhaust(a, booth)
-    r = roll(b, booth)
-    assert r.status_code == 429 and r.json()["detail"] == "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
-    assert b.get("/api/game/me").json()["attempts_left"] == 0
+# --- limit prób na sesję i stanowisko -------------------------------------------
+LIMIT_MSG = "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
 
 
-def test_tolerance_three_allows_three_sessions(admin, booth, other_clients):
-    assert admin.get("/api/admin/settings").json()["device_tolerance"] == 10
-    set_tolerance(admin, 3)
-    clients = [other_clients() for _ in range(4)]
-    for i, c in enumerate(clients):  # ten sam model, różne egzemplarze (różny ext)
-        new_session(c)
-        assert enter(c, booth, device_ext=f"{i + 1:064x}").status_code == 200
-    for c in clients[:3]:
-        exhaust(c, booth)
-    assert roll(clients[3], booth).status_code == 429
-    # inny hash urządzenia ma własną pulę
-    other = other_clients()
-    new_session(other)
-    assert enter(other, booth, device="cd" * 32).status_code == 200
-    assert roll(other, booth).status_code == 200
-
-
-def test_partial_pool_shared_between_sessions(admin, booth, other_clients):
-    set_tolerance(admin, 1)
+def test_limit_is_per_session(admin, booth, other_clients):
     a, b = other_clients(), other_clients()
     new_session(a, booth)
     new_session(b, booth)
-    exhaust(a, booth, 3)
-    d = roll(b, booth).json()
-    assert d["attempts_left"] == 1
-    assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
+    exhaust(a, booth)
+    r = roll(a, booth)
+    assert r.status_code == 429 and r.json()["detail"] == LIMIT_MSG
+    assert a.get("/api/game/me").json()["attempts_left"] == 0
+    assert b.get("/api/game/me").json()["attempts_left"] == 5  # inna sesja ma własną pulę
+    assert roll(b, booth).status_code == 200
 
 
 def test_limit_is_per_booth_not_across_booths(admin, booth, client):
-    """Regulamin konkursu §4.2: 5 prób na dobę na urządzenie na każdym stanowisku (osobna pula na każdym)."""
+    """Regulamin konkursu §4.2: 5 prób na dobę na sesję na każdym stanowisku (osobna pula na każdym)."""
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
-    set_tolerance(admin, 1)
     new_session(client, booth)
     exhaust(client, booth, 3)
     assert client.get("/api/game/me").json()["attempts_left"] == 2
@@ -81,7 +51,7 @@ def test_limit_is_per_booth_not_across_booths(admin, booth, client):
     assert client.get("/api/game/me").json()["attempts_left"] == 5  # w4 ma własne 5 prób
     exhaust(client, "w4", 5)
     r = roll(client, "w4")
-    assert r.status_code == 429 and r.json()["detail"] == "Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro."
+    assert r.status_code == 429 and r.json()["detail"] == LIMIT_MSG
     assert enter(client, booth).status_code == 200
     assert client.get("/api/game/me").json()["attempts_left"] == 2  # pierwsze stoisko pamięta trzy próby
     exhaust(client, booth, 2)
@@ -89,72 +59,39 @@ def test_limit_is_per_booth_not_across_booths(admin, booth, client):
     assert client.get("/api/game/me").json()["attempts_left"] == 0
 
 
-def test_same_pool_on_the_same_booth_other_device_has_its_own(admin, booth, other_clients):
-    admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
-    a, a2, b = other_clients(), other_clients(), other_clients()
-    new_session(a, booth)
-    new_session(a2, booth)  # ten sam hash urządzenia, ta sama pula na tym stanowisku
-    exhaust(a, booth, 5)
-    assert roll(a2, booth).status_code == 429
-    assert enter(a, "w4").status_code == 200 and roll(a, "w4").status_code == 200  # inne stanowisko: nowe 5
-    new_session(b)
-    assert enter(b, booth, device="cd" * 32).status_code == 200  # inne urządzenie ma własną pulę
-    assert roll(b, booth).status_code == 200
-
-
-def test_enter_consent_and_device_validation(client, booth):
+def test_enter_consent_validation(client, booth):
     new_session(client)
     r = enter(client, booth, consent=False)
     assert r.status_code == 422 and r.json()["detail"] == "Zaakceptuj regulamin i politykę prywatności."
-    for bad in ("", "ab" * 31, "AB" * 32, "zz" * 32, "ab" * 33):
-        assert enter(client, booth, device=bad).status_code == 422, bad
-    assert client.post("/api/game/enter", json={"booth_id": booth, "t": "x", "device": DEVICE}).status_code == 422
+    assert client.post("/api/game/enter", json={"booth_id": booth, "t": "x"}).status_code == 422
     assert roll(client, booth).status_code == 403  # nic nie zapisano
 
 
-def test_device_key_is_hmac_not_raw_hash(booth, client):
-    new_session(client, booth)
+def test_enter_ignores_legacy_device_fields(client, booth):
+    """Starszy front mógł jeszcze wysyłać device / device_ext: serwer je ignoruje i nigdzie nie zapisuje."""
+    from app import qrtoken
+    new_session(client)
+    r = client.post("/api/game/enter", json={"booth_id": booth, "t": qrtoken.current(booth), "consent": True,
+                                              "device": "ab" * 32, "device_ext": "cd" * 32})
+    assert r.status_code == 200
     conn = db.connect()
-    s = conn.execute("SELECT device_key, consent_at FROM game_sessions").fetchone()
-    assert re.fullmatch(r"[0-9a-f]{32}", s["device_key"]) and s["consent_at"]
-    dump = "".join(str(tuple(r)) for t in ("game_sessions", "booth_plays", "settings")
-                   for r in conn.execute(f"SELECT * FROM {t}"))
-    assert DEVICE not in dump
+    dump = "".join(str(tuple(x)) for t in ("game_sessions", "booth_plays", "settings") for x in conn.execute(f"SELECT * FROM {t}"))
+    assert "ab" * 32 not in dump and "cd" * 32 not in dump
+    assert conn.execute("SELECT consent_at FROM game_sessions").fetchone()[0]
     conn.close()
 
 
-def test_new_day_rotates_salt_and_drops_keys(booth, client, monkeypatch):
-    new_session(client, booth)
-    exhaust(client, booth, 2)
-    conn = db.connect()
-    salt1 = db.get_setting(conn, "device_salt")
-    key1 = conn.execute("SELECT device_key FROM game_sessions").fetchone()[0]
-    assert conn.execute("SELECT SUM(attempts) FROM booth_plays").fetchone()[0] == 2
-    monkeypatch.setattr(config, "today", lambda: "2099-01-01")
-    db.rotate_device_salt()  # zadanie w tle, bez żadnego ruchu graczy
-    assert db.get_setting(conn, "device_salt") != salt1 and '"2099-01-01"' in db.get_setting(conn, "device_salt")
-    assert conn.execute("SELECT device_key FROM game_sessions").fetchone()[0] is None
-    assert conn.execute("SELECT COUNT(*) FROM booth_plays").fetchone()[0] == 0
-    assert enter(client, booth).status_code == 200
-    key2 = conn.execute("SELECT device_key FROM game_sessions").fetchone()[0]
-    assert key2 and key2 != key1  # ten sam hash urządzenia, inny klucz w nowym dniu
-    assert roll(client, booth).json()["attempts_left"] == 4
-    conn.close()
-
-
-def test_roll_on_new_day_rotates_before_counting(booth, client, monkeypatch):
+def test_new_day_resets_pool_without_new_scan(booth, client, monkeypatch):
     new_session(client, booth)
     exhaust(client, booth)
     monkeypatch.setattr(config, "today", lambda: "2099-01-01")
-    assert roll(client, booth).status_code == 403  # klucz wyzerowany przez rotację, trzeba zeskanować kod
-    conn = db.connect()
-    assert conn.execute("SELECT COUNT(*) FROM booth_plays").fetchone()[0] == 0
-    conn.close()
+    assert roll(client, booth).status_code == 200  # przepustka nadal ważna, pula liczona od nowa dla nowej doby
+    assert client.get("/api/game/me").json()["attempts_left"] == 4
 
 
-def test_salt_set_at_startup(client):
+def test_no_salt_or_rotation_setting(client):
     conn = db.connect()
-    assert '"date"' in db.get_setting(conn, "device_salt")  # sól powstaje przy starcie, bez żadnego żądania
+    assert db.get_setting(conn, "device_salt") == "" and db.get_setting(conn, "device_tolerance") == ""
     conn.close()
 
 
@@ -260,7 +197,7 @@ def test_migration_adds_columns_to_old_tables(tmp_path, monkeypatch):
     conn = db.connect()
     assert conn.execute("SELECT role FROM volunteers").fetchone()[0] == "volunteer"
     cols = {r[1] for r in conn.execute("PRAGMA table_info(game_sessions)")}
-    assert {"won_token", "consent_at", "device_key"} <= cols
+    assert {"won_token", "consent_at", "cup_voted", "post_bonus_date"} <= cols and "device_key" not in cols
     conn.close()
 
 
@@ -281,7 +218,7 @@ def test_cup_seed_ranks_all_faculties_except_other(admin, booth, client):
     assert admin.get("/api/admin/students").json()["counts"]["W4N"] == 4576
     b = client.get("/api/stats/cup").json()
     assert "Sprawozdanie Rektora" in b["source"] and len(b["ranking"]) == 14
-    assert b["unranked"] == [{"code": "INNE", "name": "Inne", "registered": 0, "actual": 0, "potential": 0}]
+    assert b["unranked"] == [{"code": "INNE", "name": "Inne", "registered": 0, "nowy": 0, "zarejestrowany": 0, "faktyczny": 0}]
     assert b["cup_deadline"] == "2026-12-11T15:30:00Z" and b["cup_closed"] is False
     assert client.get("/api/stats/battle").status_code == 404  # stary adres nie istnieje
 
@@ -294,23 +231,23 @@ def test_seed_does_not_overwrite_existing_students(admin):
 
 def test_cup_ranking_unranked_and_inne(admin, booth, client):
     for fac in ["W4N"] * 3 + ["W13"] * 2 + ["W3", "INNE", "W1"]:
-        assert register(client, make_code(admin, booth_id=booth), fac).status_code == 200
+        assert vote_new(booth, "nowy", fac).status_code == 200
     # WZ = LD / LS * 100: W4N 3/1000 -> 0.3; W13 2/500 -> 0.4; W3 1/500 -> 0.2 (INNE poza klasyfikacją nawet z liczbą)
     put_students(admin, {"W4N": 1000, "W13": 500, "W3": 500, "INNE": 100, "W2": None})
     b = client.get("/api/stats/cup").json()
     assert b["source"] == "GUS 2026"
     assert [(r["rank"], r["code"], r["registered"], r["students"], r["wz"]) for r in b["ranking"]] == \
         [(1, "W13", 2, 500, 0.4), (2, "W4N", 3, 1000, 0.3), (3, "W3", 1, 500, 0.2)]
-    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz", "actual", "potential"}
+    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz", "nowy", "zarejestrowany", "faktyczny"}
     codes = [u["code"] for u in b["unranked"]]
     assert len(codes) == 12 and codes[-1] == "INNE" and "W1" in codes and "W4N" not in codes
     assert {"code": "W1", "name": b["unranked"][codes.index("W1")]["name"], "registered": 1,
-            "actual": 0, "potential": 1} in b["unranked"]
+            "nowy": 1, "zarejestrowany": 0, "faktyczny": 0} in b["unranked"]
 
 
 def test_cup_rounding_and_ties(admin, booth, client):
     for fac in ["W4N"] * 2 + ["W13"] + ["W3"]:
-        register(client, make_code(admin, booth_id=booth), fac)
+        vote_new(booth, "nowy", fac)
     put_students(admin, {"W4N": 600, "W13": 300, "W3": 300})  # 0.33, 0.33, 0.33
     r = client.get("/api/stats/cup").json()["ranking"]
     assert r[0]["wz"] == 0.33
@@ -339,7 +276,7 @@ def test_students_validation(admin, booth):
 
 def test_summary_cup_top3(admin, booth, client):
     for fac in ["W4N"] * 3 + ["W13", "W3"]:
-        register(client, make_code(admin, booth_id=booth), fac)
+        vote_new(booth, "nowy", fac)
     put_students(admin, {})
     assert admin.get("/api/admin/summary?date=all").json()["cup"] == []
     put_students(admin, {"W4N": 300, "W13": 100, "W3": 100, "W1": 100})
@@ -371,9 +308,9 @@ def test_login_roles_and_me(admin, booth, other_clients):
 
 
 def test_admin_can_pick_booth_and_act_on_it(admin, booth):
-    assert admin.post("/api/volunteer/generate-code", json={}).status_code == 400
+    assert admin.get("/api/volunteer/cup-qr?category=nowy").status_code == 400
     assert admin.post("/api/auth/booth", json={"booth_id": booth}).json()["booth"]["id"] == booth
-    assert admin.post("/api/volunteer/generate-code", json={}).status_code == 200
+    assert admin.get("/api/volunteer/cup-qr?category=nowy").status_code == 200
     assert admin.get("/api/volunteer/me").json()["booth"]["id"] == booth
 
 
@@ -410,15 +347,13 @@ def test_old_panels_redirect_to_login(client):
 
 # --- ustawienia, strony ---------------------------------------------------------
 def test_settings_and_facebook_in_config(admin, client):
-    assert admin.get("/api/admin/settings").json() == {"device_tolerance": 10, "facebook_url": "https://www.facebook.com/samorzadpwr",
-                                                       "device_stats": {"date": config.today(), "base_keys": 0, "ext_keys": 0}}
-    for bad in ({"device_tolerance": 0}, {"device_tolerance": 51}, {"device_tolerance": 3, "facebook_url": "http://fb.com/x"},
-                {"device_tolerance": 3, "facebook_url": "javascript:alert(1)"}, {"device_tolerance": 3, "facebook_url": "https://a b"}):
+    assert admin.get("/api/admin/settings").json()["facebook_url"] == "https://www.facebook.com/samorzadpwr"
+    for bad in ({"facebook_url": "http://fb.com/x"}, {"facebook_url": "javascript:alert(1)"}, {"facebook_url": "https://a b"}):
         assert admin.put("/api/admin/settings", json=bad).status_code == 422, bad
-    ok = {"device_tolerance": 7, "facebook_url": " https://facebook.com/samorzad "}
+    ok = {"facebook_url": " https://facebook.com/samorzad "}
     assert admin.put("/api/admin/settings", json=ok).json()["facebook_url"] == "https://facebook.com/samorzad"
     assert client.get("/api/config").json()["facebook_url"] == "https://facebook.com/samorzad"
-    admin.put("/api/admin/settings", json={"device_tolerance": 7, "facebook_url": ""})
+    admin.put("/api/admin/settings", json={"facebook_url": ""})
     assert client.get("/api/config").json()["facebook_url"] is None
     db.init_db()  # domyślny profil z seedu wraca tylko raz: wyczyszczony adres zostaje pusty
     assert client.get("/api/config").json()["facebook_url"] is None
@@ -505,102 +440,9 @@ def test_partner_admin_only(booth, other_clients):
     assert upload(other_clients(), PNG).status_code == 401
 
 
-# --- iteracja 5: klucz rozszerzony ----------------------------------------------
-EXT_A = "a1" * 32
-EXT_B = "b2" * 32
-
-
-def test_same_ext_two_sessions_share_five_despite_high_tolerance(admin, booth, other_clients):
-    set_tolerance(admin, 50)
-    a, b = other_clients(), other_clients()
-    for c in (a, b):
-        new_session(c)
-        assert enter(c, booth, device_ext=EXT_A).status_code == 200
-    exhaust(a, booth, 3)
-    assert roll(b, booth).json()["attempts_left"] == 1
-    assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
-
-
-def test_same_device_different_ext_each_has_five_up_to_ceiling(admin, booth, other_clients):
-    set_tolerance(admin, 2)  # sufit 10 prób na klucz podstawowy
-    cs = [other_clients() for _ in range(3)]
-    for c, ext in zip(cs, (EXT_A, EXT_B, "c3" * 32)):
-        new_session(c)
-        assert enter(c, booth, device_ext=ext).status_code == 200
-    exhaust(cs[0], booth)
-    exhaust(cs[1], booth)
-    assert roll(cs[0], booth).status_code == 429 and roll(cs[1], booth).status_code == 429
-    assert roll(cs[2], booth).status_code == 429  # sufit 5*2 osiągnięty
-    assert cs[2].get("/api/game/me").json()["attempts_left"] == 0
-
-
-def test_tolerance_one_is_five_total_per_device(admin, booth, other_clients):
-    set_tolerance(admin, 1)
-    a, b = other_clients(), other_clients()
-    for c, ext in ((a, EXT_A), (b, EXT_B)):
-        new_session(c)
-        assert enter(c, booth, device_ext=ext).status_code == 200
-    exhaust(a, booth, 3)
-    assert roll(b, booth).json()["attempts_left"] == 1
-    assert roll(b, booth).status_code == 200 and roll(b, booth).status_code == 429
-
-
-def test_missing_device_ext_works_and_invalid_is_422(booth, client):
-    new_session(client, booth)
-    assert roll(client, booth).status_code == 200
-    conn = db.connect()
-    assert conn.execute("SELECT ext_key FROM booth_plays").fetchone()[0] == \
-        conn.execute("SELECT device_ext_key FROM game_sessions").fetchone()[0]
-    conn.close()
-    for bad in ("", "ab" * 31, "ZZ" * 32):
-        assert enter(client, booth, device_ext=bad).status_code == 422, bad
-
-
-def test_ext_key_is_hmac_and_differs_from_base(booth, client):
-    new_session(client)
-    assert enter(client, booth, device_ext=EXT_A).status_code == 200
-    conn = db.connect()
-    s = conn.execute("SELECT device_key, device_ext_key FROM game_sessions").fetchone()
-    assert re.fullmatch(r"[0-9a-f]{32}", s["device_ext_key"]) and s["device_ext_key"] != s["device_key"]
-    dump = "".join(str(tuple(r)) for t in ("game_sessions", "booth_plays", "settings") for r in conn.execute(f"SELECT * FROM {t}"))
-    assert EXT_A not in dump
-    conn.close()
-
-
-def test_rotation_clears_both_keys(booth, client, monkeypatch):
-    new_session(client)
-    enter(client, booth, device_ext=EXT_A)
-    conn = db.connect()
-    assert conn.execute("SELECT device_ext_key FROM game_sessions").fetchone()[0]
-    monkeypatch.setattr(config, "today", lambda: "2099-01-01")
-    db.rotate_device_salt()
-    s = conn.execute("SELECT device_key, device_ext_key FROM game_sessions").fetchone()
-    assert s["device_key"] is None and s["device_ext_key"] is None
-    conn.close()
-
-
-def test_device_stats(admin, booth, other_clients):
-    a, b, c = other_clients(), other_clients(), other_clients()
-    for cl, dev, ext in ((a, DEVICE, EXT_A), (b, DEVICE, EXT_B), (c, "cd" * 32, "c3" * 32)):
-        new_session(cl)
-        assert enter(cl, booth, device=dev, device_ext=ext).status_code == 200
-        roll(cl, booth)
-    st = admin.get("/api/admin/settings").json()["device_stats"]
-    assert st == {"date": config.today(), "base_keys": 2, "ext_keys": 3}
-    assert admin.put("/api/admin/settings", json={"device_tolerance": 4, "facebook_url": ""}).json()["device_stats"] == st
-
-
-def test_tolerance_range_1_to_50(admin):
-    for n in (1, 50):
-        set_tolerance(admin, n)
-        assert admin.get("/api/admin/settings").json()["device_tolerance"] == n
-    for n in (0, 51):
-        assert admin.put("/api/admin/settings", json={"device_tolerance": n, "facebook_url": ""}).status_code == 422
-
-
-def test_reset_my_game_clears_ext_plays(admin, booth):
+def test_reset_my_game_clears_booth_plays(admin, booth):
     new_session(admin)
-    enter(admin, booth, device_ext=EXT_A)
+    enter(admin, booth)
     roll(admin, booth)
     admin.post("/api/admin/test/reset-my-game", json={})
     conn = db.connect()

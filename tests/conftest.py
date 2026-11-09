@@ -21,9 +21,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     from app import auth
     from app.main import app
-    from app.routes import donor
     auth.throttle.reset()
-    donor._misses.clear()
     with TestClient(app, base_url="http://testserver") as c:
         yield c
 

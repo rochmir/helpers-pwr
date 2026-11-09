@@ -1,19 +1,20 @@
 """Aplikacja FastAPI: routery, nagłówki bezpieczeństwa, strony statyczne."""
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from urllib.parse import quote
+
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, pages
+from . import auth, config, db, pages
 from .pages import STATIC_DIR, VERSIONED_PREFIX
-from .routes import admin, admin_test, donor, game, legal, login, misc, partners, stats, volunteer
+from .routes import admin, admin_test, cup, game, legal, login, misc, partners, stats, volunteer
 
 log = logging.getLogger("helpersi")
 
@@ -24,16 +25,6 @@ CSP = ("default-src 'self'; script-src 'self' https://challenges.cloudflare.com;
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
 
-async def _rotate_salt_hourly():
-    """Sól dobowa rotuje także bez ruchu: klucz urządzenia znika następnego dnia, nawet po zakończeniu akcji."""
-    while True:
-        await asyncio.sleep(3600)
-        try:
-            await asyncio.to_thread(db.rotate_device_salt)
-        except Exception:
-            log.exception("Rotacja soli dobowej nie powiodła się.")
-
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     db.init_db()
@@ -41,10 +32,7 @@ async def lifespan(_: FastAPI):
         log.warning("Brak ADMIN_SECRET — konto awaryjne admin jest niedostępne.")
     if not config.legal_contact():
         log.warning("Brak LEGAL_CONTACT, dokumenty prawne pokażą „[do uzupełnienia]” w miejscu kontaktu.")
-    db.rotate_device_salt()
-    rotation = asyncio.create_task(_rotate_salt_hourly())
     yield
-    rotation.cancel()
 
 
 app = FastAPI(title="helpersi-pwr", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -80,7 +68,7 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": f"Niepoprawne dane{field}."}, status_code=422)
 
 
-for module in (misc, game, login, volunteer, donor, stats, partners, admin, admin_test, legal):
+for module in (misc, game, login, volunteer, cup, stats, partners, admin, admin_test, legal):
     app.include_router(module.router)
 app.include_router(legal.admin_router)
 
@@ -120,9 +108,12 @@ def favicon():
 
 
 @app.get("/stoisko/{booth_id}", include_in_schema=False)
-def stoisko(booth_id: str):
+def stoisko(booth_id: str, staff: dict | None = Depends(auth.optional_staff)):
+    """Ekran stoiska z kodem QR do gry: tylko dla zalogowanego personelu (wolontariusz / admin)."""
     if not re.fullmatch(r"[a-z0-9]{1,20}", booth_id):
         raise HTTPException(404, "Nie znaleziono strony.")
+    if staff is None:
+        return RedirectResponse("/login?next=" + quote(f"/stoisko/{booth_id}", safe=""), status_code=303)
     return _stoisko()
 
 

@@ -1,12 +1,10 @@
 // Czesc panelu dla administratora. Logowanie i wybor rangi robi login.js, tu tylko sekcje admina.
 import { api, $, h, icon, setMessage, formatWarsaw, formatDateTime, formatDateRange, renderGenotype, getConfig, facultyLabel } from './common.js';
-import { renderSocial, renderPlayerCert, renderDonorCert, renderResultCert, showDownload } from './cert.js';
+import { renderSocial, renderPlayerCert, renderDonorCert, renderResultCert, showDownload, makeGraphic } from './cert.js';
 
 const msg = $('#panel-msg');
 let booths = [];
 let faculties = [];
-const KIND_PL = { potential: 'nowy dawca', actual: 'dawca faktyczny', promo: 'dodatkowe próby' };
-const STATUS_PL = { ACTIVE: 'aktywny', USED: 'użyty', EXPIRED: 'wygasły' };
 
 async function guard(fn, target = msg) {
   setMessage(target, '');
@@ -19,7 +17,7 @@ async function guard(fn, target = msg) {
 
 /** Wczytuje wszystkie sekcje admina (wywolywane raz po zalogowaniu administratora). */
 export async function initAdmin() {
-  await Promise.all([loadBooths(), loadVolunteers(), loadCodes(), loadDictionary(), loadDays(), refreshTestStatus(),
+  await Promise.all([loadBooths(), loadVolunteers(), loadDictionary(), loadDays(), refreshTestStatus(),
     loadHours(), loadWins(), loadPartners(), loadSettings(), loadLegal()]);
 }
 
@@ -40,7 +38,7 @@ async function loadBooths() {
       body.append(h('tr', {},
         h('td', { class: 'mono' }, b.id), h('td', {}, b.is_lecture ? b.name + ' (bez wolontariusza, poza wykazami)' : b.name),
         h('td', {}, [b.building, formatDateRange(b.date_from, b.date_to)].filter(Boolean).join(', ')),
-        h('td', {}, b.registered), h('td', {}, b.active_codes),
+        h('td', {}, b.registered),
         h('td', {}, b.matches_count), h('td', {}, b.rolls_count),
         h('td', {}, genotypeCell),
         h('td', { class: 'actions' },
@@ -49,12 +47,6 @@ async function loadBooths() {
           act('rename', 'ti-pencil', 'Zmień nazwę'), act('details', 'ti-calendar', 'Budynek i termin'),
           act('reset', 'ti-refresh', 'Resetuj genotyp'), ...(b.is_lecture ? [] : [act('delete', 'ti-trash', 'Usuń')]))));
     }
-    const sel = $('#cf-booth');
-    const cur = sel.value;
-    sel.textContent = '';
-    sel.append(h('option', { value: '' }, 'Wszystkie'));
-    for (const b of booths) sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
-    sel.value = cur;
     fillBoothSelects();
     await loadLectureLink();
   });
@@ -258,37 +250,6 @@ $('#vol-copy').addEventListener('click', async () => {
   }
 });
 
-// ---------- kody ----------
-async function loadCodes() {
-  await guard(async () => {
-    const qs = new URLSearchParams();
-    if ($('#cf-booth').value) qs.set('booth_id', $('#cf-booth').value);
-    if ($('#cf-status').value) qs.set('status', $('#cf-status').value);
-    const codes = await api('GET', '/api/admin/codes?' + qs);
-    const body = $('#codes-body');
-    body.textContent = '';
-    for (const c of codes) {
-      body.append(h('tr', { class: 'code-' + c.status.toLowerCase() },
-        h('td', { class: 'mono' }, c.code), h('td', {}, c.booth_id || ''), h('td', {}, KIND_PL[c.kind] || c.kind),
-        h('td', {}, h('span', { class: 'status-tag tag-' + c.status.toLowerCase() }, STATUS_PL[c.status] || c.status)), h('td', {}, formatDateTime(c.created_at)),
-        h('td', {}, c.status === 'ACTIVE'
-          ? h('button', { class: 'btn btn-small', type: 'button', 'data-cancel': c.code }, icon('ti-x'), 'Anuluj') : '')));
-    }
-    if (!codes.length) body.append(h('tr', {}, h('td', { colspan: 6 }, 'Brak kodów.')));
-  });
-}
-
-$('#codes-filter').addEventListener('submit', (ev) => { ev.preventDefault(); loadCodes(); });
-$('#codes-body').addEventListener('click', async (ev) => {
-  const cancelBtn = ev.target.closest && ev.target.closest('[data-cancel]');
-  if (!cancelBtn) return;
-  const code = cancelBtn.getAttribute('data-cancel');
-  await guard(async () => {
-    await api('POST', '/api/admin/codes/' + encodeURIComponent(code) + '/cancel');
-    await loadCodes();
-  });
-});
-
 // ---------- słownik ----------
 async function loadDictionary() {
   await guard(async () => {
@@ -329,14 +290,30 @@ async function loadDays() {
   });
 }
 
-$('#social-btn').addEventListener('click', async () => {
-  await guard(async () => {
-    const summary = await api('GET', '/api/admin/summary?date=' + encodeURIComponent($('#social-date').value));
-    const fmt = $('#social-format').value;
-    const canvas = await renderSocial(summary, fmt);
-    const tag = summary.scope === 'day' ? summary.date : 'cala-akcja';
-    await showDownload(canvas, $('#social-output'), 'podsumowanie-' + tag + '-' + fmt.replace(':', 'x') + '.png');
+/** Komunikat błędu grafiki tuż przed polem wyniku (tworzony przy pierwszym użyciu). */
+function graphicMsg(out) {
+  let el = out.previousElementSibling;
+  if (!el || !el.classList.contains('graphic-msg')) {
+    el = h('p', { class: 'msg graphic-msg', role: 'alert', hidden: true });
+    out.before(el);
+  }
+  return el;
+}
+
+/** Przycisk „pokaż grafikę”: wspólna obsługa postępu i błędów (makeGraphic). */
+function graphicButton(btnSel, outSel, fn) {
+  $(btnSel).addEventListener('click', (ev) => {
+    const out = $(outSel);
+    return makeGraphic(ev.currentTarget, out, graphicMsg(out), () => fn(out));
   });
+}
+
+graphicButton('#social-btn', '#social-output', async (out) => {
+  const summary = await api('GET', '/api/admin/summary?date=' + encodeURIComponent($('#social-date').value));
+  const fmt = $('#social-format').value;
+  const canvas = await renderSocial(summary, fmt);
+  const tag = summary.scope === 'day' ? summary.date : 'cala-akcja';
+  await showDownload(canvas, out, 'podsumowanie-' + tag + '-' + fmt.replace(':', 'x') + '.png');
 });
 
 
@@ -405,17 +382,23 @@ $('#wins-filter').addEventListener('input', renderWins);
 $('#wins-refresh').addEventListener('click', loadWins);
 
 // ---------- partnerzy ----------
+let partnerIds = [];
+
 async function loadPartners() {
   await guard(async () => {
     const list = await api('GET', '/api/partners');
     const ul = $('#partners-list');
     ul.textContent = '';
     $('#partners-empty').hidden = list.length > 0;
-    for (const p of list) {
+    partnerIds = list.map((p) => p.id);
+    list.forEach((p, i) => {
       ul.append(h('li', { class: 'partner-item' },
-        h('img', { src: p.url, alt: p.name }), h('div', {}, p.name),
-        h('button', { class: 'btn btn-small', type: 'button', 'data-partner': p.id }, icon('ti-trash'), 'Usuń')));
-    }
+        h('img', { src: p.url, alt: p.name }), h('div', {}, (i + 1) + '. ' + p.name),
+        h('div', { class: 'partner-actions' },
+          h('button', { class: 'btn btn-small', type: 'button', 'data-move': 'up', 'data-partner': p.id, disabled: i === 0, 'aria-label': 'Przesuń wcześniej: ' + p.name }, icon('ti-arrow-up')),
+          h('button', { class: 'btn btn-small', type: 'button', 'data-move': 'down', 'data-partner': p.id, disabled: i === list.length - 1, 'aria-label': 'Przesuń później: ' + p.name }, icon('ti-arrow-down')),
+          h('button', { class: 'btn btn-small', type: 'button', 'data-partner': p.id }, icon('ti-trash'), 'Usuń'))));
+    });
   });
 }
 
@@ -445,6 +428,18 @@ $('#partner-form').addEventListener('submit', async (ev) => {
 $('#partners-list').addEventListener('click', async (ev) => {
   const btn = ev.target.closest && ev.target.closest('button[data-partner]');
   if (!btn) return;
+  if (btn.dataset.move) {
+    const i = partnerIds.indexOf(Number(btn.dataset.partner));
+    const j = btn.dataset.move === 'up' ? i - 1 : i + 1;
+    if (i < 0 || j < 0 || j >= partnerIds.length) return;
+    const ids = partnerIds.slice();
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await guard(async () => {
+      await api('PUT', '/api/admin/partners/order', { ids });
+      await loadPartners();
+    });
+    return;
+  }
   if (!confirm('Usunąć tego partnera z grafik?')) return;
   await guard(async () => {
     await api('DELETE', '/api/admin/partners/' + encodeURIComponent(btn.dataset.partner));
@@ -453,18 +448,26 @@ $('#partners-list').addEventListener('click', async (ev) => {
 });
 
 // ---------- ustawienia ----------
-function showDeviceStats(d) {
-  if (!d) return;
-  $('#device-stats').textContent = 'Dziś (' + d.date + '): ' + d.base_keys + ' różnych kluczy podstawowych, ' + d.ext_keys +
-    ' różnych kluczy rozszerzonych. Im bliżej siebie te liczby, tym rzadsze kolizje identycznych modeli.';
+/** ISO "RRRR-MM-DDTGG:MM" (czas Warsaw) -> "11.12.2026, 16:30" do podpowiedzi. */
+function deadlineText(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})/.exec(v || '');
+  return m ? m[3] + '.' + m[2] + '.' + m[1] + ', ' + m[4] : '';
+}
+
+function fillDeadline(inputSel, hintSel, d) {
+  $(inputSel).value = d && d.custom ? d.value : '';
+  $(hintSel).textContent = d
+    ? (d.custom ? 'Ustawiony w panelu: ' + deadlineText(d.value) + '. ' : 'Obowiązuje domyślny termin. ') + 'Domyślnie: ' + deadlineText(d.default) + '. Wyczyść pole i zapisz, aby wrócić do domyślnego.'
+    : '';
+  $(inputSel).placeholder = d ? d.default : '';
 }
 
 async function loadSettings() {
   await guard(async () => {
     const st = await api('GET', '/api/admin/settings');
-    $('#set-tolerance').value = st.device_tolerance;
     $('#set-facebook').value = st.facebook_url || '';
-    showDeviceStats(st.device_stats);
+    fillDeadline('#set-cup-deadline', '#set-cup-deadline-hint', st.cup_deadline);
+    fillDeadline('#set-contest-deadline', '#set-contest-deadline-hint', st.contest_deadline);
   });
 }
 
@@ -473,33 +476,37 @@ $('#settings-form').addEventListener('submit', async (ev) => {
   await guard(async () => {
     const url = $('#set-facebook').value.trim();
     if (url && !url.startsWith('https://')) throw new Error('Adres Facebooka musi zaczynać się od https://.');
-    const st = await api('PUT', '/api/admin/settings', { device_tolerance: Number($('#set-tolerance').value), facebook_url: url });
-    $('#set-tolerance').value = st.device_tolerance;
+    const st = await api('PUT', '/api/admin/settings', {
+      facebook_url: url,
+      cup_deadline: $('#set-cup-deadline').value || '',
+      contest_deadline: $('#set-contest-deadline').value || '',
+    });
     $('#set-facebook').value = st.facebook_url || '';
-    showDeviceStats(st.device_stats);
+    fillDeadline('#set-cup-deadline', '#set-cup-deadline-hint', st.cup_deadline);
+    fillDeadline('#set-contest-deadline', '#set-contest-deadline-hint', st.contest_deadline);
     setMessage(msg, 'Ustawienia zapisane.', 'ok');
   });
 });
 
 // ---------- podglad grafik (tylko lokalnie, bez zapisu na serwerze) ----------
-$('#pv-player-btn').addEventListener('click', async () => {
+graphicButton('#pv-player-btn', '#pv-player-out', async (out) => {
   const canvas = await renderPlayerCert({ nick: $('#pv-player-nick').value, genotype: '0123012301', wonAt: new Date().toISOString(),
     token: 'HG-TEST-0001', boothName: 'Stoisko testowe' });
-  await showDownload(canvas, $('#pv-player-out'), 'podglad-certyfikat-gracza.png');
+  await showDownload(canvas, out, 'podglad-certyfikat-gracza.png');
 });
 
-$('#pv-donor-btn').addEventListener('click', async () => {
+graphicButton('#pv-donor-btn', '#pv-donor-out', async (out) => {
   const sel = $('#pv-donor-faculty');
   const fac = faculties.find((f) => f.code === sel.value);
   const facultyName = fac && fac.code !== 'INNE' ? fac.name : '';
-  const canvas = await renderDonorCert({ name: $('#pv-donor-name').value, facultyName, kind: $('#pv-donor-kind').value });
-  await showDownload(canvas, $('#pv-donor-out'), 'podglad-certyfikat-dawcy.png');
+  const canvas = await renderDonorCert({ name: $('#pv-donor-name').value, facultyName, category: $('#pv-donor-kind').value });
+  await showDownload(canvas, out, 'podglad-certyfikat-dawcy.png');
 });
 
-$('#pv-result-btn').addEventListener('click', async () => {
+graphicButton('#pv-result-btn', '#pv-result-out', async (out) => {
   const best = Math.max(0, Math.min(10, Number($('#pv-result-best').value) || 0));
   const canvas = await renderResultCert({ nick: $('#pv-result-nick').value, best, boothName: 'Stoisko testowe', date: new Date().toISOString() });
-  await showDownload(canvas, $('#pv-result-out'), 'podglad-wynik-symulatora.png');
+  await showDownload(canvas, out, 'podglad-wynik-symulatora.png');
 });
 
 // ---------- testy ----------
@@ -512,7 +519,7 @@ function fillBoothSelects() {
     sel.textContent = '';
     if (withEmpty) sel.append(h('option', { value: '' }, 'losowe'));
     for (const b of booths) {
-      if (b.is_lecture && withEmpty) continue; // sztuczne rejestracje: na Zajęciach nie ma tokenów
+      if (b.is_lecture && withEmpty) continue; // sztuczne głosy: na Zajęciach nie ma wolontariusza
       sel.append(h('option', { value: b.id }, b.name + ' (' + b.id + ')'));
     }
     if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
@@ -603,12 +610,12 @@ $('#t-wipe-confirm').addEventListener('input', () => {
 });
 
 $('#t-wipe').addEventListener('click', () => runTest($('#t-wipe-result'), async () => {
-  if (!confirm('Na pewno usunąć wszystkie punkty, tokeny i dane graczy? Tej operacji nie można cofnąć.')) return;
+  if (!confirm('Na pewno usunąć wszystkie punkty i dane graczy? Tej operacji nie można cofnąć.')) return;
   await api('POST', T + 'wipe', { confirm: $('#t-wipe-confirm').value.trim() });
   $('#t-wipe-confirm').value = '';
   $('#t-wipe').disabled = true;
   testResult($('#t-wipe-result'), 'Dane testowe wyczyszczone. Stoiska dostały nowe genotypy.', 'ok');
-  await Promise.all([loadBooths(), loadCodes(), loadDays(), refreshTestStatus()]);
+  await Promise.all([loadBooths(), loadDays(), refreshTestStatus()]);
 }));
 
 // ---------- weryfikacja Tokenu Losu (Komisja Konkursowa, §6.2 regulaminu) ----------

@@ -1,4 +1,4 @@
-"""Panel admina: stoiska, konta, tokeny, słownik, ustawienia, liczby studentów, trafienia i weryfikacja Tokenu Losu, podsumowania, eksport CSV."""
+"""Panel admina: stoiska, konta, słownik, ustawienia, liczby studentów, trafienia i weryfikacja Tokenu Losu, podsumowania, eksport CSV."""
 from __future__ import annotations
 
 import csv
@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from .. import auth, config, db
-from . import stats, volunteer
+from . import stats
 
 router = APIRouter(prefix="/api/admin")
 BOOTH_ID_RE = re.compile(r"^[a-z0-9]{1,20}$")
@@ -70,7 +70,8 @@ class RoleIn(BaseModel):
 
 
 class SettingsIn(BaseModel):
-    device_tolerance: int
+    cup_deadline: str | None = Field(None, max_length=40)
+    contest_deadline: str | None = Field(None, max_length=40)
     facebook_url: str = Field("", max_length=300)
 
 
@@ -95,14 +96,11 @@ class DictionaryIn(BaseModel):
 # --- stoiska --------------------------------------------------------------------
 @router.get("/booths")
 def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    db.expire_codes(conn)
     rows = conn.execute(
-        "SELECT b.*, (SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='USED') AS registered, "
-        "(SELECT COUNT(*) FROM registration_codes c WHERE c.booth_id=b.id AND c.status='ACTIVE') + "
-        "(SELECT COUNT(*) FROM promo_codes p WHERE p.booth_id=b.id AND p.status='ACTIVE') AS active_codes "
+        "SELECT b.*, (SELECT COUNT(*) FROM donors_stats d WHERE d.booth_id=b.id) AS registered "
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
-                               "rolls_count", "registered", "active_codes", "building", "date_from", "date_to")}
+                               "rolls_count", "registered", "building", "date_from", "date_to")}
             | {"is_lecture": bool(r["is_lecture"])} for r in rows]
 
 
@@ -150,10 +148,11 @@ def delete_booth(booth_id: str, _: dict = Depends(auth.require_admin), conn: sql
             raise HTTPException(404, "Nie ma takiego stoiska.")
         if booth["is_lecture"]:
             raise HTTPException(409, "Stanowiska Zajęcia nie można usunąć.")
-        used = conn.execute("SELECT (SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
-                            "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)", (booth_id, booth_id)).fetchone()[0]
+        used = conn.execute("SELECT (SELECT COUNT(*) FROM donors_stats WHERE booth_id=?) + "
+                            "(SELECT COUNT(*) FROM registration_codes WHERE booth_id=?) + "
+                            "(SELECT COUNT(*) FROM promo_codes WHERE booth_id=?)", (booth_id, booth_id, booth_id)).fetchone()[0]
         if used:
-            raise HTTPException(409, "Stoisko ma tokeny rejestracyjne, więc nie można go usunąć.")
+            raise HTTPException(409, "Stoisko ma zapisane głosy w Pucharze, więc nie można go usunąć.")
         conn.execute("DELETE FROM genotype_history WHERE booth_id=?", (booth_id,))
         conn.execute("DELETE FROM booths WHERE id=?", (booth_id,))
     return {"ok": True}
@@ -269,21 +268,6 @@ def delete_volunteer(login: str, _: dict = Depends(auth.require_admin), conn: sq
     return {"ok": True}
 
 
-# --- kody -----------------------------------------------------------------------
-@router.get("/codes")
-def list_codes(booth_id: str | None = None, status: str | None = None, _: dict = Depends(auth.require_admin),
-               conn: sqlite3.Connection = Depends(db.get_db)):
-    db.expire_codes(conn)
-    rows = db.list_codes(conn, booth_id or None, status.upper() if status else None, limit=200)
-    return [{"code": r["code"], "booth_id": r["booth_id"], "status": r["status"], "kind": r["kind"], "created_at": r["created_at"],
-             "expires_at": config.expiry_of(r["created_at"]), "used_at": r["used_at"]} for r in rows]
-
-
-@router.post("/codes/{code}/cancel")
-def cancel_code(code: str, staff: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    return volunteer.cancel(conn, code.strip().upper(), staff)
-
-
 # --- słownik --------------------------------------------------------------------
 @router.get("/dictionary")
 def get_dictionary(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
@@ -379,23 +363,52 @@ def unsubmit_token(token: str, _: dict = Depends(auth.require_admin), conn: sqli
 
 
 # --- ustawienia i liczby studentów ----------------------------------------------
+def _local_minute(dt) -> str:
+    return dt.astimezone(config.TZ).strftime("%Y-%m-%dT%H:%M")
+
+
+def _deadline_view(conn: sqlite3.Connection, key: str, effective, default) -> dict:
+    """Termin do panelu: obowiązujący (czas Warsaw, do ``datetime-local``), domyślny z env/kodu i czy jest nadpisany."""
+    return {"value": _local_minute(effective), "default": _local_minute(default),
+            "custom": bool(db.get_setting(conn, key))}
+
+
+def _settings_view(conn: sqlite3.Connection) -> dict:
+    return {"facebook_url": db.get_setting(conn, "facebook_url"),
+            "cup_deadline": _deadline_view(conn, "cup_deadline", config.cup_deadline(),
+                                           config.env_deadline("CUP_DEADLINE", config.DEFAULT_CUP_DEADLINE)),
+            "contest_deadline": _deadline_view(conn, "contest_deadline", config.contest_deadline(),
+                                               config.env_deadline("CONTEST_DEADLINE", config.DEFAULT_CONTEST_DEADLINE))}
+
+
 @router.get("/settings")
 def get_settings(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    return {"device_tolerance": db.device_tolerance(conn), "facebook_url": db.get_setting(conn, "facebook_url"),
-            "device_stats": db.device_stats(conn)}
+    return _settings_view(conn)
+
+
+def _normalize_deadline(raw: str | None, label: str) -> str:
+    """Pusty = powrót do wartości domyślnej (env); inaczej poprawna data i godzina, zapis w czasie Warsaw z dokładnością do minuty."""
+    if raw is None or not raw.strip():
+        return ""
+    dt = config.parse_deadline(raw)
+    if dt is None:
+        raise HTTPException(422, f"{label}: niepoprawna data i godzina.")
+    return _local_minute(dt)
 
 
 @router.put("/settings")
 def put_settings(body: SettingsIn, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
     url = body.facebook_url.strip()
-    if not 1 <= body.device_tolerance <= 50:
-        raise HTTPException(422, "Tolerancja: liczba od 1 do 50.")
     if url and (not url.startswith("https://") or len(url) <= 8 or any(c.isspace() for c in url)):
         raise HTTPException(422, "Link do Facebooka musi zaczynać się od https://.")
+    cup = _normalize_deadline(body.cup_deadline, "Koniec zliczania punktów Pucharu")
+    contest = _normalize_deadline(body.contest_deadline, "Koniec przyjmowania zgłoszeń do konkursu")
     with db.tx(conn):
-        db.set_setting(conn, "device_tolerance", str(body.device_tolerance))
         db.set_setting(conn, "facebook_url", url)
-    return {"device_tolerance": body.device_tolerance, "facebook_url": url, "device_stats": db.device_stats(conn)}
+        # pole pominięte (None) też resetuje do domyślnego: panel zawsze wysyła oba pola
+        db.set_setting(conn, "cup_deadline", cup)
+        db.set_setting(conn, "contest_deadline", contest)
+    return _settings_view(conn)
 
 
 @router.get("/students")
@@ -421,10 +434,6 @@ def put_students(body: StudentsIn, _: dict = Depends(auth.require_admin), conn: 
 
 
 # --- podsumowania ---------------------------------------------------------------
-def _used_on(conn: sqlite3.Connection, d: str) -> int:
-    return sum(db.used_counts(conn, date=d).values())
-
-
 @router.get("/summary")
 def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
             conn: sqlite3.Connection = Depends(db.get_db)):
@@ -474,14 +483,15 @@ def _csv(rows: list[list], header: list[str], filename: str) -> Response:
 
 @router.get("/export-csv")
 def export_csv(set: str = "punkty", _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    """``punkty``: wpisy wydziałów (id, wydział, data i godzina UTC). ``tokeny``: zużyte tokeny rejestracyjne wg
-    stoiska, typu i doby (zestawienie do audytu §6.3 regulaminu Pucharu)."""
-    if set == "tokeny":
+    """``punkty``: głosy w Pucharze (id, wydział, kategoria, rok studiów, stoisko, data i godzina UTC). ``stoiska``
+    (alias ``tokeny``): liczba głosów wg stoiska, kategorii i doby (zestawienie do audytu §6.3 regulaminu Pucharu)."""
+    if set in ("stoiska", "tokeny"):
         counts: dict[tuple[str, str, str], int] = {}
-        for r in conn.execute("SELECT booth_id, kind, used_at FROM registration_codes WHERE status='USED'"):
-            key = (r["booth_id"], r["kind"], config.warsaw_date(r["used_at"]))
+        for r in conn.execute("SELECT booth_id, category, created_at FROM donors_stats"):
+            key = (r["booth_id"] or "", r["category"], config.warsaw_date(r["created_at"]))
             counts[key] = counts.get(key, 0) + 1
-        return _csv([[*k, n] for k, n in sorted(counts.items())], ["booth_id", "kind", "date", "count"],
-                    "tokeny-wg-stoisk.csv")
-    return _csv([list(r) for r in conn.execute("SELECT id,faculty,created_at FROM donors_stats ORDER BY id")],
-                ["id", "faculty", "created_at"], "punkty.csv")
+        return _csv([[*k, n] for k, n in sorted(counts.items())], ["booth_id", "category", "date", "count"],
+                    "glosy-wg-stoisk.csv")
+    return _csv([list(r) for r in conn.execute(
+        "SELECT id,faculty,category,study_year,booth_id,created_at FROM donors_stats ORDER BY id")],
+        ["id", "faculty", "category", "study_year", "booth_id", "created_at"], "punkty.csv")

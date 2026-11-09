@@ -1,7 +1,7 @@
 # helpersi-pwr
 
 Aplikacja na akcję rejestracji dawców szpiku (DKMS) na Politechnice Wrocławskiej: symulator HLA „HLA Match Maker – Sprawdź Parametry”
-i towarzyszący konkurs, tokeny rejestracyjne (kody OTP) wydawane przez wolontariuszy, statystyki, Puchar Dawcy PWr oraz wspólny panel personelu.
+i towarzyszący konkurs, dynamiczne kody QR (ważne 60 s) pokazywane przez wolontariuszy do głosu w Pucharze Dawcy PWr, statystyki, Puchar oraz wspólny panel personelu.
 Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres docelowy: https://helpers-pwr.rupary.pl. Specyfikacja techniczna: `PLAN.md`.
 
 ## Prywatność
@@ -10,21 +10,24 @@ Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres doce
 - stoiska (id, nazwa, budynek, terminy, aktualny genotyp, liczniki), konta personelu (login, hash hasła, ranga; pseudonimy),
 - sesje symulatora (losowy identyfikator, liczba prób na dzień, flaga „wygrał”, czas zgody, token i wzór własnego trafienia do odtworzenia certyfikatu),
 - trafienia 10/10 (Token Losu `HG-XXXX-XXXX`): token, znacznik czasu, wzór, stoisko, numer porządkowy i czas oznaczenia jako wykorzystany. Bez powiązania z sesją (`wins.session_id` jest NULL),
-- **pseudonimowy, dobowy klucz urządzenia** (limit 5 prób na dobę na urządzenie): `HMAC(sól dobowa, hash)` skrótów z przeglądarki (`device_key`, `device_ext_key`)
-  i liczniki prób. Sól jest losowa na każdy dzień (Europe/Warsaw) i rotowana zadaniem w tle co godzinę: po zmianie dnia stare `booth_plays` są kasowane,
-  a klucze w sesjach zerowane. Dlatego „pseudonimowy”, nie „anonimowy”,
-- tokeny rejestracyjne (kod, stoisko, typ: nowy dawca / dawca faktyczny, status, czasy; tabela `registration_codes`),
-- punkty Pucharu (`donors_stats`): wydział, znacznik czasu i **stały** skrót urządzenia `HMAC(SECRET_KEY, "cup:"+device_ext)` (jeden głos z urządzenia). Bez roku studiów, stoiska, typu, tokenu i numeru legitymacji. Skrót trzymamy do końca audytu,
+- sesje symulatora (losowy identyfikator w ciasteczku `hp_game`, liczba prób na dzień i stanowisko w `booth_plays`, flaga „wygrał”, czas zgody, dodatkowe próby,
+  flaga „oddał głos” `cup_voted`, tymczasowy claim kodu QR na 10 minut, data odebrania bonusu „post”, token i wzór własnego trafienia do odtworzenia certyfikatu),
+- głosy w Pucharze (`donors_stats`): wydział, kategoria (nowy / zarejestrowany / faktyczny), rok studiów, stoisko i znacznik czasu. **Bez powiązania z sesją**, bez urządzenia, bez danych osobowych,
+- kodów QR **nie zapisujemy**: token jest bezstanowy (podpisany HMAC identyfikator stoiska, kategoria i czas wygenerowania, ważny 60 s),
+- historyczne tabele `registration_codes` i `promo_codes` (z wersji sprzed v3) zostają w starszych bazach, ale nic w nie nie piszemy; czyści je tylko „wipe” w narzędziach testowych,
 - dokumenty prawne (treść, wersje), partnerów (nazwa i plik logo w `DATA_DIR/partners`).
 
 **Nie zapisujemy:**
 - adresów IP (uvicorn z `--no-access-log`),
-- imienia, nazwiska ani ksywki (certyfikaty rysuje przeglądarka), numeru ani daty legitymacji (wolontariusz ją tylko ogląda).
+- imienia, nazwiska ani ksywki (certyfikaty rysuje przeglądarka), numeru ani daty legitymacji (wolontariusz ją tylko ogląda),
+- odcisku urządzenia (fingerprintingu): limit prób opiera się wyłącznie na losowym identyfikatorze sesji w ciasteczku.
 
 ## Dokumenty prawne
 
 Treści regulaminów i polityki prywatności są w bazie (`legal_documents`) i edytuje się je w panelu `/login`, sekcja „Regulaminy i dokumenty”, bez deployu.
-Markdown jest renderowany na serwerze bez surowego HTML. Pliki w `app/legal/*.md` służą tylko do jednorazowego seedu brakujących dokumentów bazowych.
+Markdown jest renderowany na serwerze bez surowego HTML. Pliki w `app/legal/*.md` służą do seedu brakujących dokumentów bazowych oraz do jednorazowego podniesienia
+dokumentów w istniejącej bazie do treści v3 (`settings.legal_seed_version`; stara treść trafia do historii wersji jako „system”, wersja +1, więc symulator poprosi o ponowną zgodę;
+późniejsze edycje z panelu nie są nadpisywane).
 Zmiana tytułu lub treści zwiększa wersję i ustawia datę ostatniej zmiany (tylko serwer), stan sprzed zmiany trafia do historii wersji.
 Publicznie: `/dokumenty`, `/dokumenty/{slug}`. Miejsce `{{CONTACT}}` w treści zastępuje `LEGAL_CONTACT` (puste = „[do uzupełnienia]”). `LEGAL_OWNER` już nie istnieje.
 Zmiana regulaminu konkursu lub polityki prywatności wymusza ponowną zgodę w symulatorze.
@@ -37,9 +40,10 @@ Ranga jest czytana z bazy przy każdym żądaniu, więc degradacja i reset hasł
 | Możliwość | Wolontariusz | Admin |
 |---|---|---|
 | Wybór stoiska po zalogowaniu | tak | tak |
-| Generowanie / anulowanie kodów | tylko wybrane stoisko | każde stoisko |
-| Liczniki i lista kodów | tylko wybrane stoisko | wszystkie stoiska |
-| Stoiska, konta i rangi, słownik wydziałów, liczby studentów, partnerzy, ustawienia | nie | tak |
+| Kod QR do Pucharu (4 kategorie: nowy, zarejestrowany, faktyczny, post) | tylko wybrane stoisko | każde stoisko |
+| Ekran stoiska `/stoisko/{id}` (wymaga zalogowania; bez sesji przekierowanie na `/login?next=...`) | tak | tak |
+| Liczniki głosów | tylko wybrane stoisko | wszystkie stoiska |
+| Stoiska, konta i rangi, słownik wydziałów, liczby studentów, partnerzy (kolejność strzałkami), ustawienia i terminy | nie | tak |
 | Trafienia 10/10, weryfikacja Tokenu Losu, dokumenty prawne, podsumowania, eksport CSV, grafiki | nie | tak |
 | Statystyki (`/statystyki`) i Puchar Dawcy PWr (`/puchar`) | publiczne | publiczne |
 
@@ -49,13 +53,13 @@ logowanie na dany login jest blokowane na 5 minut (licznik per login, nie per IP
 
 ## Limit prób
 
-5 prób na dobę na urządzenie na każdym stoisku (regulamin konkursu §4.2 ust. 2), liczone po kluczu urządzenia (działa między przeglądarkami tego samego telefonu).
-Limit 5 trzyma klucz rozszerzony; identyczne modele telefonów dają ten sam klucz podstawowy, więc `settings.device_tolerance` (1-50, domyślnie 10) to sufit
-`5 * tolerancja` prób łącznie na klucz podstawowy. Dodatkowe próby (kod za post/story, głos w Pucharze) idą ponad pulę stoiska i nie wygasają o północy. Po zmianie dnia klucz znika, więc trzeba ponownie zeskanować kod QR ze stoiska.
+5 prób na dobę na sesję (ciasteczko `hp_game`) na każdym stoisku (regulamin konkursu §4.2), tabela `booth_plays(session_id, booth_id, date)`; po zmianie doby (Europe/Warsaw) pula wraca.
+Dodatkowe próby idą ponad pulę stoiska i nie wygasają o północy: głos nowy / zarejestrowany +10, faktyczny +20, „post” +5 (raz dziennie na sesję, także po terminie Pucharu).
+Sesja jest tylko w ciasteczku (nagłówek `X-Game-Token` i kopia w `localStorage` zostały usunięte); stare ciasteczka nadal działają. Nie ma już `device_tolerance`.
 
 ## Stanowisko „Zajęcia”
 
-Stoisko `zajecia` (`booths.is_lecture=1`, tworzone przy starcie) służy do promocji na wykładach, także przed akcją. Nie ma wolontariusza (tokeny i kody: 409,
+Stoisko `zajecia` (`booths.is_lecture=1`, tworzone przy starcie) służy do promocji na wykładach, także przed akcją. Nie ma wolontariusza (kod QR Pucharu: 409,
 usunięcie: 409), nie ma go w publicznych wykazach, a gra działa na nim bez ograniczenia datami. Prowadzący otwiera na ekranie sali statyczny link
 `/zajecia/{token}` (rotujący QR, bez logowania). Link bierzesz w panelu admina, sekcja „Stoiska”: pole „Zajęcia: link dla prowadzących”, przycisk „Kopiuj link”;
 „Wygeneruj nowy link” unieważnia poprzedni (token w `settings.lecture_screen_token`).
@@ -68,12 +72,18 @@ Po `CONTEST_DEADLINE` ekran 10/10 pokazuje, że zgłoszenia są zamknięte.
 
 ## Puchar Dawcy PWr
 
-Wolontariusz po weryfikacji generuje token rejestracyjny (kod OTP; typ „Nowy dawca” albo „Dawca faktyczny”, legitymację tylko ogląda). Student wpisuje go na `/potwierdz`
-(`/graj` i `/potwierdz` zostają jako adresy kodów QR), wybiera wydział i oddaje jeden głos z urządzenia (drugi głos = 409, token wtedy nie jest zużywany).
-Ranking `/puchar`: Wskaźnik Zaangażowania `WZ = LD / LS * 100` (LD punkty, LS liczba studentów wpisana przez admina, `GET/PUT /api/admin/students`), remis decyduje LD.
-Wydziały bez LS oraz „Inne” są poza klasyfikacją. Po `CUP_DEADLINE` rejestracja punktów i generowanie tokenów zwracają 410.
+Wolontariusz po weryfikacji wybiera w panelu `/login` kategorię (nowy dawca, zarejestrowany dawca, faktyczny dawca lub „post / story”), klika „Pokaż kod QR” i pokazuje go osobie na jej telefonie.
+Kod (`/potwierdz?t=...`) odświeża się co 60 s i jest ważny 60 s (serwer dodaje 5 s tolerancji); można go zeskanować kilka razy w tym czasie. Po terminie: „Kod wygasł. Podejdź do stanowiska po nowy kod”.
+Skan = `POST /api/cup/claim` (sesja dostaje claim na 10 minut), potem `POST /api/cup/vote` z wydziałem i rokiem studiów. Jeden głos na sesję (drugi: 409). Kategoria „post” daje od razu +5 prób (raz dziennie), bez głosu.
+Publiczny ekran `/stoisko/{id}` (kod QR do gry) wymaga zalogowania personelu.
+Ranking `/puchar`: Wskaźnik Zaangażowania `WZ = LD / LS * 100` (LD = suma trzech równorzędnych kategorii, LS liczba studentów wpisana przez admina, `GET/PUT /api/admin/students`), remis decyduje LD.
+Wydziały bez LS oraz „Inne” są poza klasyfikacją. Po terminie Pucharu skan kodu głosu, głos i kod QR w panelu zwracają 410 (kategoria „post” działa dalej).
+Oficjalne wyniki: 16 grudnia 2026 (Wigilia Aktywnych Studentów, C-18).
 
-Terminy (czas Europe/Warsaw, nadpisywane w `.env`): `CUP_DEADLINE` (domyślnie 2026-12-11T16:30), `CONTEST_DEADLINE` (domyślnie 2026-12-11T16:00).
+Terminy (czas Europe/Warsaw): `CUP_DEADLINE` (domyślnie 2026-12-11T16:30) i `CONTEST_DEADLINE` (domyślnie 2026-12-11T16:00) można ustawić w `.env`,
+a **w panelu admina** (sekcja „Ustawienia”) wpisać nową datę i godzinę dla obu terminów: „Koniec zliczania punktów Pucharu Dawcy PWr” i „Koniec przyjmowania zgłoszeń do konkursu HLA”.
+Wartość z panelu (`settings.cup_deadline`, `settings.contest_deadline`) ma pierwszeństwo przed `.env`; puste pole przywraca domyślną. Zmiana działa od razu (bez restartu), także w komunikatach i w `/api/config`.
+Daty wpisane na stałe w treści regulaminów nie zmieniają się automatycznie.
 
 ## Jak powstaje obraz
 
@@ -138,7 +148,9 @@ Wymagany jest tylko Docker. W katalogu repozytorium:
 ```
 
 To samo co `docker compose -f docker-compose.local.yml up --build`. Strona: `http://localhost:8000` (inny port: zmienna `HELPERS_PORT`).
-Panel `/login`: login `admin`, hasło `dev`. Ciasteczka bez HTTPS. Katalog `app/` jest podpięty tylko do odczytu
+Panel `/login`: login `admin`, hasło `dev`. Ciasteczka bez HTTPS.
+Test na telefonie w tej samej sieci Wi-Fi: uruchom z `PUBLIC_URL=http://<adres IP komputera>:8000` (np. `$env:PUBLIC_URL='http://192.168.0.10:8000'; .\lokalnie.ps1`),
+bo kody QR kierują na `PUBLIC_URL`. Certyfikaty i kody QR warto sprawdzić na prawdziwym iPhonie i Androidzie. Katalog `app/` jest podpięty tylko do odczytu
 z live reloadem: zmiany w HTML, CSS, JS i Pythonie widać po odświeżeniu, bez przebudowy obrazu (statyki bez cache'u,
 `DEV_NO_CACHE=1`). Zmiany w `requirements.txt` lub `Dockerfile` wymagają ponownego `up --build`. Dane trafiają do folderu
 `data-lokalne/` obok projektu (ignorowany przez git); żeby zacząć od zera, zatrzymaj kontener i usuń ten folder.

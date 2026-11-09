@@ -17,8 +17,6 @@ export function storageRemove(key) {
 /** JSON fetch. Rzuca Error z polami status i detail. */
 export async function api(method, path, body) {
   const headers = { Accept: 'application/json' };
-  const token = storageGet('hp_game');
-  if (token) headers['X-Game-Token'] = token;
   const opts = { method, headers, credentials: 'same-origin' };
   // Serwer wymaga JSON przy kazdym zapytaniu zmieniajacym dane (ochrona CSRF), takze bez tresci.
   if (body === undefined && method !== 'GET' && method !== 'HEAD') body = {};
@@ -240,9 +238,12 @@ export function boothText(b) {
 
 const barState = new WeakMap();
 
-/** Wykres slupkowy skumulowany: nowi (czerwony) + faktyczni (granatowy). Wiersze sa trwale i aktualizowane po kluczu,
- *  wiec slupki rosna od 0 przy pierwszym rysunku, a potem plynnie zmieniaja dlugosc.
- *  items: [{ key, rank (opcjonalnie), label, value (dlugosc slupka), countText, potential, actual, aria, sub (wezel lub tekst) }] */
+export const CATEGORIES = [['nowy', 'nowych'], ['zarejestrowany', 'zarejestrowanych'], ['faktyczny', 'faktycznych']];
+
+/** Wykres slupkowy skumulowany: nowi (czerwony), zarejestrowani (zielony) i faktyczni (granatowy). Wiersze sa trwale
+ *  i aktualizowane po kluczu, wiec slupki rosna od 0 przy pierwszym rysunku, a potem plynnie zmieniaja dlugosc.
+ *  items: [{ key, rank (opcjonalnie), label, value (dlugosc slupka), countText,
+ *            segments: [{ key: 'nowy'|'zarejestrowany'|'faktyczny', value }], aria, sub (wezel lub tekst) }] */
 export function updateBars(listEl, items, emptyText) {
   let st = barState.get(listEl);
   if (!st) { st = { rows: new Map(), first: true }; barState.set(listEl, st); }
@@ -259,16 +260,16 @@ export function updateBars(listEl, items, emptyText) {
     seen.add(it.key);
     let row = st.rows.get(it.key);
     if (!row) {
-      const potential = h('span', { class: 'seg seg-potential' });
-      const actual = h('span', { class: 'seg seg-actual' });
-      const group = h('span', { class: 'seg-group' }, potential, actual);
+      const segs = {};
+      for (const [k] of CATEGORIES) segs[k] = h('span', { class: 'seg seg-' + k });
+      const group = h('span', { class: 'seg-group' }, ...CATEGORIES.map(([k]) => segs[k]));
       const rank = it.rank === undefined ? null : h('span', { class: 'bar-rank' });
       const name = h('span', { class: 'bar-label' });
       const track = h('div', { class: 'stack', role: 'img' }, group);
       const count = h('strong', { class: 'bar-count' });
       const sub = h('span', { class: 'bar-sub' });
       const el = h('li', { class: 'bar-row' }, rank, name, track, h('span', { class: 'bar-num' }, count), sub);
-      row = { el, group, potential, actual, rank, name, track, count, sub };
+      row = { el, group, segs, rank, name, track, count, sub };
       st.rows.set(it.key, row);
     }
     if (row.rank) row.rank.textContent = it.rank;
@@ -278,11 +279,12 @@ export function updateBars(listEl, items, emptyText) {
     row.count.textContent = it.countText;
     row.sub.textContent = '';
     row.sub.append(it.sub);
-    const sum = it.potential + it.actual;
+    const values = {};
+    for (const seg of it.segments || []) values[seg.key] = seg.value;
+    const sum = CATEGORIES.reduce((a, [k]) => a + (values[k] || 0), 0);
     const apply = () => {
       row.group.style.width = (it.value / max * 100) + '%';
-      row.potential.style.width = (sum ? it.potential / sum * 100 : 0) + '%';
-      row.actual.style.width = (sum ? it.actual / sum * 100 : 0) + '%';
+      for (const [k] of CATEGORIES) row.segs[k].style.width = (sum ? (values[k] || 0) / sum * 100 : 0) + '%';
     };
     if (st.first) {
       row.group.style.width = '0%';
@@ -294,4 +296,14 @@ export function updateBars(listEl, items, emptyText) {
     if (!seen.has(key)) { row.el.remove(); st.rows.delete(key); }
   }
   st.first = false;
+}
+
+/** Podpis z rozbiciem na trzy kategorie: "2 nowych · 1 zarejestrowanych · 0 faktycznych". */
+export function categorySplit(r) {
+  const parts = [];
+  CATEGORIES.forEach(([k, label], i) => {
+    if (i) parts.push(' · ');
+    parts.push(h('span', { class: 'split-' + k }, h('b', {}, r[k] || 0), ' ' + label));
+  });
+  return h('span', {}, ...parts);
 }

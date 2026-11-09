@@ -37,20 +37,22 @@ CREATE TABLE IF NOT EXISTS game_sessions(
   session_id TEXT PRIMARY KEY, created_at TEXT NOT NULL, has_won INTEGER NOT NULL DEFAULT 0,
   bonus_attempts INTEGER NOT NULL DEFAULT 0, pass_booth TEXT NULL, pass_until TEXT NULL,
   won_genotype TEXT NULL, won_at TEXT NULL, won_token TEXT NULL,
-  consent_at TEXT NULL, device_key TEXT NULL, device_ext_key TEXT NULL);
+  consent_at TEXT NULL, cup_voted INTEGER NOT NULL DEFAULT 0, cup_claim_booth TEXT NULL,
+  cup_claim_category TEXT NULL, cup_claim_until TEXT NULL, post_bonus_date TEXT NULL);
 CREATE TABLE IF NOT EXISTS game_attempts(
   session_id TEXT, date TEXT, attempts INTEGER NOT NULL DEFAULT 0, best INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(session_id, date));
+-- historyczne, nieużywane od v3 (zostają dla starszych baz; tylko czyszczenie i kontrola przy usuwaniu stoiska)
 CREATE TABLE IF NOT EXISTS registration_codes(
   code TEXT PRIMARY KEY, booth_id TEXT NOT NULL REFERENCES booths(id),
   status TEXT NOT NULL CHECK(status IN('ACTIVE','USED','EXPIRED')),
   created_at TEXT NOT NULL, used_at TEXT NULL,
   kind TEXT NOT NULL DEFAULT 'potential' CHECK(kind IN ('potential','actual')));
+-- Głos w Pucharze Dawcy PWr: wydział, kategoria, rok studiów, stoisko i czas; bez danych osobowych i bez powiązania z sesją.
 CREATE TABLE IF NOT EXISTS donors_stats(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, faculty TEXT NOT NULL, created_at TEXT NOT NULL, device_hash TEXT NULL);
--- Licznik zbiorczy faktycznych dawców per wydział (bez głosu, czasu i skrótu urządzenia): §3.4 Pucharu zabrania
--- trzymać typ dawcy w rekordzie głosu (donors_stats), a na /puchar pokazujemy podział LD na nowych i faktycznych.
-CREATE TABLE IF NOT EXISTS cup_actual_counts(faculty TEXT PRIMARY KEY, actual INTEGER NOT NULL DEFAULT 0);
+  id INTEGER PRIMARY KEY AUTOINCREMENT, faculty TEXT NOT NULL, created_at TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'nowy' CHECK(category IN ('nowy','zarejestrowany','faktyczny')),
+  study_year TEXT NULL, booth_id TEXT NULL);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS volunteers(
   login TEXT PRIMARY KEY, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -59,15 +61,16 @@ CREATE TABLE IF NOT EXISTS wins(
   token TEXT PRIMARY KEY, seq INTEGER NOT NULL, genotype TEXT NOT NULL, booth_id TEXT NOT NULL,
   won_at TEXT NOT NULL, session_id TEXT NULL, is_test INTEGER NOT NULL DEFAULT 0, submitted_at TEXT NULL);
 CREATE TABLE IF NOT EXISTS booth_plays(
-  device_key TEXT NOT NULL, booth_id TEXT NOT NULL, date TEXT NOT NULL, session_id TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 0, ext_key TEXT NOT NULL DEFAULT '',
-  PRIMARY KEY(device_key, booth_id, date, session_id));
+  session_id TEXT NOT NULL, booth_id TEXT NOT NULL, date TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(session_id, booth_id, date));
+-- historyczne, nieużywane od v3
 CREATE TABLE IF NOT EXISTS promo_codes(
   code TEXT PRIMARY KEY, booth_id TEXT NOT NULL REFERENCES booths(id),
   status TEXT NOT NULL CHECK(status IN('ACTIVE','USED','EXPIRED')),
   created_at TEXT NOT NULL, used_at TEXT NULL);
 CREATE TABLE IF NOT EXISTS partners(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, filename TEXT NOT NULL);
+  id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, filename TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS legal_documents(
   slug TEXT PRIMARY KEY, title TEXT NOT NULL, body_md TEXT NOT NULL, published INTEGER NOT NULL DEFAULT 1,
   sort INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
@@ -77,8 +80,9 @@ CREATE TABLE IF NOT EXISTS legal_document_versions(
   saved_at TEXT NOT NULL, saved_by TEXT NOT NULL DEFAULT '', PRIMARY KEY(slug, version));
 """
 
-CODE_TABLES = ("registration_codes", "promo_codes")
 OTHER_FACULTY = {"code": "INNE", "name": "Inne"}
+V3_DONOR_COLUMNS = {"category": "TEXT NOT NULL DEFAULT 'nowy' CHECK(category IN ('nowy','zarejestrowany','faktyczny'))",
+                    "study_year": "TEXT NULL", "booth_id": "TEXT NULL"}
 
 
 def connect() -> sqlite3.Connection:
@@ -116,9 +120,12 @@ def _seed() -> dict:
     return json.loads(SEED_PATH.read_text(encoding="utf-8"))
 
 
-def _add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
-    if not any(c["name"] == column for c in conn.execute(f"PRAGMA table_info({table})")):
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+def _add_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> bool:
+    """Dodaje kolumnę, jeśli jej brak; zwraca True, gdy dodano."""
+    if any(c["name"] == column for c in conn.execute(f"PRAGMA table_info({table})")):
+        return False
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+    return True
 
 
 def with_other_last(faculties: list[dict]) -> list[dict]:
@@ -152,13 +159,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS raffle_draws")
     _add_column(conn, "game_sessions", "won_token", "TEXT NULL")
     _add_column(conn, "game_sessions", "consent_at", "TEXT NULL")
-    _add_column(conn, "game_sessions", "device_key", "TEXT NULL")
     _add_column(conn, "volunteers", "role", "TEXT NOT NULL DEFAULT 'volunteer' CHECK(role IN ('volunteer','admin'))")
-    # iteracja 5: klucz rozszerzony urzadzenia
-    _add_column(conn, "game_sessions", "device_ext_key", "TEXT NULL")
-    _add_column(conn, "booth_plays", "ext_key", "TEXT NOT NULL DEFAULT ''")
     _migrate_cup_contest(conn)
     _backfill_wins(conn)
+    _migrate_v3(conn)
     row = conn.execute("SELECT value FROM settings WHERE key='dictionary'").fetchone()
     if row:
         d = json.loads(row["value"])
@@ -190,27 +194,59 @@ def _migrate_cup_contest(conn: sqlite3.Connection) -> None:
     _drop_column(conn, "registration_codes", "card_hash")
     # §3.4 Pucharu: donors_stats trzyma tylko wydział, znacznik czasu i skrót urządzenia
     cols = {c["name"] for c in conn.execute("PRAGMA table_info(donors_stats)")}
-    if cols & {"study_year", "booth_id", "kind", "registered_date"} or "created_at" not in cols:
+    if cols & {"kind", "registered_date"} or "created_at" not in cols:
         conn.execute("DROP TABLE IF EXISTS donors_stats_new")
+        # kolumny v3 (jeśli już są) przechodzą do nowej tabeli, żeby rebuild ich nie skasował
+        keep = [c for c in ("category", "study_year", "booth_id") if c in cols] if "created_at" in cols else []
+        extra = "".join(f", {c} {V3_DONOR_COLUMNS[c]}" for c in keep)
         conn.execute("CREATE TABLE donors_stats_new(id INTEGER PRIMARY KEY AUTOINCREMENT, faculty TEXT NOT NULL, "
-                     "created_at TEXT NOT NULL, device_hash TEXT NULL)")
+                     f"created_at TEXT NOT NULL{extra})")
         if "created_at" in cols:
-            # tabela juz w nowym formacie, ale z doklejonymi starymi kolumnami (np. po chwilowym wdrozeniu starszej
-            # wersji aplikacji): przepisujemy glosy 1:1, zeby ich nie stracic
-            dev = "device_hash" if "device_hash" in cols else "NULL"
-            conn.execute(f"INSERT INTO donors_stats_new(id,faculty,created_at,device_hash) "
-                         f"SELECT id, faculty, created_at, {dev} FROM donors_stats ORDER BY id")
+            # tabela juz w nowym formacie, ale z doklejonymi starymi kolumnami: przepisujemy glosy 1:1
+            names = "".join(f",{c}" for c in keep)
+            conn.execute(f"INSERT INTO donors_stats_new(id,faculty,created_at{names}) "
+                         f"SELECT id, faculty, created_at{names} FROM donors_stats ORDER BY id")
         elif "registered_date" in cols:
             for r in conn.execute("SELECT id, faculty, registered_date FROM donors_stats ORDER BY id").fetchall():
                 conn.execute("INSERT INTO donors_stats_new(id,faculty,created_at) VALUES(?,?,?)",
                              (r["id"], r["faculty"], config.noon_iso(r["registered_date"])))
         conn.execute("DROP TABLE donors_stats")
         conn.execute("ALTER TABLE donors_stats_new RENAME TO donors_stats")
-    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_donors_device ON donors_stats(device_hash) "
-                 "WHERE device_hash IS NOT NULL")
     # §4.3 Konkursu: wpis trafienia bez powiązania z sesją gracza; §6.2: jednorazowość tokenu
     _add_column(conn, "wins", "submitted_at", "TEXT NULL")
     conn.execute("UPDATE wins SET session_id=NULL WHERE session_id IS NOT NULL")
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """v3: sesja gry bez odcisku urządzenia, trzy kategorie głosu, rok studiów, kolejność partnerów. Idempotentna."""
+    _drop_column(conn, "game_sessions", "device_key")
+    _drop_column(conn, "game_sessions", "device_ext_key")
+    _add_column(conn, "game_sessions", "cup_voted", "INTEGER NOT NULL DEFAULT 0")
+    _add_column(conn, "game_sessions", "cup_claim_booth", "TEXT NULL")
+    _add_column(conn, "game_sessions", "cup_claim_category", "TEXT NULL")
+    _add_column(conn, "game_sessions", "cup_claim_until", "TEXT NULL")
+    _add_column(conn, "game_sessions", "post_bonus_date", "TEXT NULL")
+    plays = {c["name"] for c in conn.execute("PRAGMA table_info(booth_plays)")}
+    if plays != {"session_id", "booth_id", "date", "attempts"}:
+        # stare próby były liczone po kluczu urządzenia (dobowa sól) — nie da się ich przenieść; limit liczy się od nowa
+        conn.execute("DROP TABLE IF EXISTS booth_plays")
+        conn.execute("CREATE TABLE booth_plays(session_id TEXT NOT NULL, booth_id TEXT NOT NULL, date TEXT NOT NULL, "
+                     "attempts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(session_id, booth_id, date))")
+    conn.execute("DROP INDEX IF EXISTS idx_donors_device")
+    with tx(conn):
+        _drop_column(conn, "donors_stats", "device_hash")
+        category_added = _add_column(conn, "donors_stats", "category", V3_DONOR_COLUMNS["category"])
+        has_actual = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='cup_actual_counts'").fetchone()
+        if category_added and has_actual:
+            for r in conn.execute("SELECT faculty, actual FROM cup_actual_counts WHERE actual>0").fetchall():
+                conn.execute("UPDATE donors_stats SET category='faktyczny' WHERE id IN "
+                             "(SELECT id FROM donors_stats WHERE faculty=? ORDER BY id LIMIT ?)", (r["faculty"], r["actual"]))
+        _add_column(conn, "donors_stats", "study_year", V3_DONOR_COLUMNS["study_year"])
+        _add_column(conn, "donors_stats", "booth_id", V3_DONOR_COLUMNS["booth_id"])
+        conn.execute("DROP TABLE IF EXISTS cup_actual_counts")
+    conn.execute("DELETE FROM settings WHERE key IN ('device_salt','device_tolerance')")
+    if _add_column(conn, "partners", "sort_order", "INTEGER NOT NULL DEFAULT 0"):
+        conn.execute("UPDATE partners SET sort_order=id")
 
 
 def _backfill_wins(conn: sqlite3.Connection) -> None:
@@ -316,13 +352,6 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
                  (key, value))
 
 
-def device_tolerance(conn: sqlite3.Connection) -> int:
-    try:
-        return min(50, max(1, int(get_setting(conn, "device_tolerance", str(config.DEVICE_TOLERANCE)))))
-    except ValueError:
-        return config.DEVICE_TOLERANCE
-
-
 def get_students(conn: sqlite3.Connection) -> dict:
     """Liczby studentów wydziałów (LS) do Pucharu Dawcy PWr: ``{source, counts:{kod:int}}``."""
     try:
@@ -414,89 +443,15 @@ def record_win(conn: sqlite3.Connection, booth_id: str, sid: str | None = None,
     return old, new, token
 
 
-def device_salt(conn: sqlite3.Connection) -> str:
-    """Sól dobowa klucza urządzenia (Europe/Warsaw). Pierwsze użycie nowego dnia losuje nową sól, kasuje stare
-    ``booth_plays`` i zeruje ``game_sessions.device_key`` i ``device_ext_key``, więc klucza nie da się powiązać między dniami."""
-    today = config.today()
-    d = json.loads(get_setting(conn, "device_salt", "{}"))
-    if d.get("date") == today:
-        return d["salt"]
-    with tx(conn):
-        d = json.loads(get_setting(conn, "device_salt", "{}"))  # ponowny odczyt pod blokadą zapisu
-        if d.get("date") != today:
-            d = {"date": today, "salt": secrets.token_hex(32)}
-            set_setting(conn, "device_salt", json.dumps(d))
-            conn.execute("DELETE FROM booth_plays WHERE date<?", (today,))
-            conn.execute("UPDATE game_sessions SET device_key=NULL, device_ext_key=NULL")
-    return d["salt"]
-
-
-def rotate_device_salt() -> None:
-    """Rotacja soli bez ruchu na stronie (zadanie w tle co godzinę)."""
-    conn = connect()
-    try:
-        device_salt(conn)
-    finally:
-        conn.close()
-
-
-def expire_codes(conn: sqlite3.Connection) -> None:
-    """Leniwe wygaszanie kodów po CODE_TTL_MINUTES."""
-    from datetime import timedelta
-    cutoff = config.iso(config.now() - timedelta(minutes=config.code_ttl_minutes()))
-    for table in CODE_TABLES:
-        conn.execute(f"UPDATE {table} SET status='EXPIRED' WHERE status='ACTIVE' AND created_at < ?", (cutoff,))
-
-
-def unique_code(conn: sqlite3.Connection, booth_id: str) -> str | None:
-    """Nowy kod ``STOISKO-XXXX`` unikalny w obu tabelach kodów (None po 20 nieudanych próbach). Wołać w transakcji."""
-    for _ in range(20):
-        code = f"{booth_id.upper()}-" + "".join(secrets.choice(config.CODE_ALPHABET) for _ in range(4))
-        if not any(conn.execute(f"SELECT 1 FROM {t} WHERE code=?", (code,)).fetchone() for t in CODE_TABLES):
-            return code
-    return None
-
-
-def list_codes(conn: sqlite3.Connection, booth_id: str | None = None, status: str | None = None,
-               limit: int = 20) -> list[sqlite3.Row]:
-    """Tokeny rejestracyjne i kody dodatkowych prób razem (te drugie z ``kind='promo'``), najnowsze pierwsze."""
-    where, args = [], []
-    if booth_id:
-        where.append("booth_id=?"); args.append(booth_id)
-    if status:
-        where.append("status=?"); args.append(status)
-    w = " WHERE " + " AND ".join(where) if where else ""
-    sql = (f"SELECT code,booth_id,status,created_at,used_at,kind,rowid AS seq FROM registration_codes{w} UNION ALL "
-           f"SELECT code,booth_id,status,created_at,used_at,'promo',rowid FROM promo_codes{w} "
-           "ORDER BY created_at DESC, seq DESC LIMIT ?")
-    return conn.execute(sql, args * 2 + [limit]).fetchall()
-
-
-def find_code(conn: sqlite3.Connection, code: str) -> tuple[str, sqlite3.Row] | None:
-    """(tabela, wiersz) tokenu rejestracyjnego albo kodu dodatkowych prób."""
-    for table in CODE_TABLES:
-        row = conn.execute(f"SELECT * FROM {table} WHERE code=?", (code,)).fetchone()
-        if row is not None:
-            return table, row
-    return None
-
-
-def used_counts(conn: sqlite3.Connection, booth_id: str | None = None, date: str | None = None) -> dict[str, int]:
-    """Zużyte tokeny wg typu (``potential`` / ``actual``): źródło zestawień per stoisko i typ, bo ``donors_stats``
-    nie trzyma stoiska ani typu (§3.4 regulaminu Pucharu). ``date`` = doba Europe/Warsaw."""
-    where, args = ["status='USED'"], []
+def category_counts(conn: sqlite3.Connection, booth_id: str | None = None, date: str | None = None) -> dict[str, int]:
+    """Głosy w Pucharze wg kategorii (wszystkie trzy klucze, domyślnie 0); ``date`` = doba Europe/Warsaw."""
+    where, args = ["1=1"], []
     if booth_id:
         where.append("booth_id=?"); args.append(booth_id)
     if date:
         start, end = config.day_bounds(date)
-        where.append("used_at>=? AND used_at<?"); args += [start, end]
-    rows = conn.execute(f"SELECT kind, COUNT(*) n FROM registration_codes WHERE {' AND '.join(where)} GROUP BY kind", args)
-    return {r["kind"]: r["n"] for r in rows}
-
-
-def device_stats(conn: sqlite3.Connection) -> dict:
-    """Liczby różnych kluczy urządzeń dziś w ``booth_plays`` (do oceny kolizji na prawdziwych telefonach)."""
-    today = config.today()
-    r = conn.execute("SELECT COUNT(DISTINCT device_key), COUNT(DISTINCT CASE WHEN ext_key<>'' THEN ext_key END) "
-                     "FROM booth_plays WHERE date=?", (today,)).fetchone()
-    return {"date": today, "base_keys": r[0], "ext_keys": r[1]}
+        where.append("created_at>=? AND created_at<?"); args += [start, end]
+    out = dict.fromkeys(config.CUP_CATEGORIES, 0)
+    for r in conn.execute(f"SELECT category, COUNT(*) n FROM donors_stats WHERE {' AND '.join(where)} GROUP BY category", args):
+        out[r["category"]] = r["n"]
+    return out

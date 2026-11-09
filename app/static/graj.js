@@ -1,6 +1,5 @@
 import { api, $, h, boothText, formatWarsawLong, setMessage, storageGet, storageSet, storageRemove, sleep, shapeEl, getConfig } from './common.js';
-import { renderPlayerCert, renderResultCert, showDownload } from './cert.js';
-import { deviceHashes, deviceHashSupported } from './fingerprint.js';
+import { renderPlayerCert, renderResultCert, showDownload, makeGraphic } from './cert.js';
 import { spinReels, buildReels, showReels, prefersReducedMotion, confetti } from './reels.js';
 
 const params = new URLSearchParams(location.search);
@@ -181,12 +180,11 @@ function enterPlay(me) {
   if (me.attempts_left <= 0) showEnd(me.best_today || 0);
 }
 
-/** Zapisuje przepustke na stoisko (token z kodu QR + skrot urzadzenia + zgoda) i usuwa token z paska adresu. */
+/** Zapisuje przepustke na stoisko (token z kodu QR + zgoda) i usuwa token z paska adresu. */
 async function useQrToken() {
   if (!qrToken) return null;
   try {
-    const { base, ext } = await deviceHashes();
-    await api('POST', '/api/game/enter', { booth_id: boothId, t: qrToken, device: base, device_ext: ext, consent: true });
+    await api('POST', '/api/game/enter', { booth_id: boothId, t: qrToken, consent: true });
     return null;
   } catch (e) {
     return e.status === 403 ? (e.detail || 'Ten kod QR wygasł. Zeskanuj ponownie kod ze stoiska.') : (e.detail || e.message);
@@ -329,9 +327,22 @@ $('#rules-btn').addEventListener('click', () => openIntro('preview'));
 $('#intro-ok').addEventListener('click', () => { introMode = null; introDlg.close(); });
 $('#end-open-btn').addEventListener('click', openEndDialog);
 $('#end-close').addEventListener('click', () => endDlg.close());
-$('#end-cert-btn').addEventListener('click', async () => {
-  const canvas = await buildResultCanvas($('#end-nick').value, true);
-  await showDownload(canvas, $('#end-cert-output'), won ? 'certyfikat-hla.png' : 'wynik-hla.png');
+/** Komunikat błędu tworzenia grafiki tuż przed polem wyniku (tworzony przy pierwszym użyciu). */
+function graphicMsg(out) {
+  let el = out.previousElementSibling;
+  if (!el || !el.classList.contains('graphic-msg')) {
+    el = h('p', { class: 'msg graphic-msg', role: 'alert', hidden: true });
+    out.before(el);
+  }
+  return el;
+}
+
+$('#end-cert-btn').addEventListener('click', (ev) => {
+  const out = $('#end-cert-output');
+  return makeGraphic(ev.currentTarget, out, graphicMsg(out), async () => {
+    const canvas = await buildResultCanvas($('#end-nick').value, true);
+    await showDownload(canvas, out, won ? 'certyfikat-hla.png' : 'wynik-hla.png');
+  });
 });
 
 async function init() {
@@ -350,14 +361,11 @@ async function init() {
       : e.detail, 'error');
     return;
   }
-  if (!deviceHashSupported()) {
-    setMessage(msg, 'Ta przeglądarka nie pozwala obliczyć identyfikatora urządzenia, a bez niego nie można korzystać z symulatora (wymagane jest bezpieczne połączenie HTTPS). Otwórz symulator w aktualnej przeglądarce, np. Chrome lub Safari.', 'error');
-    return;
-  }
   try {
     const cfg = await getConfig();
     legalUpdatedAt = (cfg && cfg.legal_updated_at) || null;
   } catch (e) { legalUpdatedAt = null; }
+  storageRemove('hp_game'); // v3: sesja tylko w ciasteczku, dawna kopia tokenu w localStorage jest zbędna
   storageRemove('hp_intro'); // dawny znacznik okna startowego, zgoda to teraz hp_consent
   let me = null;
   try {
@@ -367,7 +375,6 @@ async function init() {
       setMessage(msg, e.detail || e.message, 'error');
       return;
     }
-    storageRemove('hp_game');
   }
   if (!me || !consentOk()) {
     pendingMe = me;
@@ -391,7 +398,6 @@ $('#start-btn').addEventListener('click', async () => {
   try {
     if (needSession) {
       const s = await api('POST', '/api/game/session', {});
-      if (s.token) storageSet('hp_game', s.token);
       me = s;
       needSession = false;
     }
@@ -498,7 +504,6 @@ async function roll() {
     } else if (e.status === 403) {
       showScan();
     } else if (e.status === 401) {
-      storageRemove('hp_game');
       location.reload();
       return;
     } else {
@@ -515,15 +520,21 @@ async function roll() {
 $('#roll-btn').addEventListener('click', roll);
 $('#lever').addEventListener('click', roll);
 
-$('#cert-btn').addEventListener('click', async () => {
-  const w = won || {};
-  const canvas = await renderPlayerCert({ nick: $('#nick').value, genotype: w.genotype, wonAt: w.at, token: w.token, boothName: w.booth || $('#game-booth').textContent });
-  await showDownload(canvas, $('#cert-output'), 'certyfikat-hla.png');
+$('#cert-btn').addEventListener('click', (ev) => {
+  const out = $('#cert-output');
+  return makeGraphic(ev.currentTarget, out, graphicMsg(out), async () => {
+    const w = won || {};
+    const canvas = await renderPlayerCert({ nick: $('#nick').value, genotype: w.genotype, wonAt: w.at, token: w.token, boothName: w.booth || $('#game-booth').textContent });
+    await showDownload(canvas, out, 'certyfikat-hla.png');
+  });
 });
 
-$('#result-btn').addEventListener('click', async () => {
-  const canvas = await buildResultCanvas($('#result-nick').value, false);
-  await showDownload(canvas, $('#result-output'), 'wynik-hla.png');
+$('#result-btn').addEventListener('click', (ev) => {
+  const out = $('#result-output');
+  return makeGraphic(ev.currentTarget, out, graphicMsg(out), async () => {
+    const canvas = await buildResultCanvas($('#result-nick').value, false);
+    await showDownload(canvas, out, 'wynik-hla.png');
+  });
 });
 
 init();

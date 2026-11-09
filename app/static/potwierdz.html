@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wpisz token rejestracyjny · Helpers' Generation</title>
+<title>Głos w Pucharze Dawcy PWr · Helpers' Generation</title>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
 <link rel="stylesheet" href="/static/vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="/static/style.css">
@@ -22,36 +22,41 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/potwierdz" class="active" aria-current="page"><i class="ti ti-ticket" aria-hidden="true"></i><span class="short">Token</span><span class="long">Wpisz token rejestracyjny</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
-    <h1>Wpisz token rejestracyjny</h1>
-      <p class="lead" id="lead-text">Token dostajesz od wolontariusza po weryfikacji na stoisku. Wpisz go i wybierz wydział, a wydział dostanie punkt w Pucharze Dawcy PWr. Każda osoba oddaje jeden głos.</p>
+    <h1>Głos w Pucharze Dawcy PWr</h1>
+    <p class="lead" id="lead-text">Kod QR dostajesz od wolontariusza po weryfikacji na stoisku. Wybierz wydział i rok studiów, a wydział dostanie punkt w Pucharze Dawcy PWr. Każda osoba oddaje jeden głos.</p>
   </div>
 </section>
 <main class="section section-tight">
 <div class="container">
   <div class="narrow">
-  <div id="confirm-msg" class="msg" hidden></div>
+  <div id="state-msg" class="msg" hidden></div>
 
-  <form id="confirm-form" class="card" novalidate>
-    <label for="code">Token rejestracyjny (kod OTP) <span class="req">*</span></label>
-    <input type="text" id="code" name="code" autocapitalize="characters" autocomplete="off" spellcheck="false" required>
-    <p id="code-status" class="hint"></p>
+  <form id="vote-form" class="card" novalidate hidden>
+    <p class="title3" id="vote-label"></p>
+    <label for="faculty">Wydział <span class="req">*</span></label>
+    <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
 
-    <div id="donor-fields">
-      <label for="faculty">Wydział <span class="req">*</span></label>
-      <select id="faculty" name="faculty" required><option value="">Wybierz wydział</option></select>
+    <label for="study-year">Rok studiów <span class="req">*</span></label>
+    <select id="study-year" name="study_year" required><option value="">Wybierz rok studiów</option></select>
 
-      <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
-      <input type="text" id="donor-name" maxlength="80" autocomplete="off">
-      <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
-    </div>
+    <label for="donor-name">Imię i nazwisko na certyfikacie (opcjonalnie)</label>
+    <input type="text" id="donor-name" maxlength="80" autocomplete="off">
+    <p class="privacy">Nie wysyłamy tego na serwer. Służy tylko do wygenerowania certyfikatu na Twoim telefonie.</p>
 
-    <p class="consent-text" id="consent-text">Wysyłając token, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu Dawcy PWr</a> oraz <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> i zgadzasz się na obliczenie skrótu urządzenia, który pilnuje jednego głosu z urządzenia. Zapisujemy tylko wydział, znacznik czasu i ten skrót.</p>
-    <button class="btn btn-primary btn-lg" type="submit" id="submit-btn"><i class="ti ti-circle-check" aria-hidden="true"></i> Wyślij token</button>
+    <p class="consent-text" id="consent-text">Oddając głos, akceptujesz <a href="/dokumenty/regulamin-pucharu" target="_blank" rel="noopener">regulamin Pucharu Dawcy PWr</a> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a>. Zapisujemy wydział, rok studiów, kategorię, stoisko i czas głosu, bez danych osobowych. Jeden głos na przeglądarkę pilnuje ciasteczko sesji.</p>
+    <button class="btn btn-primary btn-lg" type="submit" id="submit-btn"><i class="ti ti-circle-check" aria-hidden="true"></i> Oddaj głos</button>
   </form>
+
+  <section id="post-done" class="card" hidden>
+    <span class="iconbox" aria-hidden="true"><i class="ti ti-gift"></i></span>
+    <h2>Dodatkowe próby odebrane!</h2>
+    <p id="post-text"></p>
+    <a class="btn btn-primary btn-lg" id="post-play" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Graj</a>
+  </section>
 
   <section id="done-section" class="card" hidden>
     <span class="iconbox" aria-hidden="true"><i class="ti ti-circle-check"></i></span>
@@ -80,7 +85,7 @@
       </div>
       <p class="footer-text">Organizator: Samorząd Studencki Politechniki Wrocławskiej, we współpracy z zespołem akcji Helpers' Generation.</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Symulator HLA</a><a href="/potwierdz" aria-current="page">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Symulator HLA</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

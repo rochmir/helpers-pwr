@@ -11,12 +11,18 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/Warsaw")
-DAILY_ATTEMPTS = 5         # prób na dobę na jedno urządzenie na każdym stanowisku (regulamin konkursu, §4.2)
-DEVICE_TOLERANCE = 10      # domyślny sufit dla identycznych urządzeń (settings.device_tolerance, 1..50)
-CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; kody rejestracyjne i tokeny trafień
-PROMO_BONUS = 5            # dodatkowe próby za post lub story z oznaczeniem Samorządu i dkms_pl (kod od wolontariusza)
-CUP_VOTE_BONUS = 10        # dodatkowe próby za udział w Pucharze Dawcy PWr (token typu potential), po udanym głosie
-CUP_VOTE_BONUS_ACTUAL = 20  # to samo dla tokenu typu actual
+DAILY_ATTEMPTS = 5         # prób na dobę na jedną sesję (ciasteczko) na każdym stanowisku (regulamin konkursu, §4.2)
+CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; tokeny losu (trafienia)
+# Kategorie głosu w Pucharze Dawcy PWr oraz „post” (dodatkowe próby za post/relację, bez głosu).
+CUP_CATEGORIES = ("nowy", "zarejestrowany", "faktyczny")
+QR_CATEGORIES = CUP_CATEGORIES + ("post",)
+CATEGORY_BONUS = {"nowy": 10, "zarejestrowany": 10, "faktyczny": 20, "post": 5}   # dodatkowe próby za kategorię
+CUP_QR_TTL_SECONDS = 60     # ważność kodu QR do głosu / postu
+CUP_QR_LEEWAY_SECONDS = 5   # tolerancja na różnice zegarów i czas skanowania
+CUP_CLAIM_MINUTES = 10      # tyle czasu po zeskanowaniu kodu na oddanie głosu (wybór wydziału i roku)
+STUDY_YEARS = [("I1", "I st., 1. rok"), ("I2", "I st., 2. rok"), ("I3", "I st., 3. rok"), ("I4", "I st., 4. rok"),
+               ("II1", "II st., 1. rok"), ("II2", "II st., 2. rok"), ("dr", "Szkoła doktorska"),
+               ("inny", "Inny / nie dotyczy")]
 # Terminy z regulaminów (Europe/Warsaw); nadpisywane zmiennymi CUP_DEADLINE i CONTEST_DEADLINE (RRRR-MM-DDTGG:MM).
 DEFAULT_CUP_DEADLINE = "2026-12-11T16:30"       # koniec zliczania punktów w Pucharze Dawcy PWr (§6.1)
 DEFAULT_CONTEST_DEADLINE = "2026-12-11T16:00"   # koniec zgłoszeń konkursowych (§5.4)
@@ -45,15 +51,42 @@ def legal_contact() -> str:
     return os.environ.get("LEGAL_CONTACT", "").strip()
 
 
-def _deadline(name: str, default: str) -> datetime:
-    """Termin z env (czas lokalny Europe/Warsaw, jeśli bez strefy); zła wartość = domyślny."""
-    for raw in (os.environ.get(name, "").strip(), default):
+def _db_setting(key: str) -> str:
+    """Wartość z tabeli settings (pusta, gdy brak bazy, tabeli albo klucza). Świeży odczyt przy każdym wywołaniu, bez cache'u."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect(db_path(), timeout=2)
         try:
-            dt = datetime.fromisoformat(raw)
-        except ValueError:
-            continue
-        return dt.replace(tzinfo=TZ) if dt.tzinfo is None else dt
+            row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return ""
+    return (row[0] if row else "").strip()
+
+
+def parse_deadline(raw: str) -> datetime | None:
+    """ISO ``RRRR-MM-DDTGG:MM`` (czas Europe/Warsaw, jeśli bez strefy); None, gdy nie da się sparsować."""
+    try:
+        dt = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    return dt.replace(tzinfo=TZ) if dt.tzinfo is None else dt
+
+
+def env_deadline(name: str, default: str) -> datetime:
+    """Termin z env albo domyślny (zła wartość = domyślny)."""
+    for raw in (os.environ.get(name, "").strip(), default):
+        dt = parse_deadline(raw)
+        if dt is not None:
+            return dt
     raise ValueError(name)
+
+
+def _deadline(name: str, default: str) -> datetime:
+    """Obowiązujący termin: ustawienie z panelu admina (settings.<nazwa małymi>), inaczej env, inaczej domyślny."""
+    dt = parse_deadline(_db_setting(name.lower()))
+    return dt if dt is not None else env_deadline(name, default)
 
 
 def cup_deadline() -> datetime:
@@ -62,13 +95,6 @@ def cup_deadline() -> datetime:
 
 def contest_deadline() -> datetime:
     return _deadline("CONTEST_DEADLINE", DEFAULT_CONTEST_DEADLINE)
-
-
-def code_ttl_minutes() -> int:
-    try:
-        return max(1, int(os.environ.get("CODE_TTL_MINUTES", "60")))
-    except ValueError:
-        return 60
 
 
 def cookie_secure() -> bool:
@@ -105,11 +131,6 @@ def iso(dt: datetime) -> str:
 
 def now_iso() -> str:
     return iso(now())
-
-
-def expiry_of(created_at: str) -> str:
-    created = datetime.strptime(created_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-    return iso(created + timedelta(minutes=code_ttl_minutes()))
 
 
 def warsaw_date(iso_ts: str) -> str:

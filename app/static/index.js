@@ -38,12 +38,10 @@ async function liveTotal() {
     label.hidden = false;
     label.textContent = dawcy(total);
     countUp(num, 0, total, 1000, () => { label.textContent = dawcy(total); });
-    const a = Number(s.total_actual) || 0;
-    if (a > 0) {
-      $('#live-p').textContent = Number(s.total_potential) || 0;
-      $('#live-a').textContent = a;
-      $('#live-split').hidden = false;
-    }
+    $('#live-n').textContent = Number(s.total_nowy) || 0;
+    $('#live-z').textContent = Number(s.total_zarejestrowany) || 0;
+    $('#live-f').textContent = Number(s.total_faktyczny) || 0;
+    $('#live-split').hidden = total <= 0;
   } catch (e) { /* zostaje sam link */ }
 }
 

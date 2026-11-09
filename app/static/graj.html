@@ -22,7 +22,7 @@
     </a>
     
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj" class="active" aria-current="page"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i><span class="short">Token</span><span class="long">Wpisz token rejestracyjny</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj" class="active" aria-current="page"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
@@ -113,7 +113,7 @@
         </div>
         <span class="iconbox iconbox-flat" aria-hidden="true"><i class="ti ti-heart-handshake"></i></span>
       </div>
-      <p class="link-row">Masz token rejestracyjny od wolontariusza? <a href="/potwierdz">Wpisz token rejestracyjny</a>, żeby przyznać punkt swojemu wydziałowi w Pucharze Dawcy PWr.</p>
+      <p class="link-row">Zarejestrowałeś się na stoisku? Poproś wolontariusza o kod QR do Pucharu Dawcy PWr.</p>
     </div>
     <p id="end-note" class="hint center" hidden>Limit 5 prób na dobę dotyczy jednego stanowiska i odnawia się codziennie. Na innym stanowisku masz kolejne 5 prób.</p>
     <p class="center"><button class="btn btn-primary" id="end-open-btn" type="button" hidden><i class="ti ti-map-pin" aria-hidden="true"></i> Co dalej</button></p>
@@ -144,7 +144,7 @@
         <li class="step"><p class="step-title"><b>2.</b> Stwórz certyfikat</p><p>Wpisz ksywkę lub imię (możesz pominąć) i zapisz certyfikat na telefonie. Widać na nim Token Losu, wzór, datę i stanowisko.</p></li>
         <li class="step"><p class="step-title"><b>3.</b> Opublikuj komentarz na Facebooku</p><p>Pod postem podsumowującym dzień akcji na profilu Samorządu Studenckiego PWr (@samorzadpwr) dodaj komentarz z hasłem i certyfikatem w załączniku. <span id="fb-line" hidden><a id="fb-link" href="#" target="_blank" rel="noopener noreferrer"><i class="ti ti-brand-facebook" aria-hidden="true"></i> Otwórz Facebooka Samorządu</a></span></p></li>
       </ol>
-      <p>Zgłoszenia przyjmujemy do <strong id="contest-deadline">11 grudnia 2026, 16:00</strong>. Wyniki ogłosimy 13 grudnia 2026. Nagrody są wyłącznie za najlepsze hasła. Szczegóły w <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulaminie konkursu</a>.</p>
+      <p>Zgłoszenia przyjmujemy do <strong id="contest-deadline">11 grudnia 2026, 16:00</strong>. Wyniki ogłosimy 16 grudnia 2026 (Wigilia Aktywnych Studentów). Nagrody są wyłącznie za najlepsze hasła. Szczegóły w <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulaminie konkursu</a>.</p>
     </div>
     <p id="contest-closed" class="fact" hidden><i class="ti ti-lock" aria-hidden="true"></i> <strong>Zgłoszenia do konkursu zostały zamknięte.</strong></p>
     <label for="nick">Ksywka lub imię (opcjonalnie)</label>
@@ -172,8 +172,8 @@
     </ul>
     <div id="consent-block" class="consent-block" hidden>
       <p id="consent-changed" class="msg msg-info" role="status" hidden>Dokumenty zmieniły się od Twojej ostatniej zgody. Przeczytaj je i zaakceptuj ponownie.</p>
-      <p class="consent-text" id="consent-text">Naciskając przycisk, akceptujesz <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulamin konkursu</a> <span class="consent-date" id="consent-date-terms"></span> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> <span class="consent-date" id="consent-date-privacy"></span> oraz zgadzasz się na obliczenie identyfikatora urządzenia.</p>
-      <p class="hint">Identyfikator urządzenia jest pseudonimowy: liczymy go na Twoim telefonie, a serwer zapisuje tylko skróty, które zmieniają się codziennie. Służą do pilnowania limitu 5 prób na dobę na każdym stanowisku.</p>
+      <p class="consent-text" id="consent-text">Naciskając przycisk, akceptujesz <a href="/dokumenty/regulamin-konkursu" target="_blank" rel="noopener">regulamin konkursu</a> <span class="consent-date" id="consent-date-terms"></span> i <a href="/dokumenty/polityka-prywatnosci" target="_blank" rel="noopener">politykę prywatności</a> <span class="consent-date" id="consent-date-privacy"></span>  oraz zgadzasz się na zapisanie w przeglądarce ciasteczka sesji.</p>
+      <p class="hint">Limit prób liczymy po losowym identyfikatorze sesji w ciasteczku <code>hp_game</code>. Nie używamy fingerprintingu ani danych osobowych.</p>
       <div id="start-msg" class="msg" role="alert" hidden></div>
       <button class="btn btn-primary btn-lg btn-block" id="start-btn" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Zaakceptuj i sprawdź parametry</button>
     </div>
@@ -191,7 +191,7 @@
     <p id="end-booth-hours" hidden></p>
     <p id="end-booth-empty" hidden>Nie ma teraz innych stanowisk. Wróć jutro.</p>
     <div class="fact"><i class="ti ti-gift" aria-hidden="true"></i>
-      <p><strong>Dodatkowe próby.</strong> Opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl i pokaż je wolontariuszowi. Dostaniesz kod na 5 dodatkowych prób, który wpiszesz na <a href="/potwierdz">stronie wpisywania kodów</a>.</p></div>
+      <p><strong>Dodatkowe próby.</strong> Opublikuj post lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl i pokaż je wolontariuszowi. Wolontariusz pokaże Ci kod QR w kategorii „post”: po jego zeskanowaniu dostaniesz 5 dodatkowych prób (raz dziennie).</p></div>
     <section id="end-cert" class="dlg-cert" hidden>
       <h3 id="end-cert-title">Odbierz swój wynik</h3>
       <label for="end-nick">Ksywka lub imię (opcjonalnie)</label>
@@ -214,7 +214,7 @@
       </div>
       <p class="footer-text">Organizator: Samorząd Studencki Politechniki Wrocławskiej, we współpracy z zespołem akcji Helpers' Generation.</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj" aria-current="page">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj" aria-current="page">Symulator HLA</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

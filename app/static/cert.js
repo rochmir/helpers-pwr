@@ -32,8 +32,9 @@ export function ensureFonts() {
           })());
         }
       }
-      await Promise.allSettled(jobs); // brak pliku = font systemowy
-      try { await document.fonts.ready; } catch (e) { /* ignoruj */ }
+      // brak pliku albo wolna sieć = font systemowy; nie czekamy dłużej niż 3 s, żeby grafika zawsze powstała
+      const timeout = new Promise((resolve) => setTimeout(resolve, 3000));
+      await Promise.race([Promise.allSettled(jobs).then(() => (document.fonts ? document.fonts.ready : null)).catch(() => null), timeout]);
     })();
   }
   return fontsPromise;
@@ -51,15 +52,24 @@ const LOGO_FILES = {
 };
 const logoCache = {};
 
+/** Ładuje obraz przez onload/onerror (decode() bywa zawodne dla SVG w WebKit); po timeoucie albo błędzie zwraca null. */
+export function loadImage(url, timeoutMs = 4000) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    img.onload = () => finish(img);
+    img.onerror = () => finish(null);
+    img.src = url;
+  });
+}
+
 function loadLogo(key) {
   if (!logoCache[key]) {
     logoCache[key] = (async () => {
-      try {
-        const img = new Image();
-        img.src = LOGO_FILES[key].url;
-        await img.decode();
-        return { img, ratio: LOGO_FILES[key].ratio };
-      } catch (e) { return null; } // brak logo = pomijamy
+      const img = await loadImage(LOGO_FILES[key].url);
+      return img ? { img, ratio: LOGO_FILES[key].ratio } : null; // brak logo = pomijamy
     })();
   }
   return logoCache[key];
@@ -75,7 +85,9 @@ async function loadLogos() {
 function drawLogo(ctx, logo, x, y, height, align = 'left') {
   if (!logo) return;
   const w = height * logo.ratio;
-  ctx.drawImage(logo.img, align === 'right' ? x - w : x, y, w, height);
+  try {
+    ctx.drawImage(logo.img, align === 'right' ? x - w : x, y, w, height);
+  } catch (e) { console.error('Nie udało się narysować logo', e); } // jedno logo nie może zepsuć całej grafiki
 }
 
 // ---------- pomocnicze ----------
@@ -139,9 +151,8 @@ async function loadPartners() {
   if (!Array.isArray(list)) return [];
   const loaded = await Promise.all(list.map(async (p) => {
     try {
-      const img = new Image();
-      img.src = p.url;
-      await img.decode();
+      const img = await loadImage(p.url);
+      if (!img) return null;
       const w = img.naturalWidth || img.width;
       const hh = img.naturalHeight || img.height;
       if (!w || !hh) return null;
@@ -280,7 +291,9 @@ function drawPartnersBar(ctx, W, bottom, barH, partners) {
     let hh = maxH * k;
     let ww = hh * p.ratio;
     if (hh > boxH) { hh = boxH; ww = hh * p.ratio; }
-    ctx.drawImage(p.img, x, y0 + (boxH - hh) / 2, ww, hh);
+    try {
+      ctx.drawImage(p.img, x, y0 + (boxH - hh) / 2, ww, hh);
+    } catch (e) { console.error('Nie udało się narysować logo partnera', e); }
     x += maxH * k * p.ratio + gap * k;
   }
 }
@@ -305,6 +318,17 @@ export function drawFrame(canvas, { logos, partners = [], bandH = 230, dateText 
 
 // ---------- uklad tresci (bloki) ----------
 
+/** Ścieżka prostokąta z zaokrąglonymi rogami bez ctx.roundRect (brak w iOS do 15 i starszych przeglądarkach). */
+function roundRectPath(ctx, x, y, w, hh, r) {
+  const rr = Math.min(r, w / 2, hh / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + hh, rr);
+  ctx.arcTo(x + w, y + hh, x, y + hh, rr);
+  ctx.arcTo(x, y + hh, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
 /** Rzad ksztaltow genotypu w bialych komorkach z szara ramka, wysrodkowany; top = gorna krawedz. */
 function drawGenotypeRow(ctx, genotype, W, top, maxW, cellMax) {
   const n = genotype.length;
@@ -317,7 +341,7 @@ function drawGenotypeRow(ctx, genotype, W, top, maxW, cellMax) {
     ctx.strokeStyle = C.light;
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.roundRect(x, top, cell, cell, 12);
+    roundRectPath(ctx, x, top, cell, cell, 12);
     ctx.fill();
     ctx.stroke();
     const idx = Number(genotype[i]);
@@ -438,11 +462,13 @@ export async function renderPlayerCert({ nick, genotype, wonAt, token, boothName
 
 // ---------- certyfikat dawcy ----------
 
-export async function renderDonorCert({ name, facultyName, kind } = {}) {
+/** category: 'faktyczny' = Certyfikat Dawcy Szpiku; 'zarejestrowany' i 'nowy' = Certyfikat Potencjalnego Dawcy Szpiku. */
+export async function renderDonorCert({ name, facultyName, category } = {}) {
   const ctxs = await prepare();
   const canvas = makeCanvas(1080, 1920);
   const nm = (name || '').trim();
-  const actual = kind === 'actual';
+  const actual = category === 'faktyczny';
+  const registered = category === 'zarejestrowany';
   const blocks = [
     { t: 'title', text: actual ? 'Certyfikat Dawcy Szpiku' : 'Certyfikat Potencjalnego Dawcy Szpiku', size: 92 },
     { t: 'rule', mt: 30 },
@@ -454,7 +480,9 @@ export async function renderDonorCert({ name, facultyName, kind } = {}) {
   if (facultyName) blocks.push({ t: 'text', text: facultyName, size: 44, weight: '600', mt: 40 });
   blocks.push({ t: 'text', size: 38, narrow: true, mt: 56, text: actual
     ? "Jesteś Dawcą faktycznym. Dziękujemy za Twój dar i za udział w akcji Helpers' Generation na Politechnice Wrocławskiej."
-    : "Dziękujemy, że dołączasz do grona potencjalnych Dawców szpiku podczas Helpers' Generation 2026 na Politechnice Wrocławskiej." });
+    : registered
+      ? "Dziękujemy, że jesteś w gronie potencjalnych Dawców szpiku, i za udział w akcji Helpers' Generation 2026 na Politechnice Wrocławskiej."
+      : "Dziękujemy, że dołączasz do grona potencjalnych Dawców szpiku podczas Helpers' Generation 2026 na Politechnice Wrocławskiej." });
   await drawGraphic(canvas, blocks, { ...ctxs, dateText: dateLong() });
   return canvas;
 }
@@ -546,17 +574,29 @@ function canvasBlob(canvas) {
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
 }
 
-/** Pokazuje PNG jako <img> (przytrzymanie na telefonie), przycisk Pobierz i (gdy przegladarka umie) Udostepnij. */
+let lastObjectUrl = null;
+
+/** Pokazuje PNG jako <img> (przytrzymanie na telefonie), przycisk Pobierz, link „Otwórz obraz” i (gdy przegladarka umie)
+ *  Udostepnij. Obraz idzie przez blob: URL (data: bywa ignorowany w iOS i przegladarkach aplikacji); po wszystkim canvas
+ *  jest zwalniany (pamiec telefonu). */
 export async function showDownload(canvas, container, filename = 'certyfikat.png') {
-  const dataUrl = canvas.toDataURL('image/png');
   const blob = await canvasBlob(canvas); // gotowy przed kliknieciem, bo navigator.share wymaga gestu uzytkownika
+  let url;
+  if (blob && window.URL && URL.createObjectURL) {
+    if (lastObjectUrl) { try { URL.revokeObjectURL(lastObjectUrl); } catch (e) { /* ignoruj */ } }
+    url = URL.createObjectURL(blob);
+    lastObjectUrl = url;
+  } else {
+    url = canvas.toDataURL('image/png');
+  }
   let file = null;
   try {
     if (blob && typeof File === 'function') file = new File([blob], filename, { type: 'image/png' });
   } catch (e) { file = null; }
   const canShare = !!(file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));
   const row = h('div', { class: 'share-row' },
-    h('a', { class: 'btn btn-primary download-btn', href: dataUrl, download: filename }, icon('ti-download'), 'Pobierz (PNG)'));
+    h('a', { class: 'btn btn-primary download-btn', href: url, download: filename }, icon('ti-download'), 'Pobierz (PNG)'),
+    h('a', { class: 'btn btn-inverted open-btn', href: url, target: '_blank', rel: 'noopener' }, icon('ti-external-link'), 'Otwórz obraz'));
   if (canShare) {
     const btn = h('button', { class: 'btn btn-inverted share-btn', type: 'button' }, icon('ti-share'), 'Udostępnij');
     btn.addEventListener('click', async () => {
@@ -570,12 +610,36 @@ export async function showDownload(canvas, container, filename = 'certyfikat.png
   }
   container.textContent = '';
   container.append(
-    h('img', { class: 'download-img', src: dataUrl, alt: 'Wygenerowany obraz do pobrania' }),
+    h('img', { class: 'download-img', src: url, alt: 'Wygenerowany obraz do pobrania' }),
     row,
-    h('p', { class: 'download-hint' }, 'Kliknij przycisk Pobierz lub przytrzymaj palcem na obrazku, aby zapisać go w galerii'),
+    h('p', { class: 'download-hint' }, 'Na iPhonie przytrzymaj obraz i wybierz Zapisz w Zdjęciach. Na innych telefonach użyj przycisku Pobierz albo przytrzymaj obraz.'),
   );
   if (canShare) {
     container.append(h('p', { class: 'download-hint' }, 'Udostępnij otwiera menu telefonu, wybierz np. Instagram lub Facebook. Obraz nie zapisuje się w galerii.'));
   }
   container.hidden = false;
+  canvas.width = canvas.height = 0; // zwolnij pamięć canvasu
+}
+
+export const GRAPHIC_ERROR = 'Nie udało się utworzyć grafiki. Spróbuj ponownie albo otwórz stronę w Safari/Chrome.';
+
+/** Obsługa kliknięcia „utwórz grafikę”: blokuje przycisk, pokazuje postęp, a błędy loguje i zgłasza w msgEl
+ *  (bez try/catch błąd w async handlerze byłby niewidoczny). fn() robi całą pracę (render + showDownload). */
+export async function makeGraphic(btn, out, msgEl, fn) {
+  const kids = btn ? Array.from(btn.childNodes) : [];
+  if (btn) { btn.disabled = true; btn.textContent = 'Tworzę grafikę…'; }
+  if (msgEl) { msgEl.textContent = ''; msgEl.hidden = true; }
+  try {
+    await fn();
+  } catch (e) {
+    console.error(e);
+    if (out) out.hidden = true;
+    if (msgEl) {
+      msgEl.textContent = GRAPHIC_ERROR;
+      msgEl.hidden = false;
+      msgEl.className = (msgEl.className.replace(/\bmsg-(error|ok|info)\b/g, '').trim() + ' msg msg-error').trim();
+    }
+  } finally {
+    if (btn) { btn.replaceChildren(...kids); btn.disabled = false; }
+  }
 }

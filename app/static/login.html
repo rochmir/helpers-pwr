@@ -22,7 +22,7 @@
     </a>
     <div class="header-cta"><a class="btn btn-primary btn-sm" href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i> Symulator HLA</a></div>
   </div>
-  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/potwierdz"><i class="ti ti-ticket" aria-hidden="true"></i><span class="short">Token</span><span class="long">Wpisz token rejestracyjny</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
+  <nav class="subnav" aria-label="Menu główne"><div class="container"><a href="/graj"><i class="ti ti-dice-5" aria-hidden="true"></i><span class="short">Symulator</span><span class="long">Symulator HLA</span></a><a href="/puchar"><i class="ti ti-trophy" aria-hidden="true"></i><span class="short">Puchar</span><span class="long">Puchar Dawcy PWr</span></a><a href="/statystyki"><i class="ti ti-chart-bar" aria-hidden="true"></i><span>Statystyki</span></a></div></nav>
 </header>
 <section class="hero hero-small">
   <div class="container">
@@ -66,66 +66,59 @@
     <div class="card">
       <h2 id="vol-booth-name"></h2>
       <div class="counters">
-        <div class="counter">Nowi dawcy (wpisane tokeny)<strong id="c-potential">0</strong></div>
-        <div class="counter">Dawcy faktyczni (wpisane tokeny)<strong id="c-actual">0</strong></div>
+        <div class="counter">Nowi dawcy (głosy)<strong id="c-nowy">0</strong></div>
+        <div class="counter">Zarejestrowani dawcy (głosy)<strong id="c-zarejestrowany">0</strong></div>
+        <div class="counter">Faktyczni dawcy (głosy)<strong id="c-faktyczny">0</strong></div>
         <div class="counter">Trafienia 10/10<strong id="c-matches">0</strong></div>
         <div class="counter">Próby<strong id="c-rolls">0</strong></div>
       </div>
 
       <p class="link-row"><a id="booth-screen-link" href="/" target="_blank" rel="noopener"><i class="ti ti-device-tv" aria-hidden="true"></i> Otwórz ekran stoiska</a> (z kodem QR do symulatora; wymaga zalogowania w tej przeglądarce)</p>
-
-      <p id="cup-closed-note" class="msg msg-error" hidden></p>
-      <label for="code-kind">Typ tokenu</label>
-      <select id="code-kind">
-        <option value="potential">Nowy dawca</option>
-        <option value="actual">Dawca faktyczny (okazana legitymacja)</option>
-      </select>
-      <p class="hint">Token rejestracyjny (kod OTP) wydaj dopiero po weryfikacji. Nowy dawca: pobrany wymaz i podpisany formularz. Dawca faktyczny: okazana Ci legitymacja „Dawca Przeszczepu” lub „Zasłużony Dawca Przeszczepu”. Numeru ani daty legitymacji nie zapisujemy.</p>
-
-      <button class="btn btn-primary btn-lg btn-block" id="gen-btn" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Wygeneruj token rejestracyjny</button>
-
-      <div class="promo-gen">
-        <button class="btn btn-inverted btn-lg btn-block" id="promo-btn" type="button"><i class="ti ti-gift" aria-hidden="true"></i> Dodatkowe próby</button>
-        <p class="hint">Kod na 5 dodatkowych prób w grze, niezwiązany z Pucharem ani z rejestracją. Wydaj go po obejrzeniu na telefonie gracza posta lub story z oznaczeniem Samorządu Studenckiego PWr i dkms_pl (Facebook, Instagram lub TikTok). Niczego z posta nie zapisujemy.</p>
-      </div>
-
-      <div id="code-box" class="code-box" hidden>
-        <p class="title3" id="code-kind-label">Token rejestracyjny (kod OTP)</p>
-        <div class="code-big" id="code-big"></div>
-        <img class="qr" id="code-qr" alt="Kod QR prowadzący do wpisania tokenu" width="320" height="320">
-        <p>Ważny do: <strong id="code-expires"></strong></p>
-      </div>
     </div>
 
     <div class="card">
-      <h3>Ostatnie tokeny</h3>
-      <div class="table-wrap">
-      <table class="table" id="vcodes-table">
-        <thead><tr><th>Token</th><th>Typ</th><th>Status</th><th>Utworzony</th><th>Ważny do</th><th></th></tr></thead>
-        <tbody id="vcodes-body"></tbody>
-      </table>
+      <h3>Kod QR dla osoby po weryfikacji</h3>
+      <p id="cup-closed-note" class="msg msg-error" hidden></p>
+      <p class="hint">Wybierz kategorię, kliknij „Pokaż kod QR” i pokaż go osobie na jej telefonie. Kod odświeża się co 60 sekund i jest ważny 60 sekund. Niczego nie zapisujemy: ani numeru legitymacji, ani posta.</p>
+      <div class="qr-cats" role="radiogroup" aria-label="Kategoria kodu QR">
+        <label class="qr-cat"><input type="radio" name="qr-cat" value="nowy" checked>
+          <span><strong>Nowy dawca</strong><small>Wymaz i wypełniony formularz.</small></span></label>
+        <label class="qr-cat"><input type="radio" name="qr-cat" value="zarejestrowany">
+          <span><strong>Zarejestrowany dawca</strong><small>E-mail powitalny lub karta DKMS.</small></span></label>
+        <label class="qr-cat"><input type="radio" name="qr-cat" value="faktyczny">
+          <span><strong>Faktyczny dawca</strong><small>Legitymacja „Dawca Przeszczepu” lub „Zasłużony Dawca Przeszczepu”. Numeru nie zapisujemy.</small></span></label>
+        <label class="qr-cat"><input type="radio" name="qr-cat" value="post">
+          <span><strong>Post / story (+5 prób)</strong><small>Post lub relacja z oznaczeniem Samorządu i dkms_pl.</small></span></label>
       </div>
-      <p id="vcodes-empty" class="hint" hidden>Brak tokenów.</p>
+      <div class="row">
+        <button class="btn btn-primary btn-lg" id="qr-show" type="button"><i class="ti ti-qrcode" aria-hidden="true"></i> Pokaż kod QR</button>
+        <button class="btn btn-inverted btn-lg" id="qr-hide" type="button" hidden><i class="ti ti-eye-off" aria-hidden="true"></i> Ukryj</button>
+      </div>
+      <div id="qr-box" class="code-box" hidden>
+        <p class="title3" id="qr-cat-label"></p>
+        <img class="qr" id="cup-qr" alt="Kod QR do głosu w Pucharze Dawcy PWr" width="320" height="320">
+        <p id="qr-left" class="hint" role="status"></p>
+      </div>
     </div>
 
   </div>
   <div id="admin-part" hidden>
     <div class="row">
       <a class="btn btn-inverted" id="export-csv" href="/api/admin/export-csv"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: punkty wydziałów</a>
-      <a class="btn btn-inverted" id="export-csv-tokens" href="/api/admin/export-csv?set=tokeny"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: tokeny wg stoiska i typu</a>
+      <a class="btn btn-inverted" id="export-csv-tokens" href="/api/admin/export-csv?set=stoiska"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: głosy wg stoiska i kategorii</a>
     </div>
 
     <section id="booths-section" class="card">
       <h2>Stoiska</h2>
       <div class="table-wrap">
       <table class="table" id="booths-table">
-        <thead><tr><th>ID</th><th>Nazwa</th><th>Budynek i termin</th><th>Wpisane tokeny</th><th>Aktywne tokeny</th><th>10/10</th><th>Próby</th><th>Genotyp</th><th>Akcje</th></tr></thead>
+        <thead><tr><th>ID</th><th>Nazwa</th><th>Budynek i termin</th><th>Głosy w Pucharze</th><th>10/10</th><th>Próby</th><th>Genotyp</th><th>Akcje</th></tr></thead>
         <tbody id="booths-body"></tbody>
       </table>
       </div>
       <div id="lecture-box" class="inline-form" hidden>
         <h3>Zajęcia: link dla prowadzących</h3>
-        <p class="hint">Stanowisko „Zajęcia” służy do promocji akcji na wykładach, także przed jej rozpoczęciem. Nie ma wolontariusza, więc nie wystawia się tam tokenów ani kodów, a stanowisko nie jest widoczne w wykazach. Prowadzący otwiera ten link na ekranie sali, bez logowania. Ekran pokazuje rotujący kod QR do symulatora.</p>
+        <p class="hint">Stanowisko „Zajęcia” służy do promocji akcji na wykładach, także przed jej rozpoczęciem. Nie ma wolontariusza, więc nie wystawia się tam kodów QR, a stanowisko nie jest widoczne w wykazach. Prowadzący otwiera ten link na ekranie sali, bez logowania. Ekran pokazuje rotujący kod QR do symulatora.</p>
         <label for="lecture-url">Link do ekranu Zajęć</label>
         <input type="text" id="lecture-url" readonly>
         <div class="copy-row">
@@ -192,30 +185,6 @@
           <span id="vol-copy-status" class="hint" role="status"></span>
         </div>
         <p class="hint">Hasło widać tylko teraz. Po zamknięciu tej strony nie da się go odczytać, można tylko ustawić nowe.</p>
-      </div>
-    </section>
-
-    <section id="codes-section" class="card">
-      <h2>Tokeny rejestracyjne</h2>
-      <form id="codes-filter" class="inline-form">
-        <div class="field-row">
-          <div><label for="cf-booth">Stoisko</label>
-          <select id="cf-booth"><option value="">Wszystkie</option></select></div>
-          <div><label for="cf-status">Status</label>
-          <select id="cf-status">
-            <option value="">Wszystkie</option>
-            <option value="ACTIVE">ACTIVE</option>
-            <option value="USED">USED</option>
-            <option value="EXPIRED">EXPIRED</option>
-          </select></div>
-        </div>
-        <button class="btn" type="submit"><i class="ti ti-refresh" aria-hidden="true"></i> Filtruj</button>
-      </form>
-      <div class="table-wrap">
-      <table class="table" id="codes-table">
-        <thead><tr><th>Kod</th><th>Stoisko</th><th>Typ</th><th>Status</th><th>Utworzony</th><th></th></tr></thead>
-        <tbody id="codes-body"></tbody>
-      </table>
       </div>
     </section>
 
@@ -340,10 +309,13 @@
     <section id="settings-section" class="card">
       <h2>Ustawienia</h2>
       <form id="settings-form">
-        <label for="set-tolerance">Sufit dla identycznych urządzeń (1-50)</label>
-        <input type="number" id="set-tolerance" min="1" max="50" step="1" required>
-        <p class="hint">Limit 5 prób na dobę na urządzeniu na każdym stanowisku trzyma klucz rozszerzony, który odróżnia egzemplarze telefonów. Ta wartość to sufit dla identycznych urządzeń (ten sam klucz podstawowy): razem mogą wykorzystać najwyżej 5 razy tyle prób, ile wynosi wartość. Przy 1 limit to twarde 5 prób na klucz podstawowy.</p>
-        <p class="hint" id="device-stats">Dziś: brak danych.</p>
+        <label for="set-cup-deadline">Koniec zliczania punktów Pucharu Dawcy PWr</label>
+        <input type="datetime-local" id="set-cup-deadline" step="60">
+        <p class="hint" id="set-cup-deadline-hint"></p>
+        <label for="set-contest-deadline">Koniec przyjmowania zgłoszeń do konkursu HLA</label>
+        <input type="datetime-local" id="set-contest-deadline" step="60">
+        <p class="hint" id="set-contest-deadline-hint"></p>
+        <p class="hint">Czas Europe/Warsaw. Puste pole = wartość domyślna (zmienne CUP_DEADLINE i CONTEST_DEADLINE albo termin z regulaminu). Po terminie Pucharu nie da się oddać głosu, a kategoria „post” działa dalej.</p>
         <label for="set-facebook">Adres profilu Facebook Samorządu (miejsce zgłoszeń konkursowych)</label>
         <input type="url" id="set-facebook" placeholder="https://www.facebook.com/..." autocomplete="off" spellcheck="false">
         <p class="hint">Musi zaczynać się od https://. Pusty adres = gracze zobaczą instrukcję bez linku.</p>
@@ -373,7 +345,7 @@
           <select id="pv-donor-faculty"></select></div>
         </div>
         <label for="pv-donor-kind">Typ</label>
-        <select id="pv-donor-kind"><option value="potential">Nowy dawca</option><option value="actual">Dawca faktyczny</option></select>
+        <select id="pv-donor-kind"><option value="nowy">Nowy dawca</option><option value="zarejestrowany">Zarejestrowany dawca</option><option value="faktyczny">Faktyczny dawca</option></select>
         <button class="btn btn-primary" id="pv-donor-btn" type="button"><i class="ti ti-photo" aria-hidden="true"></i> Pokaż certyfikat dawcy</button>
         <div id="pv-donor-out" class="download" hidden></div>
       </div>
@@ -458,7 +430,7 @@
 
       <div class="test-block">
         <h3>Wyczyść wszystkie dane testowe</h3>
-        <p>Usuwa punkty, tokeny rejestracyjne, trafienia, sesje i próby graczy, zeruje liczniki stoisk i nadaje im nowe genotypy. Stoiska, konta wolontariuszy, słownik i dokumenty prawne zostają.</p>
+        <p>Usuwa punkty, trafienia, sesje i próby graczy, zeruje liczniki stoisk i nadaje im nowe genotypy. Stoiska, konta wolontariuszy, słownik i dokumenty prawne zostają.</p>
         <label for="t-wipe-confirm">Aby odblokować, wpisz USUŃ</label>
         <input type="text" id="t-wipe-confirm" autocomplete="off" spellcheck="false">
         <button class="btn btn-danger" id="t-wipe" type="button" disabled><i class="ti ti-trash" aria-hidden="true"></i> Wyczyść wszystkie dane testowe</button>
@@ -480,7 +452,7 @@
       </div>
       <p class="footer-text">Organizator: Samorząd Studencki Politechniki Wrocławskiej, we współpracy z zespołem akcji Helpers' Generation.</p>
     </div>
-    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Symulator HLA</a><a href="/potwierdz">Wpisz token rejestracyjny</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login" aria-current="page">Logowanie</a></nav>
+    <nav class="footer-links" aria-label="Linki w stopce"><a href="/graj">Symulator HLA</a><a href="/puchar">Puchar Dawcy PWr</a><a href="/statystyki">Statystyki</a><a href="/dokumenty">Regulaminy</a><a href="/dokumenty/polityka-prywatnosci">Polityka prywatności</a><a href="/login" aria-current="page">Logowanie</a></nav>
   </div></div>
   <div class="footer-bottom"><div class="container">To strona akcji studenckiej. Nie jest oficjalną stroną Fundacji DKMS.</div></div>
 </footer>

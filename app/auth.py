@@ -1,4 +1,4 @@
-"""Sesje: gracz (podpisany token, cookie lub nagłówek) i personel (konto z rolą admin / wolontariusz).
+"""Sesje: gracz (podpisany token w ciasteczku) i personel (konto z rolą admin / wolontariusz).
 
 Żadnych adresów IP — throttle logowania jest per login, w pamięci procesu.
 """
@@ -49,17 +49,26 @@ def set_game_cookie(response: Response, token: str) -> None:
                         samesite="lax", secure=config.cookie_secure(), path="/")
 
 
-def optional_game_session(request: Request, response: Response, conn: sqlite3.Connection = Depends(get_db)) -> str | None:
-    """Id istniejącej sesji gry (cookie lub ``X-Game-Token``); None, gdy brak/nieważna."""
-    from_cookie = request.cookies.get(GAME_COOKIE)
-    token = from_cookie or request.headers.get("X-Game-Token")
-    sid = read_game_token(token)
+def optional_game_session(request: Request, conn: sqlite3.Connection = Depends(get_db)) -> str | None:
+    """Id istniejącej sesji gry z ciasteczka ``hp_game``; None, gdy brak/nieważna."""
+    sid = read_game_token(request.cookies.get(GAME_COOKIE))
     if sid is None:
         return None
     if conn.execute("SELECT 1 FROM game_sessions WHERE session_id=?", (sid,)).fetchone() is None:
         return None
-    if not from_cookie:  # tylko nagłówek — odnów cookie
-        set_game_cookie(response, token)
+    return sid
+
+
+def ensure_game_session(conn: sqlite3.Connection, request: Request, response: Response) -> str:
+    """Istniejąca sesja gry albo nowa (``created_at`` = początek doby, żeby nic nie wiązało sesji z chwilą głosu);
+    nowej ustawia ciasteczko."""
+    sid = optional_game_session(request, conn)
+    if sid is not None:
+        return sid
+    sid, token = new_game_token()
+    conn.execute("INSERT INTO game_sessions(session_id,created_at) VALUES(?,?)",
+                 (sid, config.day_bounds(config.today())[0]))
+    set_game_cookie(response, token)
     return sid
 
 
