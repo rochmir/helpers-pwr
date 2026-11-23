@@ -106,14 +106,14 @@ ul.dots li::before { content: ''; position: absolute; left: .2rem; top: 1rem; wi
 .brand { display: flex; align-items: center; gap: .8rem; text-decoration: none; min-width: 0; }
 .brand-sep { width: .2rem; height: 2.4rem; background: var(--grey-light); flex: none; }
 .logo-dkms { height: 2.6rem; width: auto; flex: none; }
-.logo-pwr { height: 2.2rem; width: auto; min-width: 0; }
+.logo-pwr { height: 3rem; width: auto; min-width: 0; }
 .logo-ss { height: 2.2rem; width: auto; flex: none; }
 /* logo HG jest biale: czerwony kafelek (box-sizing: border-box, wysokosc = widoczne logo + 2 x padding) */
 .logo-hg { height: 3.8rem; width: auto; flex: none; padding: .6rem 1rem; background: var(--primary); border-radius: .3rem; }
 /* w naglowku samorzad (i jego separator) ukryty ponizej 992px (za malo miejsca), zostaje w stopce */
 .brand .logo-ss, .brand .logo-ss-sep { display: none; }
 @media (min-width: 992px) { .brand .logo-ss { display: block; height: 3.6rem; } .brand .logo-ss-sep { display: block; } }
-@media (min-width: 576px) { .logo-dkms { height: 4rem; } .logo-hg { height: 5.2rem; } .logo-pwr { height: 3.8rem; } .brand { gap: 2rem; } .brand-sep { height: 4rem; } }
+@media (min-width: 576px) { .logo-dkms { height: 4rem; } .logo-hg { height: 5.2rem; } .logo-pwr { height: 4.4rem; } .brand { gap: 2rem; } .brand-sep { height: 4rem; } }
 .header-cta { display: none; gap: 1.2rem; flex: none; }
 @media (min-width: 576px) { .header-cta { display: flex; } }
 .subnav { background: var(--grey-bg); }
@@ -537,7 +537,7 @@ form .btn { margin-top: 2rem; }
 .footer-main .container { display: flex; flex-direction: column; gap: 2rem; }
 @media (min-width: 768px) { .footer-main .container { flex-direction: row; align-items: center; justify-content: space-between; gap: 4rem; } }
 .footer-logos { display: flex; flex-wrap: wrap; align-items: center; gap: 1.6rem 2.4rem; }
-.footer-logos .logo-dkms { height: 3.2rem; } .footer-logos .logo-hg { height: 4.4rem; } .footer-logos .logo-pwr { height: 3rem; } .footer-logos .logo-ss { height: 3rem; }
+.footer-logos .logo-dkms { height: 3.2rem; } .footer-logos .logo-hg { height: 4.4rem; } .footer-logos .logo-pwr { height: 3.8rem; } .footer-logos .logo-ss { height: 3rem; }
 .footer-text { margin: 0; font-size: 1.3rem; line-height: 1.8rem; color: var(--grey-dark); max-width: 56rem; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 0 2.4rem; font-size: 1.3rem; }
 .footer-links a { color: var(--black); text-decoration: none; font-weight: var(--fw-medium); padding: .4rem 0; }
@@ -548,7 +548,7 @@ form .btn { margin-top: 2rem; }
 .page-booth { background: var(--primary-dualtone); }
 .booth-strip { display: flex; align-items: center; justify-content: space-between; gap: 2rem; padding: 1.6rem 2.4rem; background: var(--white); }
 .booth-strip .logo-dkms { height: clamp(3rem, 5.2vmin, 7rem); }
-.booth-strip .logo-pwr { height: clamp(2.8rem, 4.8vmin, 6.4rem); }
+.booth-strip .logo-pwr { height: clamp(3.2rem, 5.6vmin, 7.4rem); }
 .booth-strip .logo-hg { height: calc(clamp(3rem, 5.2vmin, 7rem) + 1.6vmin); padding: .8vmin 1.4vmin; border-radius: .6vmin; }
 .booth-strip .logo-ss { height: clamp(2.8rem, 4.8vmin, 6.4rem); }
 .booth { flex: 1; display: flex; flex-direction: column; gap: 2.4rem; padding: 2.4rem; }
@@ -885,3 +885,11 @@ details.help > p { margin-top: .4rem; }
   .booth-strip img { max-width: 40%; object-fit: contain; }
 }
 
+
+/* partner technologiczny w stopce (logo biale: ciemny kafelek jak przy HG) */
+.footer-partner { background: var(--grey-bg); border-top: 1px solid rgba(0,0,0,.08); padding-block: 2rem; }
+.footer-partner .container { display: flex; flex-direction: column; align-items: flex-start; gap: 1.2rem 2rem; }
+@media (min-width: 576px) { .footer-partner .container { flex-direction: row; align-items: center; } }
+.logo-solvro { height: 4.4rem; width: auto; flex: none; padding: .9rem 1.4rem; background: #1b1b1f; border-radius: .3rem; box-sizing: border-box; }
+.footer-partner p { margin: 0; font-size: 1.3rem; line-height: 1.8rem; color: var(--grey-dark); }
+.footer-partner a { color: var(--black); }
