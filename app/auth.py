@@ -100,8 +100,8 @@ class Throttle:
     def fail(self, key: str) -> None:
         now = time.monotonic()
         with self._lock:
-            if len(self._fails) > 1000:
-                self._fails.clear()
+            if len(self._fails) > 1000:  # porządek: usuwamy tylko klucze bez błędów w oknie
+                self._fails = {k: v for k, v in self._fails.items() if now - v[-1] < self.WINDOW}
             fails = [t for t in self._fails.get(key, []) if now - t < self.WINDOW] + [now]
             self._fails[key] = fails
             if len(fails) >= self.MAX_FAILS:

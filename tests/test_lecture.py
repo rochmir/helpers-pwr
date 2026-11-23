@@ -7,10 +7,10 @@ from test_api import JSON, enter, new_session, vote_new
 from test_iter4 import roll
 
 
-def screen_token(admin):
-    r = admin.get("/api/admin/lecture-screen")
-    assert r.status_code == 200
-    return r.json()["token"]
+def screen_token(admin, booth_id="zajecia"):
+    """Token ekranu stoiska z panelu admina (GET; ``None``, gdy ekran wyłączony)."""
+    url = admin.get(f"/api/admin/booths/{booth_id}/screen").json()["url"]
+    return url.rsplit("/", 1)[1] if url else None
 
 
 # --- wykazy -----------------------------------------------------------------------
@@ -42,28 +42,49 @@ def test_lecture_booth_ignores_booth_dates(admin, client):
     assert admin.patch("/api/admin/booths/zajecia", json={"date_from": "2020-01-01", "date_to": "2020-01-02"}).status_code == 200
     new_session(client, "zajecia")
     assert roll(client, "zajecia").status_code == 200
+    assert client.get(f"/api/screen/{screen_token(admin)}/state").json()["play_path"] is not None
 
 
 # --- ekran bez logowania ----------------------------------------------------------
 def test_screen_with_good_token_works_without_login(admin, other_clients):
     token = screen_token(admin)
-    assert admin.get("/api/admin/lecture-screen").json()["url"] == f"{config.public_url()}/zajecia/{token}"
+    assert admin.get("/api/admin/booths/zajecia/screen").json()["url"] == f"{config.public_url()}/ekran/{token}"
     guest = other_clients()
-    page = guest.get(f"/zajecia/{token}")
+    page = guest.get(f"/ekran/{token}")
     assert page.status_code == 200 and "booth-name" in page.text
-    st = guest.get("/api/booth/zajecia/state", params={"screen": token}).json()
+    assert page.headers["cache-control"] == "no-store" and page.headers["referrer-policy"] == "no-referrer"
+    assert page.headers["x-robots-tag"] == "noindex"
+    st = guest.get(f"/api/screen/{token}/state").json()
     assert st["play_path"].startswith("/graj?stoisko=zajecia&t=") and 0 < st["qr_seconds_left"] <= 60
+    assert "screen_token" not in st and token not in str(st)
     assert guest.get("/api/booth/zajecia/state").json()["play_path"] is None  # bez tokenu nic
 
 
 def test_screen_with_bad_token_is_404_and_hides_play_path(admin, booth, other_clients):
     token = screen_token(admin)
     guest = other_clients()
-    for bad in ("zly", token[:-1] + ("A" if token[-1] != "A" else "B"), token + "x", "żółw"):
-        assert guest.get(f"/zajecia/{bad}").status_code == 404, bad
-        assert guest.get("/api/booth/zajecia/state", params={"screen": bad}).json()["play_path"] is None
-    # token Zajęć nie otwiera zwykłego stoiska
-    assert guest.get(f"/api/booth/{booth}/state", params={"screen": token}).json()["play_path"] is None
+    for bad in ("zly", token[:-1] + ("A" if token[-1] != "A" else "B"), token + "x", "żółw", "x" * 65):
+        assert guest.get(f"/ekran/{bad}").status_code == 404, bad
+        assert guest.get(f"/api/screen/{bad}/state").status_code == 404, bad
+        assert guest.get(f"/zajecia/{bad}", follow_redirects=False).status_code == 404, bad
+
+
+def test_token_of_one_booth_does_not_open_another(admin, booth, other_clients):
+    admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
+    t_c13 = admin.post("/api/admin/booths/c13/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    t_w4 = admin.post("/api/admin/booths/w4/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    assert t_c13 != t_w4
+    guest = other_clients()
+    assert guest.get(f"/api/screen/{t_c13}/state").json()["play_path"].startswith("/graj?stoisko=c13&")
+    assert guest.get(f"/api/screen/{t_w4}/state").json()["play_path"].startswith("/graj?stoisko=w4&")
+
+
+def test_empty_or_missing_token_never_matches(client, booth):
+    conn = db.connect()
+    assert db.booth_by_screen_token(conn, "") is None and db.booth_by_screen_token(conn, None) is None
+    assert db.booth_by_screen_token(conn, "x" * 64) is None  # c13 nie ma tokenu (NULL)
+    conn.close()
+    assert client.get("/api/admin/booths/c13/screen").json() == {"url": None}
 
 
 def test_regular_booth_still_requires_staff(admin, booth, other_clients):
@@ -72,25 +93,65 @@ def test_regular_booth_still_requires_staff(admin, booth, other_clients):
     assert admin.get(f"/api/booth/{booth}/state").json()["play_path"]
 
 
-def test_rotation_invalidates_old_link(admin, other_clients):
-    old = screen_token(admin)
-    r = admin.post("/api/admin/lecture-screen/rotate", json={})
-    assert r.status_code == 200 and r.json()["token"] != old
+def test_booth_screen_rotation_invalidates_old_link(admin, booth, other_clients):
+    old = admin.post(f"/api/admin/booths/{booth}/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    r = admin.post("/api/admin/booths/zajecia/screen", json={})  # osobny ekran nie rusza c13
+    assert r.status_code == 200
+    r = admin.post(f"/api/admin/booths/{booth}/screen", json={})
+    assert r.status_code == 200 and r.json()["url"].rsplit("/", 1)[1] != old
+    new = r.json()["url"].rsplit("/", 1)[1]
     guest = other_clients()
-    assert guest.get(f"/zajecia/{old}").status_code == 404
-    assert guest.get("/api/booth/zajecia/state", params={"screen": old}).json()["play_path"] is None
-    assert guest.get(f"/zajecia/{r.json()['token']}").status_code == 200
-    assert screen_token(admin) == r.json()["token"]
+    assert guest.get(f"/ekran/{old}").status_code == 404
+    assert guest.get(f"/api/screen/{old}/state").status_code == 404
+    assert guest.get(f"/ekran/{new}").status_code == 200
+    assert screen_token(admin, booth) == new
+    assert [b for b in admin.get("/api/admin/booths").json() if b["id"] == booth][0]["has_screen"] is True
 
 
-def test_lecture_screen_admin_only(booth, other_clients):
+def test_old_zajecia_link_redirects_to_ekran(admin, other_clients):
+    token = screen_token(admin)
+    guest = other_clients()
+    r = guest.get(f"/zajecia/{token}", follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == f"/ekran/{token}"
+
+
+def test_public_screen_outside_booth_dates_has_no_play_path(admin, booth, other_clients):
+    token = admin.post(f"/api/admin/booths/{booth}/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    guest = other_clients()
+    admin.patch(f"/api/admin/booths/{booth}", json={"date_from": "2020-01-01", "date_to": "2020-01-02"})
+    st = guest.get(f"/api/screen/{token}/state").json()
+    assert st["play_path"] is None and st["closed"] is True
+    assert admin.get(f"/api/booth/{booth}/state").json()["play_path"]  # personel dalej ma link
+    admin.patch(f"/api/admin/booths/{booth}", json={"date_from": "2020-01-01", "date_to": "2099-12-31"})
+    st = guest.get(f"/api/screen/{token}/state").json()
+    assert st["play_path"].startswith(f"/graj?stoisko={booth}&") and st["closed"] is False
+
+
+def test_ensure_lecture_booth_copies_old_settings_token(client):
+    conn = db.connect()
+    conn.execute("UPDATE booths SET screen_token=NULL WHERE id='zajecia'")
+    db.set_setting(conn, "lecture_screen_token", "STARY_TOKEN_1234")
+    db.ensure_lecture_booth(conn)
+    assert conn.execute("SELECT screen_token FROM booths WHERE id='zajecia'").fetchone()[0] == "STARY_TOKEN_1234"
+    db.ensure_lecture_booth(conn)  # drugi start nic nie zmienia
+    assert conn.execute("SELECT screen_token FROM booths WHERE id='zajecia'").fetchone()[0] == "STARY_TOKEN_1234"
+    conn.close()
+    assert client.get("/ekran/STARY_TOKEN_1234").status_code == 200
+
+
+def test_reserved_booth_ids_are_refused(admin):
+    for bid in ("ekran", "login", "zajecia"):
+        assert admin.post("/api/admin/booths", json={"id": bid, "name": "x"}).status_code == 422, bid
+
+
+def test_booth_screen_admin_only(booth, other_clients):
     anon = other_clients()
-    assert anon.get("/api/admin/lecture-screen").status_code == 401
-    assert anon.post("/api/admin/lecture-screen/rotate", json={}).status_code == 401
+    assert anon.get("/api/admin/booths/zajecia/screen").status_code == 401
+    assert anon.post("/api/admin/booths/zajecia/screen", json={}).status_code == 401
     v = other_clients()
     v.post("/api/auth/login", json={"login": "tester", "password": "tajne-haslo1"})
-    assert v.get("/api/admin/lecture-screen").status_code == 403
-    assert v.post("/api/admin/lecture-screen/rotate", json={}).status_code == 403
+    assert v.get("/api/admin/booths/zajecia/screen").status_code == 403
+    assert v.post("/api/admin/booths/zajecia/screen", json={}).status_code == 403
 
 
 # --- brak wolontariusza -----------------------------------------------------------
@@ -161,11 +222,11 @@ def test_previous_seed_hashes_are_not_the_current_text():
 # --- treść dokumentów -------------------------------------------------------------
 def test_documents_contain_new_clauses(client):
     k = client.get("/dokumenty/regulamin-konkursu").text
-    assert "na jedną sesję przeglądarki na każdym stanowisku, z zastrzeżeniem ust. 5." in k
-    assert "Limit, o którym mowa w ust. 2, nie obejmuje prób dodatkowych." in k
+    assert "ma podstawowy limit 5 prób na dobę na każdym stanowisku osobno." in k
+    assert "Limit, o którym mowa w ust. 3, nie obejmuje prób dodatkowych (ust. 4)." in k
     p = client.get("/dokumenty/regulamin-pucharu").text
-    assert "Oddanie głosu uprawnia do dodatkowych prób w symulatorze HLA Match Maker" in p
-    assert "Kod jest ważny do momentu zeskanowania" in p and "rok studiów" in p
+    assert "przyznaje uczestnikowi +10 dodatkowych prób w symulatorze edukacyjnym HLA Match Maker" in p
+    assert "kod jest ważny do momentu zeskanowania" in p and "rok studiów" in p
     pol = client.get("/dokumenty/polityka-prywatnosci").text
     assert "hp_game" in pol and "fingerprint" in pol.lower() and "wyłącznie informację o wygenerowaniu jednorazowego kodu QR" in pol
 

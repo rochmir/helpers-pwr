@@ -1,53 +1,86 @@
-# Regulamin Międzywydziałowego Turnieju Zaangażowania Społecznego „Puchar Dawcy PWr”
+# Regulamin Międzywydziałowego Turnieju „Puchar Dawcy PWr”
 
-w ramach ogólnouczelnianej akcji Fundacji DKMS – Helpers' Generation na Politechnice Wrocławskiej
+Edycja grudzień 2026
 
-Ostatnia zmiana: listopad 2026 | Wersja 3
+## § 1. Postanowienia ogólne
 
-## §1. Postanowienia ogólne i Organizator
+1. Regulamin określa zasady organizacji i przebiegu międzywydziałowego turnieju „Puchar Dawcy PWr” (dalej: „Turniej”), w którym Wydziały Politechniki Wrocławskiej (dalej: „Uczelnia”) rywalizują zaangażowaniem swoich społeczności w ideę dawstwa szpiku kostnego i komórek krwiotwórczych.
+2. Organizatorem Turnieju jest Samorząd Studencki Politechniki Wrocławskiej z siedzibą przy Wybrzeże Wyspiańskiego 23-25, pokój 15, 50-370 Wrocław (dalej: „Organizator”).
+3. Turniej organizowany jest w ramach studenckiej akcji Fundacji DKMS „Helpers' Generation” we współpracy z Samorządem Studenckim Politechniki Wrocławskiej. Fundacja DKMS z siedzibą przy ul. Altowej 6/9, 02-386 Warszawa (dalej: „Fundacja”) samodzielnie prowadzi rejestrację potencjalnych dawców. Samorząd Studencki nie prowadzi rejestru dawców ani nie przetwarza danych zdrowotnych uczestników.
+4. Turniej trwa od 7 do 11 grudnia 2026 r. (do godz. 16:30 w ostatnim dniu) i odbywa się na stoiskach stacjonarnych na terenie kampusu Uczelni, w godzinach podanych w harmonogramie na stronie Turnieju: https://helpers-pwr.rupary.pl (dalej: „Serwis”).
+5. Cele Turnieju to: edukacja w zakresie dawstwa szpiku i komórek macierzystych, zwiększenie liczby osób świadomych idei dawstwa oraz integracja wspólnoty akademickiej.
+6. Udział w Turnieju jest dobrowolny i bezpłatny. Dawstwo szpiku ma charakter bezinteresowny i nieodpłatny – za rejestrację ani za oddanie głosu w Turnieju uczestnik nie otrzymuje żadnej korzyści majątkowej ani osobistej, a jedyną „korzyścią” są dodatkowe próby w edukacyjnym symulatorze (bez wartości majątkowej), na zasadach określonych w § 3 Regulaminu oraz regulaminie konkursu „HLA Match Maker”. Nagrody dotyczą wyłącznie Wydziałów jako zbiorowości.
+7. Nikt nie ma obowiązku rejestracji w rejestrze dawców. Oddanie głosu w Turnieju przysługuje także osobom, które zarejestrowały się wcześniej, oraz osobom, które faktycznie oddały szpik lub komórki krwiotwórcze.
+8. Ilekroć w Regulaminie jest mowa o wolontariuszu, rozumie się przez to osobę upoważnioną przez Organizatora lub Fundację do obsługi stoiska, która weryfikuje uprawnienie uczestnika do oddania głosu.
 
-1. Niniejszy regulamin (dalej: „Regulamin”) określa zasady organizacji i wyłonienia zwycięzcy w ramach Międzywydziałowego Turnieju Zaangażowania Społecznego pod nazwą „Puchar Dawcy PWr” (dalej: „Turniej”).
-2. Organizatorem Turnieju jest Samorząd Studencki Politechniki Wrocławskiej (dalej: „Organizator”) we współpracy z zespołem studenckiej akcji Fundacji DKMS – Helpers' Generation na Politechnice Wrocławskiej.
-3. Turniej odbywa się w ramach ogólnouczelnianej akcji rejestracji potencjalnych dawców szpiku kostnego w dniach 7–11 grudnia 2026 r. na kampusie Politechniki Wrocławskiej.
-4. Udział w Turnieju ma charakter rywalizacji wspólnotowej jednostek uczelnianych i opiera się na zasadzie pełnej dobrowolności oraz bezinteresowności rejestracji w bazie dawców.
+## § 2. Uczestnicy i Wydziały
 
-## §2. Uczestnicy Turnieju
+1. W Turnieju klasyfikowane są Wydziały Uczelni: W1 Architektury, W2 Budownictwa Lądowego i Wodnego, W3 Chemiczny, W4N Informatyki i Telekomunikacji, W5 Elektryczny, W6 Geoinżynierii, Górnictwa i Geologii, W7 Inżynierii Środowiska, W8N Zarządzania, W9 Mechaniczno-Energetyczny, W10 Mechaniczny, W11 Podstawowych Problemów Techniki, W12N Elektroniki, Fotoniki i Mikrosystemów, W13 Matematyki, W14 Medyczny [lista do potwierdzenia na dzień turnieju]. Do wyboru jest również pozycja „Inne” (obejmująca jednostki ogólnouczelniane poza wydziałami), która pozostaje poza klasyfikacją rankingową Turnieju.
+2. Głos na rzecz Wydziału może oddać osoba pełnoletnia będąca studentem, doktorantem lub pracownikiem Uczelni, przypisując się do jednego Wydziału.
+3. Każdy uczestnik może oddać jeden głos w całym Turnieju, niezależnie od liczby kierunków studiów, statusów i miejsc zatrudnienia.
+4. Wydział reprezentuje w Turnieju właściwa Wydziałowa Rada Samorządu Studenckiego (dalej: „WRSS”).
 
-1. W Turnieju sklasyfikowane zostają wyłącznie wydziały Politechniki Wrocławskiej (W1-W14).
-2. W imieniu społeczności danego Wydziału reprezentację sprawuje właściwa Wydziałowa Rada Samorządu Studenckiego (WRSS).
+## § 3. Zasady przyznawania punktów
 
-## §3. Zasady Przyznawania Punktów i Weryfikacja
+1. Punkt na rzecz wybranego Wydziału przyznawany jest na oficjalnym stoisku, jeżeli uczestnik spełni jeden z poniższych warunków:
+   - **Kategoria N (nowy dawca):** przejdzie na stoisku procedurę rejestracji w rejestrze potencjalnych dawców prowadzonym przez Fundację,
+   - **Kategoria Z (zarejestrowany dawca):** okaże wolontariuszowi wiarygodne potwierdzenie wcześniejszej rejestracji w rejestrze potencjalnych dawców szpiku,
+   - **Kategoria F (faktyczny dawca):** okaże dokument potwierdzający, że oddał szpik lub krwiotwórcze komórki macierzyste.
+2. Każdy zweryfikowany głos to 1 punkt, niezależnie od kategorii. Wolontariusz weryfikuje wyłącznie uprawnienie do głosu; nie zapisuje ani nie kopiuje okazanych dokumentów.
+3. Przyznanie punktu odbywa się dwuetapowo: (1) wolontariusz generuje jednorazowy kod QR powiązany ze stoiskiem i wybraną kategorią (kod jest ważny do momentu zeskanowania), (2) uczestnik skanuje kod własnym urządzeniem i wybiera w Serwisie swój Wydział oraz status uczestnika.
+4. Aby ograniczyć wielokrotne głosowanie przez tę samą osobę, Serwis zapisuje w przeglądarce uczestnika plik cookie sesji (`hp_game`). Szczegóły opisuje Polityka Prywatności.
+5. Serwis nie gromadzi danych osobowych uczestników Turnieju. W bazie zapisywany jest wyłącznie Wydział, kategoria głosu (N/Z/F), status uczestnika (rok studiów 1–5, szkoła doktorska albo pracownik), stoisko i czas, bez danych osobowych i bez powiązania z sesją.
+6. Oddanie głosu w Turnieju jako nowy lub zarejestrowany dawca (kategoria N lub Z) przyznaje uczestnikowi +10 dodatkowych prób w symulatorze edukacyjnym HLA Match Maker, a jako faktyczny dawca (kategoria F) – +20 dodatkowych prób. Ponadto okazanie wolontariuszowi opublikowanego posta lub relacji promującej akcję z oznaczeniem profilu Organizatora uprawnia do odebrania +5 dodatkowych prób (raz dziennie na sesję). Dodatkowe próby nie wygasają o północy, nie mają wartości majątkowej i stanowią jedyną korzyść związaną z udziałem.
+7. Punkty zlicza się tylko w godzinach pracy stoisk. Kody wygenerowane poza harmonogramem nie są uwzględniane.
 
-1. Punkt na rzecz danego Wydziału może zostać przypisany w jeden z trzech równorzędnych sposobów:
-   - **Rejestracja nowego dawcy:** Poprawne i kompletne przejście procedury rejestracji w bazie potencjalnych dawców szpiku Fundacji DKMS na stoisku stacjonarnym PWr (pobranie wymazu z błony śluzowej policzka oraz podpisanie formularza).
-   - **Zgłoszenie zarejestrowanego dawcy:** Okazanie na stoisku stacjonarnym potwierdzenia wcześniejszej rejestracji w bazie DKMS (np. wiadomości e-mail powitalnej od fundacji lub plastikowej karty potencjalnego dawcy szpiku).
-   - **Zgłoszenie faktycznego dawcy:** Okazanie na stoisku oficjalnej legitymacji („Dawca Przeszczepu” lub „Zasłużony Dawca Przeszczepu”) przez studenta będącego już faktycznym dawcą szpiku kostnego lub komórek macierzystych.
-2. Po zweryfikowaniu uprawnienia wolontariusz wybiera w panelu stanowiska odpowiednią kategorię uczestnika (nowy / zarejestrowany / faktyczny) i wyświetla jednorazowy kod QR powiązany z danym stoiskiem i wybraną kategorią. Kod jest ważny do momentu zeskanowania; po zeskanowaniu traci ważność, a kolejny kod wolontariusz wyświetla ponownie po wyborze kategorii.
-3. Student skanuje kod QR własnym smartfonem, a na dedykowanej stronie wybiera z listy swój macierzysty Wydział oraz rok studiów, zatwierdzając tym samym przypisanie punktu.
-4. W celu wyeliminowania wielokrotnego głosowania przez tę samą osobę, system autoryzuje próbę na podstawie bezpiecznej, generowanej serwerowo sesji, zapisywanej w plikach cookies na urządzeniu użytkownika. W bazie Turnieju nie są gromadzone ani przetwarzane jakiekolwiek dane osobowe (w tym imię, nazwisko, numer legitymacji czy numer PESEL).
-5. Każdy uczestnik może oddać dokładnie jeden głos w Turnieju.
-6. Oddanie głosu uprawnia do dodatkowych prób w symulatorze HLA Match Maker, na zasadach określonych w regulaminie tego konkursu.
+## § 4. Wyłonienie zwycięzcy
 
-## §4. Algorytm Wyłonienia Zwycięzcy (Wskaźnik Zaangażowania)
+1. Aby porównać Wydziały różnej wielkości, klasyfikacja opiera się na Wskaźniku Zaangażowania W_Z:
 
-1. W celu zagwarantowania równych i sprawiedliwych szans rywalizacji między jednostkami o zróżnicowanej liczbie studentów, klasyfikacja końcowa opiera się na Wskaźniku Zaangażowania (WZ).
-2. Wskaźnik Zaangażowania dla danego Wydziału obliczany jest według wzoru:
+   W_Z = (L_D / L_S) x 100%
 
-   WZ = (LD / LS) × 100%
+   gdzie L_D to liczba zweryfikowanych punktów Wydziału, a L_S to liczba studentów Wydziału według danych ze sprawozdania Rektora Politechniki Wrocławskiej za lata 2020–2024. Głosy oddane na pozycję „Inne” nie wliczają się do klasyfikacji rankingowej.
+2. W_Z liczy się z dokładnością do trzech miejsc po przecinku.
+3. Do klasyfikacji Wydział musi zdobyć co najmniej 10 punktów (L_D >= 10).
+4. Puchar Dawcy PWr otrzymuje Wydział o najwyższym W_Z.
+5. Przy równym W_Z o kolejności decydują kolejno: (1) wyższe L_D, (2) większa liczba punktów kategorii N, (3) wcześniejszy czas zarejestrowania ostatniego punktu.
 
-   gdzie:
-   - LD – całkowita suma zweryfikowanych punktów (suma głosów z kategorii: nowi, zarejestrowani, faktyczni dawcy) przypisanych do danego Wydziału podczas akcji (7–11 grudnia 2026 r.). Głosy z wszystkich trzech kategorii mają równą wartość punktową, jednakże w celach statystycznych na wykresach rankingowych mogą być oznaczane odrębnymi kolorami.
-   - LS – oficjalna liczba studentów danego Wydziału według stanu na dzień 30 listopada 2026 r., podana przez Centrum Kształcenia PWr.
-3. Zwycięzcą Turnieju zostaje Wydział, który uzyska najwyższą wartość Wskaźnika Zaangażowania (WZ). W przypadku uzyskania identycznego wyniku WZ (do drugiego miejsca po przecinku) przez co najmniej dwa Wydziały, o zwycięstwie decyduje wyższa bezwzględna liczba punktów (LD).
+## § 5. Nagrody i ogłoszenie wyników
 
-## §5. Nagrody i Harmonogram
+1. Zwycięski Wydział otrzymuje Puchar Dawcy PWr, który zostaje jego własnością na stałe, oraz tytuł „Najbardziej Zaangażowanej Społeczności Politechniki Wrocławskiej w Ratowaniu Życia”. Tytuł jest przechodni i zwycięski Wydział zachowuje go do czasu rozstrzygnięcia kolejnej edycji Turnieju. W każdej edycji przyznawany jest nowy puchar. Puchar odbiera przedstawiciel WRSS.
+2. Zliczanie punktów kończy się 11 grudnia 2026 r. o godz. 16:30.
+3. Ranking prezentowany na żywo w Serwisie ma charakter poglądowy do czasu weryfikacji przez Komisję.
+4. Wyniki nieoficjalne (ranking) Organizator publikuje w Serwisie i w mediach społecznościowych Samorządu 14 grudnia 2026 r. do godz. 17:00.
+5. Wyniki oficjalne Organizator ogłasza po rozpatrzeniu protestów, nie później niż 16 grudnia 2026 r., w miejscu i terminie wskazanym na oficjalnych kanałach Samorządu Studenckiego Politechniki Wrocławskiej.
 
-1. Zwycięski Wydział otrzymuje tytuł Najbardziej Zaangażowanej Społeczności PWr w Ratowaniu Życia oraz nagrody (w tym Puchar Dawcy PWr). Nagrody rzeczowe i statuetki przekazywane są przez Organizatorów lub Partnerów akcji.
-2. Zliczanie punktów w systemie trwa do dnia 11 grudnia 2026 r. do godziny 16:30. W trakcie trwania akcji w Serwisie https://helpers-pwr.rupary.pl prezentowany jest orientacyjny ranking na żywo.
-3. Oficjalne ogłoszenie ostatecznych wyników Turnieju oraz wręczenie nagród odbędzie się podczas Wigilii Aktywnych Studentów w dniu 16 grudnia 2026 r. w budynku C-18. Dodatkowo wyniki zostaną opublikowane w formie posta na oficjalnych profilach Samorządu Studenckiego PWr na platformie Facebook.
+## § 6. Komisja Skrutacyjna
 
-## §6. Postanowienia końcowe
+1. Przebieg Turnieju nadzoruje Komisja Skrutacyjna w składzie co najmniej trzech osób, wskazanych przez Przewodniczącego Samorządu Studenckiego Politechniki Wrocławskiej. Członkiem Komisji nie może być osoba kandydująca do władz WRSS ani wskazana przez WRSS jako jej przedstawiciel w Turnieju.
+2. Członek Komisji wyłącza się z rozstrzygania spraw dotyczących Wydziału, którego jest studentem lub pracownikiem.
+3. Komisja: weryfikuje spójność danych w Serwisie, porównuje liczbę głosów kategorii N z liczbą rejestracji zgłoszoną przez wolontariuszy, wykrywa próby nadużyć, rozpatruje protesty i sporządza protokół końcowy.
+4. Komisja unieważnia punkty uzyskane z naruszeniem Regulaminu, w tym przez wielokrotne głosowanie, manipulację sesją lub ingerencję w Serwis, i odnotowuje to w protokole.
+5. Uchwały zapadają zwykłą większością głosów; przy równości decyduje głos przewodniczącego.
 
-1. Nad poprawnością przebiegu Turnieju oraz weryfikacją rozliczeń czuwa Komisja Skrutacyjna złożona z przedstawicieli Zarządu Samorządu Studenckiego PWr oraz Koordynatora Akcji Helpers' Generation.
-2. Wszelkie próby manipulacji systemem teleinformatycznym skutkować będą dyskwalifikacją nieuprawnionych głosów dla danego Wydziału.
-3. Niniejszy Regulamin wchodzi w życie z dniem zatwierdzenia przez Zarząd Samorządu Studenckiego Politechniki Wrocławskiej i opublikowania w Serwisie.
+## § 7. Protesty
+
+1. Protest może wnieść Przewodniczący WRSS lub osoba przez niego upoważniona na piśmie.
+2. Protest składa się mailem na adres {{CONTACT}} [adres do potwierdzenia] w ciągu 24 godzin od publikacji wstępnych wyników. Protest powinien wskazywać Wydział, zaskarżone zdarzenie (stoisko, czas) i uzasadnienie wraz z dowodami.
+3. Protesty spóźnione lub od osób nieuprawnionych pozostają bez rozpoznania.
+4. Komisja rozpatruje protesty przed ogłoszeniem wyników oficjalnych, tj. do 16 grudnia 2026 r., i informuje o decyzji składającego protest.
+5. Rozstrzygnięcie Komisji jest ostateczne na gruncie Regulaminu i nie wyłącza drogi dochodzenia roszczeń na podstawie powszechnie obowiązujących przepisów.
+
+## § 8. Dane osobowe i wizerunek
+
+1. Serwis działa zgodnie z zasadą ochrony danych w fazie projektowania (art. 25 rozporządzenia (UE) 2016/679, dalej: „RODO”) i nie przetwarza danych osobowych uczestników Turnieju. Informacje o plikach cookies zawiera Polityka Prywatności.
+2. Dane zbierane na stoisku przy rejestracji w rejestrze dawców (w tym dane o stanie zdrowia) przetwarza wyłącznie Fundacja DKMS jako administrator, na podstawie odrębnej zgody i klauzuli informacyjnej udzielanej przez Fundację. Organizator nie ma do nich dostępu.
+3. Administratorem danych osób odbierających Puchar i nagrody w imieniu Wydziału jest Politechnika Wrocławska; kontakt do Inspektora Ochrony Danych: iod@pwr.edu.pl.
+4. Wizerunek osób biorących udział w ceremonii wręczenia Pucharu może być utrwalany i publikowany na zasadach określonych w art. 81 ustawy o prawie autorskim i prawach pokrewnych; osoby te zostaną o tym poinformowane przed ceremonią, a zgoda wyrażana jest przed ich fotografowaniem.
+
+## § 9. Postanowienia końcowe
+
+1. Regulamin wchodzi w życie z dniem publikacji w Serwisie i obowiązuje do końca edycji.
+2. Organizator może zmienić harmonogram lub lokalizację stoisk z powodu siły wyższej (np. ewakuacja budynku, awaria infrastruktury, zmiana organizacji pracy Uczelni), informując o tym w Serwisie.
+3. Zmiana Regulaminu w trakcie Turnieju jest dopuszczalna wyłącznie dla usunięcia oczywistych błędów lub z powodu siły wyższej i nie może pogarszać sytuacji Wydziałów.
+4. W sprawach nieuregulowanych stosuje się przepisy prawa polskiego, w tym Kodeksu cywilnego.
+5. Nieważność jednego postanowienia nie wpływa na ważność pozostałych.
+6. Interpretacji Regulaminu dokonuje Przewodniczący Samorządu Studenckiego Politechniki Wrocławskiej po zasięgnięciu opinii Komisji Skrutacyjnej.

@@ -76,7 +76,7 @@ def test_cup_code_single_use(admin, booth, other_clients):
     r = claim(voter(), booth, t=code["id"])
     assert r.status_code == 410 and r.json()["detail"] == USED
     assert status(v, code["id"]) == "scanned"
-    assert first.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "II1"}).status_code == 200
+    assert first.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 200
     assert status(v, code["id"]) == "voted"
     conn = db.connect()
     row = conn.execute("SELECT * FROM cup_qr_codes WHERE id=?", (code["id"],)).fetchone()
@@ -91,10 +91,10 @@ def test_cup_code_new_code_revokes_old(admin, booth, other_clients):
     old, scanned = issue(v, "nowy"), issue(v, "post")
     assert claim(voter(), booth, t=scanned["id"]).status_code == 200      # zeskanowany przed nowym kodem
     new = issue(v, "nowy")
-    assert status(v, old["id"]) == "revoked" and status(v, new["id"]) == "active"
-    assert status(v, scanned["id"]) == "granted"                           # zeskanowanych nie ruszamy
-    r = claim(voter(), booth, t=old["id"])
-    assert r.status_code == 410 and r.json()["detail"] == REVOKED
+    # niezeskanowany kod zostaje ważny (wspólne konto stoiska nie blokuje się nawzajem)
+    assert status(v, old["id"]) == "active" and status(v, new["id"]) == "active"
+    assert status(v, scanned["id"]) == "granted"
+    assert claim(voter(), booth, t=old["id"]).status_code == 200
     assert claim(voter(), booth, t=new["id"]).status_code == 200
 
 
@@ -139,7 +139,7 @@ def test_cup_code_status_transitions_and_auth(admin, booth, other_clients):
     c = voter()
     claim(c, booth, t=code)
     assert status(v, code) == "scanned"
-    c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"})
     d = v.get(f"/api/volunteer/cup-qr/{code}").json()
     assert d["status"] == "voted" and d["category"] == "nowy" and d["scanned_at"] and d["voted_at"]
     # dostęp: anonim 401, wolontariusz z innego stoiska 404, nieznany kod 404, admin widzi wszystko
@@ -166,7 +166,7 @@ def test_claim_window_message_after_11_min(admin, booth, monkeypatch):
     c = voter()
     assert claim(c, booth).status_code == 200
     set_clock(monkeypatch, config.now() + timedelta(minutes=11))
-    r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"})
     assert r.status_code == 403 and r.json()["detail"] == CLAIM_EXPIRED
 
 
@@ -186,18 +186,18 @@ def test_vote_bonuses_and_errors(admin, booth, monkeypatch):
         assert d["bonus_attempts_granted"] == bonus and d["attempts_left"] == 5 + bonus and d["category"] == cat
     # głos bez claimu
     c = voter()
-    assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 403
+    assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 403
     # claim wygasa po 10 minutach
     c = voter()
     assert claim(c, booth).status_code == 200
     real = config.now()
     set_clock(monkeypatch, real + timedelta(minutes=config.CUP_CLAIM_MINUTES + 1))
-    r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    r = c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"})
     assert r.status_code == 403 and r.json()["detail"] == CLAIM_EXPIRED
     set_clock(monkeypatch, real)
     c = voter()
     claim(c, booth)
-    assert c.post("/api/cup/vote", json={"faculty": "ZZ", "study_year": "I1"}).status_code == 422
+    assert c.post("/api/cup/vote", json={"faculty": "ZZ", "study_year": "1"}).status_code == 422
     assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "X9"}).status_code == 422
     assert c.get("/api/cup/me").json()["claim"]["category"] == "nowy"
 
@@ -207,7 +207,7 @@ def test_cup_deadline_blocks_vote_not_post(admin, booth, monkeypatch):
     claim(c, booth)
     monkeypatch.setattr(config, "cup_closed", lambda: True)
     assert claim(voter(), booth, "nowy").status_code == 410
-    assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 410
+    assert c.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 410
     assert admin.post("/api/volunteer/cup-qr", json={"category": "faktyczny", "booth_id": booth}).status_code == 410
     assert claim(voter(), booth, "post").status_code == 200
 
@@ -251,10 +251,9 @@ def test_stoisko_requires_staff(client, booth, other_clients):
     r = anon.get("/stoisko/c13", follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/login?next=%2Fstoisko%2Fc13"
     assert volunteer(other_clients).get("/stoisko/c13").status_code == 200
-    token = client.get("/api/admin/lecture-screen")
     client.post("/api/auth/login", json={"login": "admin", "password": "test-admin-secret"})
-    t = client.get("/api/admin/lecture-screen").json()["token"]
-    assert anon.get(f"/zajecia/{t}").status_code == 200
+    t = client.get("/api/admin/booths/zajecia/screen").json()["url"].rsplit("/", 1)[1]
+    assert anon.get(f"/ekran/{t}").status_code == 200
 
 
 def test_removed_endpoints(admin, booth):
@@ -295,7 +294,7 @@ def test_partner_order(admin, booth, other_clients):
 def test_deadlines_in_admin_settings(admin, booth, client, other_clients):
     s = admin.get("/api/admin/settings").json()
     assert s["cup_deadline"] == {"value": "2026-12-11T16:30", "default": "2026-12-11T16:30", "custom": False}
-    assert s["contest_deadline"]["value"] == "2026-12-11T16:00"
+    assert s["contest_deadline"]["value"] == "2026-12-13T23:59"
     # termin Pucharu w przeszłości zamyka głosowanie, termin konkursu zmienia /api/config
     r = admin.put("/api/admin/settings", json={"facebook_url": "", "cup_deadline": "2020-01-02T09:05",
                                                "contest_deadline": "2020-01-02T08:00"})
@@ -310,7 +309,7 @@ def test_deadlines_in_admin_settings(admin, booth, client, other_clients):
     admin.put("/api/admin/settings", json={"facebook_url": "", "cup_deadline": "", "contest_deadline": None})
     assert config.cup_closed() is False
     assert admin.get("/api/admin/settings").json()["cup_deadline"]["custom"] is False
-    assert client.get("/api/config").json()["contest_deadline"] == "2026-12-11T15:00:00Z"
+    assert client.get("/api/config").json()["contest_deadline"] == "2026-12-13T22:59:00Z"
     # walidacja i uprawnienia
     for bad in ("zle", "2020-13-45T99:00"):
         assert admin.put("/api/admin/settings", json={"facebook_url": "", "cup_deadline": bad}).status_code == 422
@@ -325,7 +324,7 @@ def test_deadlines_in_admin_settings(admin, booth, client, other_clients):
 def test_legal_upgrade_v3(client, conn):
     slug = "regulamin-pucharu"
     row = conn.execute("SELECT * FROM legal_documents WHERE slug=?", (slug,)).fetchone()
-    assert row["version"] == 1 and db.get_setting(conn, "legal_seed_version") == "4"   # świeża baza: bez podbicia
+    assert row["version"] == 1 and db.get_setting(conn, "legal_seed_version") == "5"   # świeża baza: bez podbicia
     conn.execute("UPDATE legal_documents SET body_md='Stara treść v2.\n', title='Stary' WHERE slug=?", (slug,))
     conn.execute("DELETE FROM settings WHERE key='legal_seed_version'")
     legal.seed(conn)
@@ -333,7 +332,7 @@ def test_legal_upgrade_v3(client, conn):
     assert new["version"] == 2 and new["body_md"] == row["body_md"] and new["updated_at"] >= row["updated_at"]
     hist = conn.execute("SELECT * FROM legal_document_versions WHERE slug=?", (slug,)).fetchall()
     assert [(h["version"], h["saved_by"], h["body_md"]) for h in hist] == [(1, "system", "Stara treść v2.\n")]
-    assert db.get_setting(conn, "legal_seed_version") == "4"
+    assert db.get_setting(conn, "legal_seed_version") == "5"
     legal.seed(conn)   # drugi raz nic nie zmienia
     assert tuple(conn.execute("SELECT * FROM legal_documents WHERE slug=?", (slug,)).fetchone()) == tuple(new)
     # późniejsza edycja admina nie jest nadpisywana
@@ -400,7 +399,7 @@ def test_migration_from_pre_v3(tmp_path, monkeypatch):
 
 def test_dictionary_has_study_years(client):
     d = client.get("/api/dictionary/faculties").json()
-    assert len(d["study_years"]) == 8 and d["study_years"][0] == {"code": "I1", "label": "I st., 1. rok"}
+    assert len(d["study_years"]) == 7 and d["study_years"][0] == {"code": "1", "label": "1. rok"}
 
 
 def test_pages_have_no_potwierdz_links_and_no_fingerprint(client):

@@ -158,6 +158,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     _add_column(conn, "booths", "date_to", "TEXT NULL")
     # stanowisko „Zajęcia” (promocja na wykładach): poza publicznymi wykazami, bez wolontariusza i bez ograniczenia datami
     _add_column(conn, "booths", "is_lecture", "INTEGER NOT NULL DEFAULT 0")
+    # link ekranu stoiska /ekran/{token}; NULL = ekran wyłączony
+    _add_column(conn, "booths", "screen_token", "TEXT NULL")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_booths_screen_token ON booths(screen_token) WHERE screen_token IS NOT NULL")
     # wzór i czas trafienia (anonimowo, bez nicku) + oznaczenie trafień testowych
     _add_column(conn, "genotype_history", "is_test", "INTEGER NOT NULL DEFAULT 0")
     _add_column(conn, "game_sessions", "won_genotype", "TEXT NULL")
@@ -193,9 +196,7 @@ def _migrate_cup_contest(conn: sqlite3.Connection) -> None:
     """Iteracja 7 (regulaminy Konkursu i Pucharu): minimalizacja danych, jeden głos z urządzenia, token jednorazowy.
     Idempotentna: każdy krok sprawdza, czy jest jeszcze potrzebny."""
     # Dodatkowe próby (kod promo +5, udział w Pucharze +10/+20) wróciły: promo_codes i bonus_attempts powstają
-    # w SCHEMA i w kroku poniżej, a tu ich NIE kasujemy (migracja biegnie przy każdym starcie).
-    conn.execute("CREATE TABLE IF NOT EXISTS promo_codes(code TEXT PRIMARY KEY, booth_id TEXT NOT NULL REFERENCES booths(id), "
-                 "status TEXT NOT NULL CHECK(status IN('ACTIVE','USED','EXPIRED')), created_at TEXT NOT NULL, used_at TEXT NULL)")
+    # w SCHEMA (promo_codes), a tu ich NIE kasujemy (migracja biegnie przy każdym starcie).
     _add_column(conn, "game_sessions", "bonus_attempts", "INTEGER NOT NULL DEFAULT 0")
     # §3.4 Pucharu: bez numeru legitymacji (także jego skrótu)
     conn.execute("DROP TABLE IF EXISTS actual_donor_cards")
@@ -324,34 +325,35 @@ def init_db() -> None:
 
 LECTURE_BOOTH_ID = "zajecia"
 LECTURE_BOOTH_NAME = "Zajęcia"
-LECTURE_TOKEN_KEY = "lecture_screen_token"
+# identyfikatory zarezerwowane dla tras (/ekran, /login) i stanowiska Zajęć
+RESERVED_BOOTH_IDS = frozenset({"ekran", "login", LECTURE_BOOTH_ID})
 
 
 def ensure_lecture_booth(conn: sqlite3.Connection) -> None:
-    """Idempotentnie tworzy stanowisko „Zajęcia” (is_lecture=1), jeśli nie ma stoiska o tym id."""
+    """Idempotentnie tworzy stanowisko „Zajęcia” (is_lecture=1) i nadaje mu token ekranu; raz przenosi stary ``settings.lecture_screen_token``."""
     with tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone() is None:
             create_booth(conn, LECTURE_BOOTH_ID, LECTURE_BOOTH_NAME, is_lecture=True)
             log.info("Utworzono stanowisko %s", LECTURE_BOOTH_ID)
+        row = conn.execute("SELECT screen_token FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone()
+        if not row["screen_token"]:
+            token = get_setting(conn, "lecture_screen_token") or secrets.token_urlsafe(16)
+            conn.execute("UPDATE booths SET screen_token=? WHERE id=?", (token, LECTURE_BOOTH_ID))
 
 
-def lecture_screen_token(conn: sqlite3.Connection) -> str:
-    """Token statycznego linku `/zajecia/{token}`; tworzony przy pierwszym użyciu (``INSERT OR IGNORE`` chroni wyścig)."""
-    conn.execute("INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)", (LECTURE_TOKEN_KEY, secrets.token_urlsafe(16)))
-    return get_setting(conn, LECTURE_TOKEN_KEY)
-
-
-def rotate_lecture_screen_token(conn: sqlite3.Connection) -> str:
-    token = secrets.token_urlsafe(16)
-    set_setting(conn, LECTURE_TOKEN_KEY, token)
-    return token
-
-
-def lecture_token_ok(conn: sqlite3.Connection, given: str | None) -> bool:
-    """Stałoczasowe porównanie tokenu ekranu Zajęć."""
-    if not given:
-        return False
-    return hmac.compare_digest(given.encode(), lecture_screen_token(conn).encode())
+def booth_by_screen_token(conn: sqlite3.Connection, token: str | None) -> sqlite3.Row | None:
+    """Stoisko, którego ekran ma ten token. Pusty, za długi lub nie-ASCII token nie pasuje; porównanie stałoczasowe, bez wczesnego wyjścia."""
+    if not token or len(token) > 64:
+        return None
+    try:
+        given = token.encode("ascii")
+    except UnicodeEncodeError:
+        return None
+    found = None
+    for b in conn.execute("SELECT * FROM booths WHERE screen_token IS NOT NULL AND screen_token<>''"):
+        if hmac.compare_digest(given, b["screen_token"].encode()):
+            found = b
+    return found
 
 
 def get_booth_hours(conn: sqlite3.Connection) -> str:
@@ -432,6 +434,9 @@ def bootstrap_booths() -> None:
             booth_id, name = parts[0].strip().lower(), ":".join(parts[1:]).strip()
             if not booth_id.isalnum() or not booth_id.isascii() or not name:
                 log.warning("BOOTSTRAP_BOOTHS: pominięto niepoprawny wpis %r", booth_id)
+                continue
+            if booth_id in RESERVED_BOOTH_IDS:
+                log.warning("BOOTSTRAP_BOOTHS: pominięto zarezerwowane id %r", booth_id)
                 continue
             with tx(conn):
                 if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:

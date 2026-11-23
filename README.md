@@ -2,7 +2,7 @@
 
 Aplikacja na akcję rejestracji dawców szpiku (DKMS) na Politechnice Wrocławskiej: symulator HLA „HLA Match Maker – Sprawdź Parametry”
 i towarzyszący konkurs, jednorazowe kody QR (ważne do zeskanowania) pokazywane przez wolontariuszy do głosu w Pucharze Dawcy PWr, statystyki, Puchar oraz wspólny panel personelu.
-Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres docelowy: https://helpers-pwr.rupary.pl. Specyfikacja techniczna: `PLAN.md`.
+Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres docelowy: https://helpers-pwr.rupary.pl.
 
 ## Prywatność
 
@@ -12,7 +12,7 @@ Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres doce
 - trafienia 10/10 (Token Losu `HG-XXXX-XXXX`): token, znacznik czasu, wzór, stoisko, numer porządkowy i czas oznaczenia jako wykorzystany. Bez powiązania z sesją (`wins.session_id` jest NULL),
 - sesje symulatora (losowy identyfikator w ciasteczku `hp_game`, liczba prób na dzień i stanowisko w `booth_plays`, flaga „wygrał”, czas zgody, dodatkowe próby,
   flaga „oddał głos” `cup_voted`, tymczasowy claim kodu QR na 10 minut, data odebrania bonusu „post”, token i wzór własnego trafienia do odtworzenia certyfikatu),
-- głosy w Pucharze (`donors_stats`): wydział, kategoria (nowy / zarejestrowany / faktyczny), rok studiów, stoisko i znacznik czasu. **Bez powiązania z sesją**, bez urządzenia, bez danych osobowych,
+- głosy w Pucharze (`donors_stats`): wydział, kategoria (nowy / zarejestrowany / faktyczny), status (rok studiów 1–5, szkoła doktorska, pracownik), stoisko i znacznik czasu. **Bez powiązania z sesją**, bez urządzenia, bez danych osobowych,
 - jednorazowe kody QR Pucharu zapisujemy w `cup_qr_codes` (losowy identyfikator, stoisko, kategoria, konto wolontariusza, czasy wygenerowania, zeskanowania i oddania głosu), bez powiązania z sesją studenta,
 - historyczne tabele `registration_codes` i `promo_codes` (z wersji sprzed v3) zostają w starszych bazach, ale nic w nie nie piszemy; czyści je tylko „wipe” w narzędziach testowych,
 - dokumenty prawne (treść, wersje), partnerów (nazwa i plik logo w `DATA_DIR/partners`).
@@ -26,7 +26,7 @@ Reguły wynikają z dwóch regulaminów (do wglądu na `/dokumenty`). Adres doce
 
 Treści regulaminów i polityki prywatności są w bazie (`legal_documents`) i edytuje się je w panelu `/login`, sekcja „Regulaminy i dokumenty”, bez deployu.
 Markdown jest renderowany na serwerze bez surowego HTML. Pliki w `app/legal/*.md` służą do seedu brakujących dokumentów bazowych oraz do jednorazowego podniesienia
-dokumentów w istniejącej bazie do treści v3 (`settings.legal_seed_version`; stara treść trafia do historii wersji jako „system”, wersja +1, więc symulator poprosi o ponowną zgodę;
+dokumentów w istniejącej bazie do treści v5 (`settings.legal_seed_version`; stara treść trafia do historii wersji jako „system”, wersja +1, więc symulator poprosi o ponowną zgodę;
 późniejsze edycje z panelu nie są nadpisywane).
 Zmiana tytułu lub treści zwiększa wersję i ustawia datę ostatniej zmiany (tylko serwer), stan sprzed zmiany trafia do historii wersji.
 Publicznie: `/dokumenty`, `/dokumenty/{slug}`. Miejsce `{{CONTACT}}` w treści zastępuje `LEGAL_CONTACT` (puste = „[do uzupełnienia]”). `LEGAL_OWNER` już nie istnieje.
@@ -42,6 +42,7 @@ Ranga jest czytana z bazy przy każdym żądaniu, więc degradacja i reset hasł
 | Wybór stoiska po zalogowaniu | tak | tak |
 | Kod QR do Pucharu (4 kategorie: nowy, zarejestrowany, faktyczny, post) | tylko wybrane stoisko | każde stoisko |
 | Ekran stoiska `/stoisko/{id}` (wymaga zalogowania; bez sesji przekierowanie na `/login?next=...`) | tak | tak |
+| Stały link publicznego ekranu `/ekran/{token}` (bez logowania; tworzy i rotuje admin w panelu) | nie | tak |
 | Liczniki głosów | tylko wybrane stoisko | wszystkie stoiska |
 | Stoiska, konta i rangi, słownik wydziałów, liczby studentów, partnerzy (kolejność strzałkami), ustawienia i terminy | nie | tak |
 | Trafienia 10/10, weryfikacja Tokenu Losu, dokumenty prawne, podsumowania, eksport CSV, grafiki | nie | tak |
@@ -60,9 +61,9 @@ Sesja jest tylko w ciasteczku (nagłówek `X-Game-Token` i kopia w `localStorage
 ## Stanowisko „Zajęcia”
 
 Stoisko `zajecia` (`booths.is_lecture=1`, tworzone przy starcie) służy do promocji na wykładach, także przed akcją. Nie ma wolontariusza (kod QR Pucharu: 409,
-usunięcie: 409), nie ma go w publicznych wykazach, a gra działa na nim bez ograniczenia datami. Prowadzący otwiera na ekranie sali statyczny link
-`/zajecia/{token}` (rotujący QR, bez logowania). Link bierzesz w panelu admina, sekcja „Stoiska”: pole „Zajęcia: link dla prowadzących”, przycisk „Kopiuj link”;
-„Wygeneruj nowy link” unieważnia poprzedni (token w `settings.lecture_screen_token`).
+usunięcie: 409), nie ma go w publicznych wykazach, a gra działa na nim bez ograniczenia datami. Prowadzący otwiera na ekranie sali stały link
+`/ekran/{token}` (QR co minutę, token QR ok. 2-3 min, przepustka 30 min; bez logowania). Link tworzy admin w panelu (sekcja „Stoiska”,
+`POST /api/admin/booths/{id}/screen`); ponowne wygenerowanie unieważnia poprzedni. Ten sam mechanizm działa na każdym stoisku; stare `/zajecia/{token}` przekierowuje na `/ekran/{token}`.
 
 ## Konkurs i Token Losu
 
@@ -73,14 +74,14 @@ Po `CONTEST_DEADLINE` ekran 10/10 pokazuje, że zgłoszenia są zamknięte.
 ## Puchar Dawcy PWr
 
 Wolontariusz po weryfikacji wybiera w panelu `/login` kategorię (nowy dawca, zarejestrowany dawca, faktyczny dawca lub „post / story”), klika „Pokaż kod QR” i pokazuje go osobie na jej telefonie.
-Kod (`/potwierdz?t=<id>`) jest **jednorazowy**, nie wygasa z czasem i nie odświeża się: działa do pierwszego zeskanowania. Nowy kod unieważnia poprzednie niezeskanowane kody tego wolontariusza na stoisku. Panel odpytuje `GET /api/volunteer/cup-qr/{id}` i po zeskanowaniu przyciemnia kod (stany: active, scanned, voted, granted, revoked); kolejny kod wymaga ponownego wyboru kategorii. Drugi skan: 410 „Kod został już wykorzystany”.
-Skan = `POST /api/cup/claim` (kod zużywany dopiero po sprawdzeniu sesji; sesja dostaje claim na 10 minut), potem `POST /api/cup/vote` z wydziałem i rokiem studiów. Jeden głos na sesję (drugi: 409). Kategoria „post” daje od razu +5 prób (raz dziennie), bez głosu.
+Kod (`/potwierdz?t=<id>`) jest **jednorazowy**, nie wygasa z czasem i nie odświeża się: działa do pierwszego zeskanowania. Panel odpytuje `GET /api/volunteer/cup-qr/{id}` i po zeskanowaniu przyciemnia kod (stany: active, scanned, voted, granted, revoked); kolejny kod wymaga ponownego wyboru kategorii. Drugi skan: 410 „Kod został już wykorzystany”. Wystawianie kodów jest zablokowane (409), gdy dziś stanowisko jest poza swoimi datami.
+Skan = `POST /api/cup/claim` (kod zużywany dopiero po sprawdzeniu sesji; sesja dostaje claim na 10 minut), potem `POST /api/cup/vote` z wydziałem i statusem (rok 1–5, szkoła doktorska, pracownik). Jeden głos na sesję (drugi: 409). Kategoria „post” daje od razu +5 prób (raz dziennie), bez głosu.
 Publiczny ekran `/stoisko/{id}` (kod QR do gry) wymaga zalogowania personelu.
-Ranking `/puchar`: Wskaźnik Zaangażowania `WZ = LD / LS * 100` (LD = suma trzech równorzędnych kategorii, LS liczba studentów wpisana przez admina, `GET/PUT /api/admin/students`), remis decyduje LD.
+Ranking `/puchar`: Wskaźnik Zaangażowania `WZ = LD / LS * 100` z dokładnością do 3 miejsc po przecinku (LD = suma trzech równorzędnych kategorii, LS liczba studentów wpisana przez admina, `GET/PUT /api/admin/students`). Klasyfikowane są tylko wydziały z LD >= 10 (poniżej progu bez miejsca). Remis WZ rozstrzyga kolejno: wyższe LD, więcej punktów kategorii „nowy”, wcześniejszy czas ostatniego punktu.
 Wydziały bez LS oraz „Inne” są poza klasyfikacją. Po terminie Pucharu skan kodu głosu, głos i kod QR w panelu zwracają 410 (kategoria „post” działa dalej).
 Oficjalne wyniki: 16 grudnia 2026 (Wigilia Aktywnych Studentów, C-18).
 
-Terminy (czas Europe/Warsaw): `CUP_DEADLINE` (domyślnie 2026-12-11T16:30) i `CONTEST_DEADLINE` (domyślnie 2026-12-11T16:00) można ustawić w `.env`,
+Terminy (czas Europe/Warsaw): `CUP_DEADLINE` (domyślnie 2026-12-11T16:30) i `CONTEST_DEADLINE` (domyślnie 2026-12-13T23:59) można ustawić w `.env`,
 a **w panelu admina** (sekcja „Ustawienia”) wpisać nową datę i godzinę dla obu terminów: „Koniec zliczania punktów Pucharu Dawcy PWr” i „Koniec przyjmowania zgłoszeń do konkursu HLA”.
 Wartość z panelu (`settings.cup_deadline`, `settings.contest_deadline`) ma pierwszeństwo przed `.env`; puste pole przywraca domyślną. Zmiana działa od razu (bez restartu), także w komunikatach i w `/api/config`.
 Daty wpisane na stałe w treści regulaminów nie zmieniają się automatycznie.
@@ -172,4 +173,6 @@ python -m venv .venv; .venv\Scripts\pip install -r requirements-dev.txt
 ```
 
 Uruchomienie bez Dockera: `ADMIN_SECRET=dev COOKIE_SECURE=0 DATA_DIR=./data .venv/bin/uvicorn app.main:app --reload --port 8000`
+
+Narzędzia testowe admina (`/api/admin/test/*`) działają tylko z `TEST_TOOLS=1` (w testach i w `docker-compose.local.yml` ustawione; na produkcji wyłączone).
 (Windows: ustaw te zmienne w `$env:`).

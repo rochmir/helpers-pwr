@@ -17,13 +17,14 @@ CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"   # bez 0/O/1/I/L; tokeny losu
 CUP_CATEGORIES = ("nowy", "zarejestrowany", "faktyczny")
 QR_CATEGORIES = CUP_CATEGORIES + ("post",)
 CATEGORY_BONUS = {"nowy": 10, "zarejestrowany": 10, "faktyczny": 20, "post": 5}   # dodatkowe próby za kategorię
-CUP_CLAIM_MINUTES = 10      # tyle czasu po zeskanowaniu kodu na oddanie głosu (wybór wydziału i roku)
-STUDY_YEARS = [("I1", "I st., 1. rok"), ("I2", "I st., 2. rok"), ("I3", "I st., 3. rok"), ("I4", "I st., 4. rok"),
-               ("II1", "II st., 1. rok"), ("II2", "II st., 2. rok"), ("dr", "Szkoła doktorska"),
-               ("inny", "Inny / nie dotyczy")]
+CUP_MIN_POINTS = 10         # próg LD, od którego wydział jest klasyfikowany w Pucharze (regulamin §4)
+CUP_CLAIM_MINUTES = 10     # tyle czasu po zeskanowaniu kodu na oddanie głosu (wybór wydziału i roku)
+# Status uczestnika (kod zapisywany w kolumnie study_year; stare kody I1..inny zostają w bazie bez zmian).
+STUDY_YEARS = [("1", "1. rok"), ("2", "2. rok"), ("3", "3. rok"), ("4", "4. rok"), ("5", "5. rok"),
+               ("dr", "Szkoła doktorska"), ("pracownik", "Pracownik")]
 # Terminy z regulaminów (Europe/Warsaw); nadpisywane zmiennymi CUP_DEADLINE i CONTEST_DEADLINE (RRRR-MM-DDTGG:MM).
 DEFAULT_CUP_DEADLINE = "2026-12-11T16:30"       # koniec zliczania punktów w Pucharze Dawcy PWr (§6.1)
-DEFAULT_CONTEST_DEADLINE = "2026-12-11T16:00"   # koniec zgłoszeń konkursowych (§5.4)
+DEFAULT_CONTEST_DEADLINE = "2026-12-13T23:59"   # koniec komentarzy konkursowych do 13 grudnia 23:59
 PASS_MINUTES = 30          # ważność przepustki na stoisko po zeskanowaniu kodu QR
 
 

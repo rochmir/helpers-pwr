@@ -10,6 +10,7 @@ os.environ["COOKIE_SECURE"] = "0"
 os.environ["ADMIN_SECRET"] = "test-admin-secret"
 os.environ["SECRET_KEY"] = "test-secret-key"
 os.environ.pop("BOOTSTRAP_BOOTHS", None)
+os.environ["TEST_TOOLS"] = "1"  # narzędzia testowe /api/admin/test/* są w testach włączone
 
 import pytest
 from fastapi.testclient import TestClient

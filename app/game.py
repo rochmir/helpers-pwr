@@ -12,10 +12,6 @@ MATCH_WEIGHTS = {5: 25, 6: 35, 7: 25, 8: 10, 9: 5}
 WIN_ONE_IN = 150
 
 
-def count_matches(a: str, b: str) -> int:
-    return sum(1 for x, y in zip(a, b) if x == y)
-
-
 def random_genotype(rng: random.Random) -> str:
     return "".join(rng.choice(ALPHABET) for _ in range(LENGTH))
 

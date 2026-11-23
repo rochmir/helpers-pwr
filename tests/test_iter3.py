@@ -68,7 +68,7 @@ def test_cup_vote_without_session_creates_one(admin, booth, other_clients):
     p = other_clients()
     r = claim(p, booth)
     assert r.status_code == 200 and "hp_game" in r.headers.get("set-cookie", "")
-    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 200
+    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 200
     me = p.get("/api/game/me")
     assert me.status_code == 200 and me.json()["bonus_attempts"] == 10 and me.json()["attempts_left"] == 15
     conn = db.connect()
@@ -119,14 +119,14 @@ def test_rejected_votes_give_no_bonus(admin, booth, other_clients):
     p = other_clients()
     new_session(p)
     assert claim(p, booth).status_code == 200
-    assert p.post("/api/cup/vote", json={"faculty": "XXX", "study_year": "I1"}).status_code == 422
+    assert p.post("/api/cup/vote", json={"faculty": "XXX", "study_year": "1"}).status_code == 422
     assert p.get("/api/game/me").json()["bonus_attempts"] == 0
-    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 200   # +10
+    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 200   # +10
     assert claim(p, booth).status_code == 409                                  # drugi głos z tej sesji
-    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 409
+    assert p.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 409
     assert p.get("/api/game/me").json()["bonus_attempts"] == 10
     q = other_clients()                                                        # głos bez claimu: 403
-    assert q.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"}).status_code == 403
+    assert q.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"}).status_code == 403
     assert q.get("/api/game/me").status_code == 401
 
 
@@ -158,9 +158,11 @@ def test_qr_token_validity_window(booth, monkeypatch):
     assert qrtoken.valid(booth, tok)
     set_clock(monkeypatch, t0 + timedelta(seconds=40))  # kolejna minuta: token inny, stary jeszcze ważny
     assert qrtoken.current(booth) != tok and qrtoken.valid(booth, tok)
-    set_clock(monkeypatch, t0 + timedelta(minutes=2))   # 2 minuty później: nadal ważny
+    set_clock(monkeypatch, t0 + timedelta(minutes=1))   # minutę później: nadal ważny
     assert qrtoken.valid(booth, tok)
-    set_clock(monkeypatch, t0 + timedelta(minutes=3))   # starszy niż 2 minuty wstecz
+    set_clock(monkeypatch, t0 + timedelta(minutes=2))   # 2 minuty później: nadal ważny (bieżąca + 2 poprzednie)
+    assert qrtoken.valid(booth, tok)
+    set_clock(monkeypatch, t0 + timedelta(minutes=3))   # 3 minuty później: starszy niż ważność
     assert not qrtoken.valid(booth, tok)
     set_clock(monkeypatch, t0)
     assert not qrtoken.valid("inne", tok) and not qrtoken.valid(booth, "") and not qrtoken.valid(booth, None)

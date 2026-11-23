@@ -101,7 +101,7 @@ def list_booths(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection 
         "FROM booths b ORDER BY b.id")
     return [{k: r[k] for k in ("id", "name", "current_genotype", "genotype_updated_at", "matches_count",
                                "rolls_count", "registered", "building", "date_from", "date_to")}
-            | {"is_lecture": bool(r["is_lecture"])} for r in rows]
+            | {"is_lecture": bool(r["is_lecture"]), "has_screen": bool(r["screen_token"])} for r in rows]
 
 
 @router.post("/booths", status_code=201)
@@ -111,6 +111,8 @@ def create_booth(body: BoothIn, _: dict = Depends(auth.require_admin), conn: sql
         raise HTTPException(422, "Id stoiska: 1-20 znaków, małe litery i cyfry.")
     if not name:
         raise HTTPException(422, "Nazwa stoiska nie może być pusta.")
+    if bid in db.RESERVED_BOOTH_IDS:
+        raise HTTPException(422, "Ten identyfikator jest zarezerwowany.")
     d_from, d_to = _iso_date(body.date_from), _iso_date(body.date_to)
     _check_range(d_from, d_to)
     with db.tx(conn):
@@ -171,20 +173,28 @@ def reset_genotype(booth_id: str, _: dict = Depends(auth.require_admin), conn: s
     return {"genotype": g}
 
 
-def _lecture_view(conn: sqlite3.Connection, token: str) -> dict:
-    return {"token": token, "url": f"{config.public_url()}/zajecia/{token}"}
+def _screen_view(token: str | None) -> dict:
+    return {"url": f"{config.public_url()}/ekran/{token}" if token else None}
 
 
-@router.get("/lecture-screen")
-def get_lecture_screen(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    """Statyczny link do ekranu stanowiska „Zajęcia” dla prowadzących (tworzony przy pierwszym użyciu)."""
-    return _lecture_view(conn, db.lecture_screen_token(conn))
+@router.get("/booths/{booth_id}/screen")
+def get_booth_screen(booth_id: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Stały link do ekranu stoiska (albo null, gdy ekran wyłączony)."""
+    row = conn.execute("SELECT screen_token FROM booths WHERE id=?", (booth_id,)).fetchone()
+    if row is None:
+        raise HTTPException(404, "Nie ma takiego stoiska.")
+    return _screen_view(row["screen_token"])
 
 
-@router.post("/lecture-screen/rotate")
-def rotate_lecture_screen(_: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    """Nowy link; poprzedni przestaje działać."""
-    return _lecture_view(conn, db.rotate_lecture_screen_token(conn))
+@router.post("/booths/{booth_id}/screen")
+def rotate_booth_screen(booth_id: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Tworzy albo rotuje link do ekranu stoiska; poprzedni przestaje działać."""
+    with db.tx(conn):
+        if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
+            raise HTTPException(404, "Nie ma takiego stoiska.")
+        token = secrets.token_urlsafe(16)
+        conn.execute("UPDATE booths SET screen_token=? WHERE id=?", (token, booth_id))
+    return _screen_view(token)
 
 
 @router.get("/booth-hours")
@@ -434,6 +444,16 @@ def put_students(body: StudentsIn, _: dict = Depends(auth.require_admin), conn: 
     return out
 
 
+# --- głosy w Pucharze -----------------------------------------------------------
+@router.delete("/votes/{vote_id}")
+def delete_vote(vote_id: int, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
+    """Usuwa pomyłkowy głos z Pucharu (wiersz donors_stats)."""
+    with db.tx(conn):
+        if conn.execute("DELETE FROM donors_stats WHERE id=?", (vote_id,)).rowcount == 0:
+            raise HTTPException(404, "Nie ma takiego głosu.")
+    return {"ok": True}
+
+
 # --- podsumowania ---------------------------------------------------------------
 @router.get("/summary")
 def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
@@ -460,7 +480,7 @@ def summary(date: str | None = None, _: dict = Depends(auth.require_admin),
     podium = [f for f in stats.faculty_counts(conn, d) if f["count"] > 0][:3]
     return {"scope": "all" if d is None else "day", "date": date, "registered": registered,
             "registered_total": total, "podium": podium,
-            "cup": [r for r in stats.cup(conn, d)["ranking"] if r["registered"] > 0][:3],
+            "cup": [r for r in stats.cup(conn, d)["ranking"] if r["qualified"]][:3],  # próg LD jak w /api/stats/cup
             "game": {"players": players, "rolls": rolls, "matches": matches}}
 
 
@@ -484,9 +504,18 @@ def _csv(rows: list[list], header: list[str], filename: str) -> Response:
 
 @router.get("/export-csv")
 def export_csv(set: str = "punkty", _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    """``punkty``: głosy w Pucharze (id, wydział, kategoria, rok studiów, stoisko, data i godzina UTC). ``stoiska``
-    (alias ``tokeny``): liczba głosów wg stoiska, kategorii i doby (zestawienie do audytu §6.3 regulaminu Pucharu)."""
-    if set in ("stoiska", "tokeny"):
+    """``punkty``: głosy w Pucharze (id, wydział, kategoria, status, stoisko, data i godzina UTC). ``stoiska``:
+    liczba głosów wg stoiska, kategorii i doby (zestawienie do audytu §6.3 regulaminu Pucharu).
+    ``zestawienie``: liczba głosów wg wydziału, kategorii i statusu (długi format; nieznany kod statusu = sam kod)."""
+    if set == "zestawienie":
+        names = {f["code"]: f["name"] for f in db.get_dictionary(conn)["faculties"]}
+        labels = dict(config.STUDY_YEARS)
+        rows = conn.execute("SELECT faculty, category, study_year, COUNT(*) n FROM donors_stats "
+                            "GROUP BY faculty, category, study_year ORDER BY faculty, category, study_year").fetchall()
+        return _csv([[r["faculty"], names.get(r["faculty"], r["faculty"]), r["category"], r["study_year"],
+                      labels.get(r["study_year"], r["study_year"]), r["n"]] for r in rows],
+                    ["faculty", "faculty_name", "category", "study_year", "status_label", "count"], "puchar-zestawienie.csv")
+    if set == "stoiska":
         counts: dict[tuple[str, str, str], int] = {}
         for r in conn.execute("SELECT booth_id, category, created_at FROM donors_stats"):
             key = (r["booth_id"] or "", r["category"], config.warsaw_date(r["created_at"]))

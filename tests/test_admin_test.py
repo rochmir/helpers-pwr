@@ -173,3 +173,18 @@ def test_wipe(admin, booth, client, monkeypatch):
     assert not testing.is_armed("x")
     # konto wolontariusza nadal działa
     assert admin.post("/api/auth/login", json={"login": "tester", "password": "tajne-haslo1"}).status_code == 200
+
+
+def test_test_tools_off_without_env():
+    """Bez TEST_TOOLS=1 router narzędzi testowych nie jest podpięty: endpointy zwracają 404."""
+    import os
+    import subprocess
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {k: v for k, v in os.environ.items() if k != "TEST_TOOLS"}
+    code = ("from fastapi.testclient import TestClient\n"
+            "from app.main import app\n"
+            "print(TestClient(app).get('/api/admin/test/status').status_code)\n")
+    out = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip() == "404"

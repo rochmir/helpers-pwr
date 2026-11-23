@@ -65,22 +65,43 @@ def attempts_left(conn: sqlite3.Connection, sid: str) -> int:
     return game_state(conn, sid)["attempts_left"]
 
 
+def _booth_state(b: sqlite3.Row, with_qr: bool) -> dict:
+    """Wspólna odpowiedź o stanowisku; ``with_qr`` dodaje ważny link do gry (aktualny token QR)."""
+    out = {"id": b["id"], "name": b["name"], "genotype": b["current_genotype"],
+           "genotype_updated_at": b["genotype_updated_at"], "matches_count": b["matches_count"],
+           "rolls_count": b["rolls_count"], "play_path": None, "qr_seconds_left": None}
+    if with_qr:
+        out["play_path"] = f"/graj?stoisko={b['id']}&t={qrtoken.current(b['id'])}"
+        out["qr_seconds_left"] = qrtoken.seconds_to_change()
+    return out
+
+
+def booth_open(b: sqlite3.Row) -> bool:
+    """Stanowisko działa dziś w oknie dat stanowiska; Zajęcia nie mają ograniczenia."""
+    if b["is_lecture"]:
+        return True
+    today = config.today()
+    return (b["date_from"] is None or b["date_from"] <= today) and (b["date_to"] is None or today <= b["date_to"])
+
+
 @router.get("/api/booth/{booth_id}/state")
-def booth_state(booth_id: str, screen: str | None = None, staff: dict | None = Depends(auth.optional_staff),
+def booth_state(booth_id: str, staff: dict | None = Depends(auth.optional_staff),
                 conn: sqlite3.Connection = Depends(db.get_db)):
     b = conn.execute("SELECT * FROM booths WHERE id=?", (booth_id,)).fetchone()
     if b is None:
         raise HTTPException(404, "Nie ma takiego stoiska.")
-    out = {"id": b["id"], "name": b["name"], "genotype": b["current_genotype"],
-           "genotype_updated_at": b["genotype_updated_at"], "matches_count": b["matches_count"],
-           "rolls_count": b["rolls_count"], "play_path": None, "qr_seconds_left": None}
-    # Ważny link do gry (aktualny token QR) dostaje tylko personel tego stoiska; publicznie go nie ma.
-    # Ekran Zajęć (statyczny link /zajecia/{token}) dostaje QR bez logowania, ale tylko dla stanowiska is_lecture.
-    if (staff and (staff["role"] == "admin" or staff.get("booth") == b["id"])) or \
-            (b["is_lecture"] and db.lecture_token_ok(conn, screen)):
-        out["play_path"] = f"/graj?stoisko={b['id']}&t={qrtoken.current(b['id'])}"
-        out["qr_seconds_left"] = qrtoken.seconds_to_change()
-    return out
+    # Ważny link do gry dostaje tylko personel tego stoiska (albo admin); publicznie go nie ma.
+    return _booth_state(b, bool(staff and (staff["role"] == "admin" or staff.get("booth") == b["id"])))
+
+
+@router.get("/api/screen/{token}/state")
+def screen_state(token: str, conn: sqlite3.Connection = Depends(db.get_db)):
+    """Stan stanowiska dla publicznego ekranu /ekran/{token}; bez logowania, zły token = 404."""
+    b = db.booth_by_screen_token(conn, token)
+    if b is None:
+        raise HTTPException(404, "Nie znaleziono ekranu.")
+    is_open = booth_open(b)  # poza oknem dat ekran pokazuje „zamknięte” (bez linku do gry)
+    return {**_booth_state(b, is_open), "closed": not is_open}
 
 
 @router.post("/api/game/session")
@@ -146,8 +167,9 @@ def _roll(conn: sqlite3.Connection, sid: str, booth_id: str) -> dict:
         # Najpierw pula stanowiska (5 na dobę), potem dodatkowe próby (w tej samej transakcji). Wiersz dnia zawsze
         # istnieje (do best); licznik puli idzie do booth_plays.
         from_pool = 1 if pool > 0 else 0
-        conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,?) "
-                     "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+?", (sid, today, from_pool, from_pool))
+        # Każdy rzut (także z puli dodatkowej) liczy się do rolls dnia w podsumowaniu; limit puli to booth_plays.
+        conn.execute("INSERT INTO game_attempts(session_id,date,attempts) VALUES(?,?,1) "
+                     "ON CONFLICT(session_id,date) DO UPDATE SET attempts=attempts+1", (sid, today))
         if from_pool:
             conn.execute("INSERT INTO booth_plays(session_id,booth_id,date,attempts) VALUES(?,?,?,1) "
                          "ON CONFLICT(session_id,booth_id,date) DO UPDATE SET attempts=attempts+1",

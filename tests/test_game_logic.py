@@ -4,6 +4,10 @@ from collections import Counter
 from app import game
 
 
+def count_matches(a: str, b: str) -> int:
+    return sum(1 for x, y in zip(a, b) if x == y)
+
+
 def test_make_match_exact_positions():
     rng = random.Random(1)
     for _ in range(2000):
@@ -11,7 +15,7 @@ def test_make_match_exact_positions():
         k = rng.choice(list(game.MATCH_WEIGHTS))
         out = game.make_match(target, k, rng)
         assert len(out) == game.LENGTH and set(out) <= set(game.ALPHABET)
-        assert game.count_matches(target, out) == k
+        assert count_matches(target, out) == k
 
 
 def test_weight_distribution():
@@ -27,7 +31,7 @@ def test_roll_never_full_match():
     rng = random.Random(3)
     for _ in range(500):
         k, g = game.roll("0123012301", rng)
-        assert 5 <= k <= 9 and game.count_matches("0123012301", g) == k
+        assert 5 <= k <= 9 and count_matches("0123012301", g) == k
 
 
 def test_new_genotype_unique():

@@ -77,12 +77,6 @@ export function setMessage(el, text, kind = 'info') {
   el.className = el.className.replace(/\bmsg-(error|ok|info)\b/g, '').trim() + ' msg msg-' + kind;
 }
 
-export function formatTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d)) return String(iso);
-  return d.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-}
 export function formatDateTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -165,12 +159,6 @@ export function formatDateRange(from, to, nowYear = new Date().getFullYear()) {
   if (a.y === b.y && a.m === b.m) return a.d + '-' + one(b, needYear);
   if (a.y === b.y) return one(a, false) + ' - ' + one(b, needYear);
   return one(a, true) + ' - ' + one(b, true);
-}
-
-export function countMatches(a, b) {
-  let n = 0;
-  for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] === b[i]) n++;
-  return n;
 }
 
 export function qrUrl(path) {

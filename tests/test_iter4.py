@@ -236,34 +236,52 @@ def test_cup_ranking_unranked_and_inne(admin, booth, client):
     put_students(admin, {"W4N": 1000, "W13": 500, "W3": 500, "INNE": 100, "W2": None})
     b = client.get("/api/stats/cup").json()
     assert b["source"] == "GUS 2026"
-    assert [(r["rank"], r["code"], r["registered"], r["students"], r["wz"]) for r in b["ranking"]] == \
-        [(1, "W13", 2, 500, 0.4), (2, "W4N", 3, 1000, 0.3), (3, "W3", 1, 500, 0.2)]
-    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz", "nowy", "zarejestrowany", "faktyczny"}
+    # LD < 10: wszystkie niekwalifikowane, więc bez miejsca
+    assert [(r["rank"], r["code"], r["registered"], r["students"], r["wz"], r["qualified"]) for r in b["ranking"]] == \
+        [(None, "W13", 2, 500, 0.4, False), (None, "W4N", 3, 1000, 0.3, False), (None, "W3", 1, 500, 0.2, False)]
+    assert set(b["ranking"][0]) == {"rank", "code", "name", "registered", "students", "wz", "qualified", "nowy", "zarejestrowany", "faktyczny"}
     codes = [u["code"] for u in b["unranked"]]
     assert len(codes) == 12 and codes[-1] == "INNE" and "W1" in codes and "W4N" not in codes
     assert {"code": "W1", "name": b["unranked"][codes.index("W1")]["name"], "registered": 1,
             "nowy": 1, "zarejestrowany": 0, "faktyczny": 0} in b["unranked"]
 
 
-def test_cup_rounding_and_ties(admin, booth, client):
-    for fac in ["W4N"] * 2 + ["W13"] + ["W3"]:
-        vote_new(booth, "nowy", fac)
-    put_students(admin, {"W4N": 600, "W13": 300, "W3": 300})  # 0.33, 0.33, 0.33
+def test_cup_rounding_qualification_and_threshold(admin, booth, client):
+    """WZ z 3 miejscami; próg LD >= 10: poniżej progu wydział jest za kwalifikowanymi, bez miejsca."""
+    add_points("W4N", 20)
+    add_points("W13", 10)
+    put_students(admin, {"W4N": 6000, "W13": 3000})  # 20/6000 = 0.333; 10/3000 = 0.333
     r = client.get("/api/stats/cup").json()["ranking"]
-    assert r[0]["wz"] == 0.33
-    # remis: więcej punktów (LD), potem kolejność słownika (W3 przed W13)
-    assert [x["code"] for x in r] == ["W4N", "W3", "W13"]
+    assert r[0]["wz"] == 0.333 and r[0]["qualified"] is True and r[0]["rank"] == 1
+    add_points("W3", 9)
+    put_students(admin, {"W4N": 6000, "W3": 90})  # W3: 9/90 = 10.0, ale LD 9 < 10
+    r = client.get("/api/stats/cup").json()["ranking"]
+    assert [(x["code"], x["qualified"], x["rank"]) for x in r] == [("W4N", True, 1), ("W3", False, None)]
 
 
-def test_cup_tie_at_two_decimals_decided_by_ld_not_raw_ratio(admin, booth, client):
-    """§4.4: remis liczony „do drugiego miejsca po przecinku”: 33/10000 i 1/300 to oba 0,33, więc wygrywa wyższe LD."""
+def test_cup_tie_order_wz_ld_nowy_then_time(admin, booth, client):
+    """Remis WZ: wyższe LD, potem więcej „nowy”, potem wcześniejszy czas ostatniego punktu."""
+    conn = db.connect()
+    conn.executemany("INSERT INTO donors_stats(faculty,created_at,category) VALUES(?,?,?)",
+                     [("W4N", "2026-12-09T10:00:00Z", "nowy")] * 20 +
+                     [("W13", "2026-12-08T09:00:00Z", "faktyczny")] * 20 +
+                     [("W3", "2026-12-08T10:00:00Z", "nowy")] * 20)
+    conn.close()
+    put_students(admin, {"W4N": 2000, "W13": 2000, "W3": 2000})  # WZ 1.0 każdy, LD 20 każdy
+    r = [x["code"] for x in client.get("/api/stats/cup").json()["ranking"]]
+    # W4N i W3 mają po 20 „nowy” (W4N później, więc W3 wcześniej); W13 bez „nowy” na końcu
+    assert r == ["W3", "W4N", "W13"]
+
+
+def test_cup_tie_at_three_decimals_decided_by_ld(admin, booth, client):
+    """Remis WZ do 3 miejsc: 33/10000 = 0,330 i 10/3030 = 0,330 (po zaokrągleniu); wygrywa wyższe LD."""
     add_points("W13", 33)
-    add_points("W3", 1)
-    put_students(admin, {"W13": 10000, "W3": 300})
+    add_points("W3", 10)
+    put_students(admin, {"W13": 10000, "W3": 3030})
     r = client.get("/api/stats/cup").json()["ranking"]
     assert [(x["code"], x["wz"]) for x in r] == [("W13", 0.33), ("W3", 0.33)]
-    # i zero punktów też jest sklasyfikowane (WZ 0), ale pod punktowanymi
-    put_students(admin, {"W13": 10000, "W3": 300, "W1": 50})
+    # zero punktów: niekwalifikowany, na końcu
+    put_students(admin, {"W13": 10000, "W3": 3030, "W1": 50})
     assert [x["code"] for x in client.get("/api/stats/cup").json()["ranking"]] == ["W13", "W3", "W1"]
 
 
@@ -275,14 +293,23 @@ def test_students_validation(admin, booth):
 
 
 def test_summary_cup_top3(admin, booth, client):
-    for fac in ["W4N"] * 3 + ["W13", "W3"]:
-        vote_new(booth, "nowy", fac)
+    """Top3 w podsumowaniu = tylko wydziały kwalifikowane (LD >= 10), nie każdy z punktami."""
+    add_points("W4N", 10)
+    add_points("W13", 10)
+    add_points("W3", 3)  # poniżej progu
     put_students(admin, {})
     assert admin.get("/api/admin/summary?date=all").json()["cup"] == []
-    put_students(admin, {"W4N": 300, "W13": 100, "W3": 100, "W1": 100})
+    put_students(admin, {"W4N": 100, "W13": 1000, "W3": 10, "W1": 100})  # W4N WZ 10.0, W13 1.0, W3 30.0 (niekwalifikowany)
     top = admin.get("/api/admin/summary?date=all").json()["cup"]
-    assert [(r["code"], r["wz"]) for r in top] == [("W4N", 1.0), ("W3", 1.0), ("W13", 1.0)]
+    assert [(r["code"], r["wz"]) for r in top] == [("W4N", 10.0), ("W13", 1.0)]
     assert admin.get("/api/admin/summary?date=2001-01-01").json()["cup"] == []
+
+
+def test_cup_wz_half_up_rounding(admin, booth, client):
+    """10/3200*100 = 0.3125 -> 0.313 (zaokrąglenie połówkami w górę, bez błędu float)."""
+    add_points("W4N", 10)
+    put_students(admin, {"W4N": 3200})
+    assert client.get("/api/stats/cup").json()["ranking"][0]["wz"] == 0.313
 
 
 def test_cup_day_filter_uses_warsaw_day(admin, booth, client):

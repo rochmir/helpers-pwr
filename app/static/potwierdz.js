@@ -5,11 +5,10 @@ const msg = $('#state-msg');
 const form = $('#vote-form');
 const LABELS = { nowy: 'Nowy dawca', zarejestrowany: 'Zarejestrowany dawca', faktyczny: 'Faktyczny dawca' };
 const ICONS = { nowy: 'ti-user-plus', zarejestrowany: 'ti-id-badge', faktyczny: 'ti-droplet' };
-// Kody lat studiów z /api/dictionary/faculties -> układ przycisków (stopień: numery lat; reszta: pojedyncze przyciski).
+// Jedna grupa przycisków statusu (kody z /api/dictionary/faculties; kolejność jak w config.STUDY_YEARS).
 const YEAR_LAYOUT = [
-  { title: 'I st.', items: [['I1', '1'], ['I2', '2'], ['I3', '3'], ['I4', '4']] },
-  { title: 'II st.', items: [['II1', '1'], ['II2', '2']] },
-  { title: '', items: [['dr', 'Doktorat'], ['inny', 'Inne']] },
+  { title: '', items: [['1', '1. rok'], ['2', '2. rok'], ['3', '3. rok'], ['4', '4. rok'], ['5', '5. rok'],
+    ['dr', 'Szkoła doktorska'], ['pracownik', 'Pracownik']] },
 ];
 const submitBtn = $('#submit-btn');
 const picks = { faculty: '', year: '' };
@@ -126,7 +125,7 @@ async function init() {
 form.addEventListener('submit', (ev) => {
   ev.preventDefault();
   if (busy) return;
-  if (!picks.faculty || !picks.year) { setMessage(msg, 'Wybierz wydział i rok studiów.', 'error'); return; }
+  if (!picks.faculty || !picks.year) { setMessage(msg, 'Wybierz wydział i status.', 'error'); return; }
   busy = true;
   const name = $('#donor-name').value; // tylko lokalnie
   const btn = submitBtn;

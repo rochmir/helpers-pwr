@@ -44,9 +44,7 @@ export function ensureFonts() {
 
 const LOGO_FILES = {
   dkms: { url: '/static/brand/dkms-logo.svg', ratio: 132 / 40 },
-  pwr: { url: '/static/brand/pwr-logo.svg', ratio: 340 / 73 },
-  pwrWhite: { url: '/static/brand/pwr-logo-white.svg', ratio: 340 / 73 },
-  hg: { url: '/static/brand/helpers-generation-logo.svg', ratio: 777.54 / 264.69 },
+  pwr: { url: '/static/brand/logoPWr_PL_poziom_wDwa_kolor_v1.png', ratio: 1181 / 512 },
   hgWhite: { url: '/static/brand/helpers-generation-logo-white.svg', ratio: 777.54 / 264.69 }, // na czerwonym pasie
   ss: { url: '/static/brand/samorzad-studencki.svg', ratio: 221.3 / 60.9 },
 };
@@ -76,10 +74,10 @@ function loadLogo(key) {
 }
 
 async function loadLogos() {
-  const [dkms, pwr, pwrWhite, hg, hgWhite, ss] = await Promise.all(
-    ['dkms', 'pwr', 'pwrWhite', 'hg', 'hgWhite', 'ss'].map(loadLogo),
+  const [dkms, pwr, hgWhite, ss] = await Promise.all(
+    ['dkms', 'pwr', 'hgWhite', 'ss'].map(loadLogo),
   );
-  return { dkms, pwr, pwrWhite, hg, hgWhite, ss };
+  return { dkms, pwr, hgWhite, ss };
 }
 
 function drawLogo(ctx, logo, x, y, height, align = 'left') {
@@ -119,13 +117,6 @@ export function wrapLines(ctx, text, maxWidth) {
     lines.push(line);
   }
   return lines;
-}
-
-/** Rysuje zawiniety tekst (wg ctx.textAlign); zwraca y pod ostatnia linia. dry=true tylko liczy. */
-export function drawWrapped(ctx, text, x, y, maxWidth, lineHeight, dry = false) {
-  const lines = wrapLines(ctx, text, maxWidth);
-  if (!dry) lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
-  return y + lines.length * lineHeight;
 }
 
 /** Zmniejsza font, az tekst zmiesci sie w jednej linii (min 28px). Zwraca uzyty rozmiar. */

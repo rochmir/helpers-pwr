@@ -157,7 +157,11 @@ function showEnd(best) {
   if (!winShown) openEndDialog();
 }
 
-function enterPlay(me) {
+// Monit o skanowanie, gdy przepustka wygasła albo jest na inne stanowisko.
+const PASS_EXPIRED = 'Przepustka wygasła. Zeskanuj kod QR na stoisku.';
+
+/** Odmowa wejścia (problem) albo brak przepustki na to stanowisko: ekran skanowania, nawet gdy próby się skończyły. */
+function enterPlay(me, problem) {
   show('scan-section', false);
   if (me.pass_is_lecture) showLecture();
   bestOverall = Math.max(bestOverall, me.best_today || 0);
@@ -167,10 +171,12 @@ function enterPlay(me) {
     show('win-section', true);
     renderWin();
   }
-  if (me.attempts_left > 0 && me.pass_booth !== boothId) {
-    showScan();
+  // Przepustka na to stanowisko ważna: odmowę pokazujemy jako komunikat, bez ekranu skanowania.
+  if (me.pass_booth !== boothId) {
+    showScan(problem || PASS_EXPIRED);
     return;
   }
+  if (problem) setMessage(msg, problem, 'error');
   show('play-section', true);
   renderTarget(boothGenotype);
   buildReels(playerEl);
@@ -197,8 +203,7 @@ async function useQrToken() {
 async function proceed(me0) {
   const problem = await useQrToken();
   const me = qrToken ? await api('GET', '/api/game/me') : me0;
-  enterPlay(me);
-  if (problem && me.attempts_left > 0 && me.pass_booth !== boothId) showScan(problem);
+  enterPlay(me, problem);
 }
 
 /** Wspolne wypelnienie listy stanowisk i godzin (lista na /graj i okno konca). */
@@ -502,7 +507,7 @@ async function roll() {
       left = 0;
       showEnd((e.data && e.data.best_today) || 0);
     } else if (e.status === 403) {
-      showScan();
+      showScan(PASS_EXPIRED);
     } else if (e.status === 401) {
       location.reload();
       return;

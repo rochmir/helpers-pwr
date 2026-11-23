@@ -50,7 +50,7 @@ def claim(c, booth, category="nowy", t=None):
     return c.post("/api/cup/claim", json={"t": t or cup_token(booth, category)})
 
 
-def vote(c, booth, category="nowy", faculty="W4N", study_year="I1"):
+def vote(c, booth, category="nowy", faculty="W4N", study_year="1"):
     """Skan kodu QR + oddanie głosu; zwraca odpowiedź z /api/cup/vote (asercja na claim)."""
     r = claim(c, booth, category)
     assert r.status_code == 200, r.text
@@ -64,7 +64,7 @@ def voter():
     return TestClient(app, base_url="http://testserver")
 
 
-def vote_new(booth, category="nowy", faculty="W4N", study_year="I1"):
+def vote_new(booth, category="nowy", faculty="W4N", study_year="1"):
     return vote(voter(), booth, category, faculty, study_year)
 
 
@@ -174,6 +174,57 @@ def test_volunteer_throttle(booth, other_clients):
     assert v.post("/api/auth/login", json={**bad, "password": "tajne-haslo1"}).status_code == 429
 
 
+def test_summary_counts_bonus_rolls(admin, booth, client, monkeypatch):
+    """Rzut z puli dodatkowej też zwiększa rolls w podsumowaniu dnia (limit puli liczy booth_plays osobno)."""
+    from app import game
+    monkeypatch.setattr(game, "is_win", lambda rng=None: False)
+    new_session(client, booth)
+    for _ in range(config.DAILY_ATTEMPTS):
+        assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200
+    assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 429
+    conn = db.connect()
+    conn.execute("UPDATE game_sessions SET bonus_attempts=2")
+    conn.close()
+    assert client.post("/api/game/roll", json={"booth_id": booth}).status_code == 200  # z puli dodatkowej
+    day = admin.get(f"/api/admin/summary?date={config.today()}").json()["game"]
+    assert day["rolls"] == config.DAILY_ATTEMPTS + 1
+
+
+def test_admin_delete_vote(admin, booth, client, other_clients):
+    assert vote(client, booth, "nowy", "W4N", "1").status_code == 200
+    conn = db.connect()
+    vid = conn.execute("SELECT id FROM donors_stats").fetchone()[0]
+    conn.close()
+    v = volunteer(other_clients)
+    assert v.delete(f"/api/admin/votes/{vid}", headers=JSON).status_code == 403
+    assert admin.delete(f"/api/admin/votes/{vid}", headers=JSON).json() == {"ok": True}
+    assert admin.delete(f"/api/admin/votes/{vid}", headers=JSON).status_code == 404
+    assert admin.get("/api/admin/summary?date=all").json()["registered"] == 0
+
+
+def test_cup_qr_closed_outside_booth_dates(admin, booth, other_clients):
+    v = volunteer(other_clients)
+    admin.patch(f"/api/admin/booths/{booth}", json={"date_from": "2020-01-01", "date_to": "2020-01-02"})
+    r = v.post("/api/volunteer/cup-qr", json={"category": "nowy"})
+    assert r.status_code == 409 and "poza datami" in r.json()["detail"]
+    admin.patch(f"/api/admin/booths/{booth}", json={"date_from": "", "date_to": ""})
+    assert v.post("/api/volunteer/cup-qr", json={"category": "nowy"}).status_code == 200
+
+
+def test_throttle_prunes_only_old_keys(monkeypatch):
+    from types import SimpleNamespace
+    from app import auth
+    clock = [0.0]
+    monkeypatch.setattr(auth, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    t = auth.Throttle()
+    t.fail("stary")
+    clock[0] = 1000.0  # „stary” poza oknem WINDOW
+    t.fail("swiezy")
+    for i in range(1001):  # przekroczenie 1000 kluczy uruchamia przycinanie
+        t.fail(f"k{i}")
+    assert "swiezy" in t._fails and "stary" not in t._fails
+
+
 def test_volunteer_permissions(admin, booth, other_clients):
     admin.post("/api/admin/booths", json={"id": "w4", "name": "W-4"})
     v = volunteer(other_clients)
@@ -207,20 +258,20 @@ def test_admin_login(client):
 # --- głosowanie ------------------------------------------------------------------
 def test_vote_flow(admin, booth, client):
     r = client.get("/api/dictionary/faculties").json()
-    assert {"code": "I1", "label": "I st., 1. rok"} in r["study_years"]
+    assert {"code": "1", "label": "1. rok"} in r["study_years"]
     d = vote(client, booth, "nowy").json()
     assert d["ok"] is True and d["faculty_name"] == "Wydział Informatyki i Telekomunikacji" and d["booth_name"] == "Budynek C-13"
     assert d["category"] == "nowy" and d["bonus_attempts_granted"] == config.CATEGORY_BONUS["nowy"]
     assert claim(client, booth, "nowy").status_code == 409
     conn = db.connect()
     row = conn.execute("SELECT * FROM donors_stats").fetchone()
-    assert (row["faculty"], row["category"], row["study_year"], row["booth_id"]) == ("W4N", "nowy", "I1", "c13")
+    assert (row["faculty"], row["category"], row["study_year"], row["booth_id"]) == ("W4N", "nowy", "1", "c13")
     conn.close()
 
 
 def test_vote_invalid_dictionary(admin, booth, client):
     assert claim(client, booth).status_code == 200
-    assert client.post("/api/cup/vote", json={"faculty": "XX", "study_year": "I1"}).status_code == 422
+    assert client.post("/api/cup/vote", json={"faculty": "XX", "study_year": "1"}).status_code == 422
     assert client.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "zly"}).status_code == 422
     assert client.post("/api/cup/vote", json={"faculty": "W4N"}).status_code == 422
     assert client.post("/api/cup/vote", json={"faculty": "W13", "study_year": "dr"}).status_code == 200
@@ -243,6 +294,17 @@ def test_donors_stats_privacy(admin, booth, client):
 def seed_regs(admin, client, booth):
     for fac in ("W4N", "W4N", "W4N", "W13", "W3"):
         assert vote_new(booth, "nowy", fac).status_code == 200
+
+
+def test_csv_export_zestawienie(admin, booth, client):
+    """Zestawienie wydział × kategoria × status: COUNT(*) w długim formacie, nazwa wydziału i etykieta statusu."""
+    seed_regs(admin, client, booth)
+    r = admin.get("/api/admin/export-csv?set=zestawienie")
+    assert r.headers["content-disposition"] == 'attachment; filename="puchar-zestawienie.csv"'
+    lines = r.content.decode("utf-8-sig").splitlines()
+    assert lines[0] == "faculty,faculty_name,category,study_year,status_label,count"
+    assert len(lines) == 4 and lines[1].startswith("W13,") and lines[1].endswith(",nowy,1,1. rok,1")
+    assert lines[3].startswith("W4N,") and lines[3].endswith(",nowy,1,1. rok,3")
 
 
 def test_live_stats(admin, booth, client):
@@ -301,12 +363,11 @@ def test_csv_export(admin, booth, client):
     assert r.content.startswith(b"\xef\xbb\xbf")
     lines = r.content.decode("utf-8-sig").splitlines()
     assert lines[0] == "id,faculty,category,study_year,booth_id,created_at"
-    assert len(lines) == 6 and lines[1].startswith("1,W4N,nowy,I1,c13,20")
+    assert len(lines) == 6 and lines[1].startswith("1,W4N,nowy,1,c13,20")
     assert "device_hash" not in r.text
-    for name in ("stoiska", "tokeny"):
-        r = admin.get(f"/api/admin/export-csv?set={name}")
-        lines = r.content.decode("utf-8-sig").splitlines()
-        assert lines[0] == "booth_id,category,date,count" and lines[1] == f"c13,nowy,{config.today()},5"
+    r = admin.get("/api/admin/export-csv?set=stoiska")
+    lines = r.content.decode("utf-8-sig").splitlines()
+    assert lines[0] == "booth_id,category,date,count" and lines[1] == f"c13,nowy,{config.today()},5"
 
 
 def test_dictionary_put(admin, booth, client):
@@ -343,7 +404,7 @@ def test_booth_admin_crud(admin, booth):
     row = admin.get("/api/admin/booths").json()[0]
     assert row["id"] == "c13" and set(row) == {"id", "name", "current_genotype", "genotype_updated_at",
                                                "matches_count", "rolls_count", "registered",
-                                               "building", "date_from", "date_to", "is_lecture"}
+                                               "building", "date_from", "date_to", "is_lecture", "has_screen"}
     g = admin.post("/api/admin/booths/c13/reset-genotype", json={}).json()["genotype"]
     assert g != row["current_genotype"] and len(g) == 10
     vote_new("c13")
@@ -367,13 +428,14 @@ def test_headers(client):
     r = client.get("/api/config")
     assert r.headers["cache-control"] == "no-store, no-cache, must-revalidate"
     assert r.headers["pragma"] == "no-cache"
-    assert "challenges.cloudflare.com" in r.headers["content-security-policy"]
+    assert "cloudflare" not in r.headers["content-security-policy"]
+    assert "script-src 'self';" in r.headers["content-security-policy"]
     assert r.headers["x-content-type-options"] == "nosniff" and r.headers["referrer-policy"] == "same-origin"
     d = r.json()
     assert "turnstile_site_key" not in d and d["public_url"] == "https://helpers-pwr.rupary.pl"
     assert d["facebook_url"] == "https://www.facebook.com/samorzadpwr"  # domyślny profil Samorządu z seedu
     assert d["legal_updated_at"].endswith("Z") and d["cup_deadline"] == "2026-12-11T15:30:00Z"
-    assert d["contest_deadline"] == "2026-12-11T15:00:00Z"
+    assert d["contest_deadline"] == "2026-12-13T22:59:00Z"
     h = client.get("/healthz")
     assert h.json() == {"ok": True} and "content-security-policy" in h.headers and h.headers["cache-control"] == "no-cache"
 

@@ -43,12 +43,11 @@ async function loadBooths() {
         h('td', {}, genotypeCell),
         h('td', { class: 'actions' },
           h('a', { class: 'btn btn-small', href: '/stoisko/' + encodeURIComponent(b.id), target: '_blank', rel: 'noopener' }, icon('ti-device-tv'), 'Otwórz ekran stoiska'),
-          act('playlink', 'ti-link', 'Link do symulatora (ważny ~2 min)'),
+          act('playlink', 'ti-link', 'Link do symulatora (ważny ok. 1-2 min)'), act('screen', 'ti-device-desktop', 'Link ekranu'),
           act('rename', 'ti-pencil', 'Zmień nazwę'), act('details', 'ti-calendar', 'Budynek i termin'),
           act('reset', 'ti-refresh', 'Resetuj genotyp'), ...(b.is_lecture ? [] : [act('delete', 'ti-trash', 'Usuń')]))));
     }
     fillBoothSelects();
-    await loadLectureLink();
   });
 }
 
@@ -56,6 +55,7 @@ $('#booths-body').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-action]');
   if (!btn) return;
   const id = btn.dataset.id;
+  if (btn.dataset.action === 'screen') { await toggleScreenRow(btn); return; }
   const b = booths.find((x) => x.id === id);
   const enc = encodeURIComponent(id);
   await guard(async () => {
@@ -92,34 +92,59 @@ $('#booths-body').addEventListener('click', async (ev) => {
   });
 });
 
-/** Pole z pełnym linkiem do ekranu Zajęć (widoczne, gdy istnieje stanowisko is_lecture). */
-async function loadLectureLink() {
-  const box = $('#lecture-box');
-  box.hidden = !booths.some((b) => b.is_lecture);
-  if (box.hidden) return;
-  $('#lecture-url').value = (await api('GET', '/api/admin/lecture-screen')).url;
+/** Rozwija pod wierszem stoiska pole z linkiem do ekranu (zwija, gdy jest już otwarte). */
+async function toggleScreenRow(btn) {
+  const row = btn.closest('tr');
+  if (row.nextElementSibling && row.nextElementSibling.classList.contains('screen-row')) {
+    row.nextElementSibling.remove();
+    return;
+  }
+  const box = h('div', { class: 'inline-form' });
+  row.after(h('tr', { class: 'screen-row' }, h('td', { colspan: 8 }, box)));
+  await guard(async () => {
+    renderScreenLink(btn.dataset.id, box, (await api('GET', '/api/admin/booths/' + encodeURIComponent(btn.dataset.id) + '/screen')).url);
+  });
 }
 
-$('#lecture-copy').addEventListener('click', async () => {
-  const input = $('#lecture-url');
-  const status = $('#lecture-status');
-  try {
-    await navigator.clipboard.writeText(input.value);
-    status.textContent = 'Skopiowano.';
-  } catch (e) {
-    input.focus();
-    input.select();
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
-    status.textContent = ok ? 'Skopiowano.' : 'Zaznaczono link, skopiuj go ręcznie (Ctrl+C).';
+/** Pokazuje link do ekranu stoiska albo przycisk jego utworzenia, gdy linku jeszcze nie ma. */
+function renderScreenLink(id, box, url) {
+  box.textContent = '';
+  if (!url) {
+    box.append(h('button', { class: 'btn btn-primary', type: 'button', 'data-screen': 'create', 'data-id': id }, icon('ti-plus'), 'Utwórz link'));
+    return;
   }
-});
+  box.append(h('label', {}, 'Link do ekranu stoiska'),
+    h('input', { type: 'text', readonly: true, value: url }),
+    h('div', { class: 'copy-row' },
+      h('button', { class: 'btn btn-primary', type: 'button', 'data-screen': 'copy' }, icon('ti-copy'), 'Kopiuj'),
+      h('button', { class: 'btn', type: 'button', 'data-screen': 'rotate', 'data-id': id }, icon('ti-refresh'), 'Wygeneruj nowy'),
+      h('span', { class: 'hint', role: 'status' })));
+}
 
-$('#lecture-rotate').addEventListener('click', async () => {
-  if (!confirm('Wygenerować nowy link? Poprzedni przestanie działać, a ekrany otwarte ze starym linkiem stracą kod QR.')) return;
+$('#booths-body').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-screen]');
+  if (!btn) return;
+  const box = btn.closest('.inline-form');
+  const kind = btn.dataset.screen;
+  if (kind === 'copy') {
+    const input = box.querySelector('input');
+    const status = box.querySelector('.hint');
+    try {
+      await navigator.clipboard.writeText(input.value);
+      status.textContent = 'Skopiowano.';
+    } catch (e) {
+      input.focus();
+      input.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+      status.textContent = ok ? 'Skopiowano.' : 'Zaznaczono link, skopiuj go ręcznie (Ctrl+C).';
+    }
+    return;
+  }
+  if (kind === 'rotate' && !confirm('Wygenerować nowy link? Poprzedni przestanie działać, a ekrany otwarte ze starym linkiem stracą kod QR.')) return;
   await guard(async () => {
-    $('#lecture-url').value = (await api('POST', '/api/admin/lecture-screen/rotate')).url;
-    $('#lecture-status').textContent = 'Nowy link gotowy. Poprzedni nie działa.';
+    renderScreenLink(btn.dataset.id, box, (await api('POST', '/api/admin/booths/' + encodeURIComponent(btn.dataset.id) + '/screen')).url);
+    if (kind === 'rotate') box.querySelector('.hint').textContent = 'Nowy link gotowy. Poprzedni nie działa.';
   });
 });
 
@@ -150,7 +175,7 @@ async function showPlayLink(boothId, el) {
   el.hidden = false;
   el.className = 'inline-result msg msg-info';
   el.textContent = '';
-  el.append(h('p', {}, 'Link do symulatora dla stoiska „' + boothId + '” (ważny ok. 2 minut od teraz; przepustka po wejściu trwa 30 minut):'),
+  el.append(h('p', {}, 'Link do symulatora dla stoiska „' + boothId + '” (ważny ok. 2-3 minut od teraz; przepustka po wejściu trwa 30 minut):'),
     h('a', { href: st.play_path, target: '_blank', rel: 'noopener' }, location.origin + st.play_path));
 }
 

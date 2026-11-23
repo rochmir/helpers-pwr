@@ -1,12 +1,12 @@
 import { api, $, renderGenotype, qrUrl } from './common.js';
 import { spinReels, prefersReducedMotion, confetti } from './reels.js';
 
-const pathParts = location.pathname.replace(/\/+$/, '').split('/');
-const lastPart = decodeURIComponent(pathParts.pop() || '');
-// /zajecia/{token}: ekran stanowiska Zajęcia dla prowadzących, bez logowania (token w adresie zastępuje cookie personelu).
-const isLectureScreen = pathParts.pop() === 'zajecia';
-const boothId = isLectureScreen ? 'zajecia' : lastPart;
-const screenToken = isLectureScreen ? lastPart : null;
+const segments = location.pathname.split('/').filter(Boolean);
+const lastPart = decodeURIComponent(segments[segments.length - 1] || '');
+// /ekran/{token}: publiczny ekran stoiska bez logowania (token w adresie zastępuje cookie personelu).
+const isPublicScreen = segments[0] === 'ekran';
+const boothId = isPublicScreen ? null : lastPart;
+const screenToken = isPublicScreen ? lastPart : null;
 const POLL_MS = 2500;
 const OVERLAY_MS = 7000; // czas pokazania overlay'a od startu animacji
 
@@ -18,21 +18,31 @@ let qrPath = null;
 let qrChangeAt = 0; // znacznik czasu (ms) zmiany kodu QR
 const QR_PERIOD_S = 60;
 
+// Link ekranu jest nieważny (zły token lub zmieniony przez administratora): logowanie nic nie da.
+function showScreenNotice(title, text) {
+  $('#qr-login').hidden = false;
+  $('.qr-login-title').textContent = title;
+  $('#qr-login p:not(.qr-login-title)').textContent = text;
+  $('#qr-login a').hidden = true;
+}
+
+function showBadScreenLink() {
+  showScreenNotice('Ten link do ekranu nie działa', 'Poproś administratora akcji o nowy link do ekranu stoiska.');
+}
+
 function showState(s) {
   $('#booth-name').textContent = s.name || 'Helpers’ Generation';
   $('#matches-count').textContent = s.matches_count;
   $('#rolls-count').textContent = s.rolls_count;
   // Ważny link do gry dostaje tylko zalogowany personel; bez sesji pokazujemy zachętę do logowania.
   $('#qr-login').hidden = !!s.play_path;
-  if (!isLectureScreen) {
+  if (!isPublicScreen) {
     $('#qr-login a').href = '/login?next=' + encodeURIComponent(location.pathname);
     $('#qr-login a').lastChild.textContent = ' Wybierz to stoisko w panelu wolontariusza';
-  }
-  if (isLectureScreen && !s.play_path) {
-    // Link został zmieniony przez administratora: logowanie nic tu nie da, trzeba nowego linku.
-    $('.qr-login-title').textContent = 'Ten link do ekranu nie działa';
-    $('#qr-login p:not(.qr-login-title)').textContent = 'Poproś administratora akcji o nowy link do ekranu Zajęć.';
-    $('#qr-login a').hidden = true;
+  } else if (!s.play_path) {
+    // Poza oknem dat stoiska link jest poprawny, tylko ekran czeka na dzień stoiska.
+    if (s.closed === true) showScreenNotice('Stoisko jeszcze nie działa', 'Ekran ruszy w dniu stoiska.');
+    else showBadScreenLink();
   }
   $('#qr-timer').hidden = !s.play_path;
   if (!s.play_path) {
@@ -82,13 +92,17 @@ function celebrate(newGenotype) {
 
 async function poll() {
   try {
-    const s = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state'
-      + (screenToken ? '?screen=' + encodeURIComponent(screenToken) : ''));
+    const path = isPublicScreen
+      ? '/api/screen/' + encodeURIComponent(screenToken) + '/state'
+      : '/api/booth/' + encodeURIComponent(boothId) + '/state';
+    const s = await api('GET', path);
     $('#offline').hidden = true;
     $('#booth-error').hidden = true;
     showState(s);
   } catch (e) {
-    if (e.status === 404) {
+    if (e.status === 404 && isPublicScreen) {
+      showBadScreenLink();
+    } else if (e.status === 404) {
       const box = $('#booth-error');
       box.textContent = 'Nie ma takiego stoiska: „' + boothId + '”.';
       box.hidden = false;

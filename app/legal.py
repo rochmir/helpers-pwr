@@ -59,8 +59,8 @@ PREVIOUS_SEED_SHA256 = {
 }
 SEED_UPDATE_AUTHOR = "system"
 # Wersja treści seedu (pliki app/legal/*.md). Baza z niższą wartością w settings.legal_seed_version dostaje jednorazowo
-# treść z plików (v3: bez fingerprintingu, trzy kategorie głosu; v4: jednorazowy kod QR ważny do zeskanowania).
-LEGAL_SEED_VERSION = 4
+# treść z plików (v3: bez fingerprintingu, trzy kategorie głosu; v4: jednorazowy kod QR ważny do zeskanowania; v5: regulaminy v5).
+LEGAL_SEED_VERSION = 5
 LEGAL_SEED_KEY = "legal_seed_version"
 
 

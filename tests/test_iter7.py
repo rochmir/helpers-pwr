@@ -183,10 +183,10 @@ def test_one_vote_per_session(admin, booth, other_clients, conn):
 
 
 def test_vote_records_only_allowed_fields(admin, booth, client, conn):
-    assert vote(client, booth, "faktyczny", "W13", "II2").status_code == 200
+    assert vote(client, booth, "faktyczny", "W13", "2").status_code == 200
     row = conn.execute("SELECT * FROM donors_stats").fetchone()
     assert set(row.keys()) == {"id", "faculty", "created_at", "category", "study_year", "booth_id"}
-    assert (row["faculty"], row["category"], row["study_year"], row["booth_id"]) == ("W13", "faktyczny", "II2", booth)
+    assert (row["faculty"], row["category"], row["study_year"], row["booth_id"]) == ("W13", "faktyczny", "2", booth)
     # sesja nie wskazuje głosu, a dane głosu nie wskazują sesji
     sid_row = conn.execute("SELECT * FROM game_sessions").fetchone()
     assert sid_row["cup_voted"] == 1 and sid_row["cup_claim_category"] is None and sid_row["cup_claim_until"] is None
@@ -202,7 +202,7 @@ def test_vote_response_has_bonus_fields(admin, booth, client):
 # --- terminy (CUP_DEADLINE, CONTEST_DEADLINE) -----------------------------------
 def test_default_deadlines_and_message():
     assert config.cup_deadline() == datetime(2026, 12, 11, 15, 30, tzinfo=timezone.utc)
-    assert config.contest_deadline() == datetime(2026, 12, 11, 15, 0, tzinfo=timezone.utc)
+    assert config.contest_deadline() == datetime(2026, 12, 13, 22, 59, tzinfo=timezone.utc)
     assert config.cup_closed_message() == "Zliczanie punktów zakończone 11 grudnia 2026 o 16:30."
 
 
@@ -219,7 +219,7 @@ def test_cup_closes_at_deadline_boundary(admin, booth, client, other_clients, mo
     r = v.post("/api/volunteer/cup-qr", json={"category": "nowy"})
     assert r.status_code == 410 and r.json()["detail"] == msg
     assert v.post("/api/volunteer/cup-qr", json={"category": "post"}).status_code == 200  # post nie zależy od terminu
-    r = client.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "I1"})
+    r = client.post("/api/cup/vote", json={"faculty": "W4N", "study_year": "1"})
     assert r.status_code == 410 and r.json()["detail"] == msg
 
 
@@ -263,7 +263,7 @@ def test_faculties_endpoint_has_study_years(client):
     d = client.get("/api/dictionary/faculties").json()
     assert set(d) == {"faculties", "study_years"}
     assert [x["code"] for x in d["study_years"]] == [c for c, _ in config.STUDY_YEARS]
-    assert d["study_years"][-1] == {"code": "inny", "label": "Inny / nie dotyczy"}
+    assert d["study_years"][-1] == {"code": "pracownik", "label": "Pracownik"}
 
 
 # --- migracja ze schematu iteracji 6 (produkcja) --------------------------------
@@ -339,7 +339,7 @@ def test_seed_matches_the_two_regulations_verbatim(client, conn):
         assert source == f"# {row['title']}\n\n{row['body_md']}"  # ani słowa zmian
         assert (row["version"], row["published"]) == (1, 1)  # świeża baza: bez podbicia wersji
     titles = {r["slug"]: r["title"] for r in conn.execute("SELECT slug, title FROM legal_documents")}
-    assert titles["regulamin-konkursu"] == "Regulamin akcji edukacyjnej i konkursu „HLA Match Maker – Sprawdź Parametry”"
+    assert titles["regulamin-konkursu"] == "Regulamin symulatora edukacyjnego i konkursu twórczego „HLA Match Maker”"
     assert titles["regulamin-pucharu"].endswith("„Puchar Dawcy PWr”") and titles["polityka-prywatnosci"] == "Polityka prywatności"
     assert [r[0] for r in conn.execute("SELECT slug FROM legal_documents ORDER BY sort")] == list(legal.BASE_SLUGS)
 
@@ -351,8 +351,8 @@ def test_public_pages_show_date_and_version(client, admin, conn):
     assert page.status_code == 200 and "text/html" in page.headers["content-type"]
     assert "Ostatnia zmiana: 1 listopada 2026, 14:30" in page.text and "Wersja 2" in page.text
     assert "<h1>Regulamin Pucharu 2</h1>" in page.text and "<title>Regulamin Pucharu 2 · " in page.text
-    assert "<h2>§1. Postanowienia ogólne i Organizator</h2>" in page.text
-    assert "Wskaźnik Zaangażowania" in page.text and '/static/v/' in page.text and "{{" not in page.text
+    assert "<h2>§ 1. Postanowienia ogólne</h2>" in page.text
+    assert "Wskaźniku Zaangażowania" in page.text and '/static/v/' in page.text and "{{" not in page.text
     lst = client.get("/dokumenty").text
     assert "Ostatnia zmiana: 1 listopada 2026, 14:30" in lst and 'href="/dokumenty/regulamin-konkursu"' in lst
     assert client.get("/dokumenty/nie-ma-takiego").status_code == 404
@@ -500,7 +500,7 @@ def test_contact_placeholder_is_substituted_and_escaped(admin, client, monkeypat
 def test_privacy_policy_matches_new_mechanics(client, conn):
     body = conn.execute("SELECT body_md FROM legal_documents WHERE slug='polityka-prywatnosci'").fetchone()[0]
     low = body.lower()
-    for needed in ("wybrzeżu wyspiańskiego 27", "tokenem losu", "hp_game", "hp_consent", "hp_staff", "fingerprint",
+    for needed in ("wybrzeże wyspiańskiego 27", "token losu", "hp_game", "hp_consent", "hp_staff", "fingerprint",
                    "facebook", "cloudflare", "jednorazowego kodu qr", "rok studiów", "kategorię", "bez powiązania z sesją",
                    "„post”", "wyłącznie informację o wygenerowaniu"):
         assert needed in low, needed
@@ -620,7 +620,7 @@ def test_migration_after_old_version_keeps_cup_votes(tmp_path, monkeypatch):
     db.init_db()
     conn = db.connect()
     conn.execute("INSERT INTO donors_stats(faculty,created_at,category,study_year,booth_id) "
-                 "VALUES('W4N','2026-11-03T10:00:00+01:00','faktyczny','I1','c13')")
+                 "VALUES('W4N','2026-11-03T10:00:00+01:00','faktyczny','1','c13')")
     conn.execute("INSERT INTO donors_stats(faculty,created_at) VALUES('W3','2026-11-04T11:00:00+01:00')")
     conn.execute("ALTER TABLE donors_stats ADD COLUMN kind TEXT NOT NULL DEFAULT 'potential'")
     conn.execute("ALTER TABLE registration_codes ADD COLUMN card_hash TEXT NULL")
@@ -635,6 +635,6 @@ def test_migration_after_old_version_keeps_cup_votes(tmp_path, monkeypatch):
         assert cols == {"id", "faculty", "created_at", "category", "study_year", "booth_id"}
         assert not {"actual_donor_cards", "raffle_draws", "donors_stats_new"} & names
         rows = [tuple(r) for r in conn.execute("SELECT faculty, created_at, category, study_year, booth_id FROM donors_stats ORDER BY id")]
-        assert rows == [("W4N", "2026-11-03T10:00:00+01:00", "faktyczny", "I1", "c13"),
+        assert rows == [("W4N", "2026-11-03T10:00:00+01:00", "faktyczny", "1", "c13"),
                         ("W3", "2026-11-04T11:00:00+01:00", "nowy", None, None)]
         conn.close()

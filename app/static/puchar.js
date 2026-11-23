@@ -1,17 +1,17 @@
 import { $, h, facultyLabel, formatWarsawLong, pollLive, updateBars, categorySplit } from './common.js';
 
-const fmt = (n) => Number(n).toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const fmt = (n) => Number(n).toLocaleString('pl-PL', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 
-/** Ranking: dlugosc slupka = WZ, podzial kolorow wg udzialu trzech kategorii w punktach (LD). */
+/** Ranking: dlugosc slupka = WZ, podzial kolorow wg udzialu trzech kategorii w punktach (LD). Poniżej progu bez miejsca. */
 function ranking(rows) {
   updateBars($('#cup-list'), rows.map((r, i) => ({
     key: r.code,
     rank: r.rank,
-    label: facultyLabel(r),
+    label: facultyLabel(r) + (r.qualified ? '' : ' (poniżej progu 10 punktów)'),
     value: r.wz,
     countText: fmt(r.wz) + ' %',
     segments: [{ key: 'nowy', value: r.nowy || 0 }, { key: 'zarejestrowany', value: r.zarejestrowany || 0 }, { key: 'faktyczny', value: r.faktyczny || 0 }],
-    first: i === 0 && r.wz > 0,
+    first: i === 0 && r.qualified && r.wz > 0,
     aria: facultyLabel(r) + ': WZ ' + fmt(r.wz) + '% (punkty ' + r.registered + ': ' + (r.nowy || 0) + ' nowych, ' +
       (r.zarejestrowany || 0) + ' zarejestrowanych, ' + (r.faktyczny || 0) + ' faktycznych, studenci ' + r.students + ')',
     sub: h('span', {}, h('b', {}, r.registered), ' pkt (LD): ', categorySplit(r), ' · ',

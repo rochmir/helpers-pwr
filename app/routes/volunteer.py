@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import auth, config, db
+from .game import booth_open
 
 router = APIRouter(prefix="/api/volunteer")
 
@@ -54,22 +55,22 @@ def code_status(row: sqlite3.Row) -> str:
 
 @router.post("/cup-qr")
 def cup_qr(body: CupQrIn, staff: dict = Depends(auth.require_volunteer), conn: sqlite3.Connection = Depends(db.get_db)):
-    """Nowy jednorazowy kod QR (bez daty ważności) dla wybranej kategorii. Poprzednie niezeskanowane kody tego
-    wolontariusza na tym stoisku są unieważniane. Kod traci ważność dopiero po zeskanowaniu."""
+    """Nowy jednorazowy kod QR (bez daty ważności) dla wybranej kategorii. Kod traci ważność dopiero po zeskanowaniu;
+    poprzednie niezeskanowane kody zostają ważne (wspólne konto stoiska nie blokuje się nawzajem)."""
     if body.category not in config.QR_CATEGORIES:
         raise HTTPException(422, "Niepoprawna kategoria.")
     bid = auth.resolve_booth(staff, body.booth_id)
-    booth = conn.execute("SELECT id, name, is_lecture FROM booths WHERE id=?", (bid,)).fetchone()
+    booth = conn.execute("SELECT * FROM booths WHERE id=?", (bid,)).fetchone()
     if booth is None:
         raise HTTPException(404, "Nie ma takiego stoiska.")
     if booth["is_lecture"]:
         raise HTTPException(409, "Na stanowisku Zajęcia nie ma wolontariusza, więc nie wystawia się tam kodów QR.")
     if body.category != "post" and config.cup_closed():
         raise HTTPException(410, config.cup_closed_message())
+    if not booth_open(booth):
+        raise HTTPException(409, "Stanowisko dziś nie działa (poza datami stoiska), więc nie wystawia się tam kodów QR.")
     code, now = secrets.token_urlsafe(16), config.now_iso()
     with db.tx(conn):
-        conn.execute("UPDATE cup_qr_codes SET revoked_at=? WHERE issued_by=? AND booth_id=? AND scanned_at IS NULL "
-                     "AND revoked_at IS NULL", (now, staff["login"], booth["id"]))
         conn.execute("INSERT INTO cup_qr_codes(id,booth_id,category,issued_by,created_at) VALUES(?,?,?,?,?)",
                      (code, booth["id"], body.category, staff["login"], now))
     return {"id": code, "path": f"/potwierdz?t={code}", "category": body.category, "created_at": now,

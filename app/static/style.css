@@ -1,6 +1,6 @@
 /*
  * Helpers' Generation / DKMS x Politechnika Wroclawska - jeden arkusz stylow dla wszystkich stron.
- * System wizualny wzorowany na dkms.pl (patrz DESIGN.md): html 62.5%, pastelowy rozowy hero, czerwone eyecatchery,
+ * System wizualny wzorowany na dkms.pl: html 62.5%, pastelowy rozowy hero, czerwone eyecatchery,
  * karty z ramka .2rem, kwadratowe pola, przyciski-pigulki WERSALIKAMI. Bez budowania; fonty i ikony lokalnie.
  *
  * Ramka: header.site-header (.header-row .brand .header-cta) + nav.subnav, .hero, main > .section > .container, footer.site-footer
@@ -311,14 +311,11 @@ form .btn { margin-top: 2rem; }
 .status-tag { display: inline-block; padding: .3rem .6rem; border-radius: .3rem; font-size: 1.3rem; line-height: 1.8rem; font-weight: var(--fw-medium); background: var(--grey-bg); color: var(--grey-dark); }
 .tag-active { background: var(--secondary-dualtone); color: var(--secondary); }
 .tag-used { background: var(--grey-bg); color: var(--grey-dark); }
-.tag-expired { background: var(--indication-dualtone); color: #8a6200; }
 .table-wrap { overflow-x: auto; margin: 0 0 1.6rem; }
 .table { width: 100%; border-collapse: collapse; font-size: 1.6rem; }
 .table th { text-align: left; padding: 1rem 1.2rem; font-size: 1.3rem; line-height: 1.8rem; font-weight: var(--fw-bold); letter-spacing: .06em; text-transform: uppercase; color: var(--grey-dark); border-bottom: .2rem solid var(--grey-bg); white-space: nowrap; }
 .table td { padding: 1.2rem; border-bottom: .2rem solid var(--grey-bg); vertical-align: middle; }
 .table tbody tr:last-child td { border-bottom: 0; }
-.table td.actions { }
-.code-used td, .code-expired td { color: var(--grey-dark); }
 
 /* ---------- genotyp (kafelki) ---------- */
 .genotype { display: grid; grid-template-columns: repeat(10, 1fr); gap: .4rem; container-type: inline-size; }
@@ -328,10 +325,6 @@ form .btn { margin-top: 2rem; }
 .genotype > .shape.match { border-color: var(--secondary); background: var(--secondary-dualtone); }
 .genotype > .shape.miss { opacity: .45; }
 .genotype-mini { width: 24rem; max-width: 100%; gap: .2rem; }
-.raffle-pick { margin-top: 2.4rem; }
-.raffle-pick .genotype { width: 40rem; max-width: 100%; }
-.raffle-draws, .raffle-entries { margin-top: 2.4rem; }
-.raffle-entries summary { cursor: pointer; font-weight: var(--fw-medium); }
 .genotype-mini > .shape { border-width: .1rem; border-radius: .3rem; }
 
 /* ---------- maszyna (jednoreki bandyta) ---------- */
@@ -650,7 +643,6 @@ form .btn { margin-top: 2rem; }
 .iconbox-flat { margin: 0; }
 .center { text-align: center; }
 #dict-save { margin-top: 1.6rem; }
-#codes-filter { margin-top: 0; padding-top: 0; border-top: 0; }
 
 /* ---------- iteracja 3: QR stoiska z odliczaniem, bonus, ekran konca prob ---------- */
 .qr-timer { width: min(100%, 44rem); }
@@ -667,7 +659,6 @@ form .btn { margin-top: 2rem; }
 .seg { display: block; height: 100%; transition: width .9s cubic-bezier(.2, .8, .3, 1); }
 .seg-group { display: flex; height: 100%; max-width: 100%; transition: width .9s cubic-bezier(.2, .8, .3, 1); }
 .seg-group .seg + .seg { box-shadow: -.2rem 0 0 var(--white); } /* biała kreska między segmentami: niski kontrast między kolorami */
-.promo-gen { margin-top: 1.6rem; }
 .bonus-note { color: var(--grey-dark); font-weight: 400; }
 .bonus-box { margin: 2.4rem 0; }
 .seg-nowy { background: var(--primary); }
@@ -683,21 +674,8 @@ form .btn { margin-top: 2rem; }
 .booth-list li:last-child { border-bottom: 0; }
 
 /* ---------- iteracja 4: zgoda, token trafienia, bitwa, panel ---------- */
-.check-row { display: flex; gap: 1.2rem; align-items: flex-start; margin: 2rem 0 .6rem; }
-.check-row label { margin: 0; font-weight: 400; font-size: 1.5rem; line-height: 2.2rem; }
-.check-row input[type="checkbox"] {
-  flex: none; width: 2.6rem; height: 2.6rem; padding: 0; margin: 0; cursor: pointer;
-  background-color: var(--white); background-repeat: no-repeat; background-position: center; background-size: 1.6rem;
-}
-.check-row input[type="checkbox"]:checked {
-  border-color: var(--primary); background-color: var(--primary);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='12' viewBox='0 0 16 12'%3E%3Cpath d='M1.5 6.5l4 4 9-9' fill='none' stroke='%23fff' stroke-width='2.4'/%3E%3C/svg%3E");
-}
-.check-row input[type="checkbox"]:focus-visible { outline: .3rem solid var(--tertiary); outline-offset: .2rem; }
-.check-row.is-invalid input[type="checkbox"] { border-color: var(--indication); }
 .win-token-box { margin: 2rem 0; }
 .win-token-box .code-big { font-size: clamp(2rem, 7.4vw, 5.2rem); word-break: normal; white-space: nowrap; letter-spacing: .02em; }
-.win-seq { margin: 0; font-weight: var(--fw-medium); color: var(--black-variant); }
 .steps-compact { grid-template-columns: 1fr; gap: 1.6rem; margin-bottom: 2.4rem; }
 @media (min-width: 768px) { .steps-compact { grid-template-columns: 1fr; gap: 1.6rem; } }
 .method { font-size: 1.6rem; color: var(--grey-dark); }
@@ -715,7 +693,6 @@ form .btn { margin-top: 2rem; }
 .share-row { display: flex; flex-wrap: wrap; gap: 1.2rem; justify-content: center; align-items: center; }
 .share-row .btn { margin-top: 0; }
 .download .share-row { margin-top: 0; }
-.section-hidden { display: none; }
 .hint-block { margin: 0 0 1.6rem; }
 .card .hint + .btn, .card .privacy + .btn { margin-top: 2rem; }
 

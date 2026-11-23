@@ -10,6 +10,8 @@ services:
     environment:
       ADMIN_SECRET: "${ADMIN_SECRET:-dev}"
       COOKIE_SECURE: "0"
+      # Narzędzia testowe admina (/api/admin/test/*); na produkcji wyłączone.
+      TEST_TOOLS: "1"
       # Test na telefonie w sieci lokalnej: PUBLIC_URL=http://<adres IP komputera>:8000 (kody QR kierują na ten adres).
       PUBLIC_URL: "${PUBLIC_URL:-http://localhost:${HELPERS_PORT:-8000}}"
       TZ: Europe/Warsaw

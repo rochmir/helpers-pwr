@@ -25,7 +25,7 @@ class ClaimIn(BaseModel):
 
 class VoteIn(BaseModel):
     faculty: str = Field(max_length=32)
-    study_year: str = Field(max_length=8)
+    study_year: str = Field(max_length=16)
 
 
 def _play_path(booth_id: str) -> str:
@@ -126,7 +126,7 @@ def vote(body: VoteIn, sid: str | None = Depends(auth.optional_game_session),
         if fac is None:
             raise HTTPException(422, "Nieznany wydział.")
         if body.study_year not in dict(config.STUDY_YEARS):
-            raise HTTPException(422, "Nieznany rok studiów.")
+            raise HTTPException(422, "Nieznany status.")
         category, booth_id = s["cup_claim_category"], s["cup_claim_booth"]
         bonus = config.CATEGORY_BONUS[category]
         cur = conn.execute("UPDATE game_sessions SET cup_voted=1, cup_claim_booth=NULL, cup_claim_category=NULL, "

@@ -14,7 +14,7 @@
     <a class="brand" href="/" aria-label="Helpers' Generation, strona główna">
       <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
       <span class="brand-sep" aria-hidden="true"></span>
-      <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+      <img class="logo-pwr" src="/static/brand/logoPWr_PL_poziom_wDwa_kolor_v1.png" alt="Politechnika Wrocławska" width="168" height="73">
       <span class="brand-sep logo-ss-sep" aria-hidden="true"></span>
       <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
       <span class="brand-sep" aria-hidden="true"></span>
@@ -114,6 +114,7 @@
     <div class="row">
       <a class="btn btn-inverted" id="export-csv" href="/api/admin/export-csv"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: punkty wydziałów</a>
       <a class="btn btn-inverted" id="export-csv-tokens" href="/api/admin/export-csv?set=stoiska"><i class="ti ti-download" aria-hidden="true"></i> Eksport CSV: głosy wg stoiska i kategorii</a>
+      <a class="btn btn-inverted" id="export-csv-zestawienie" href="/api/admin/export-csv?set=zestawienie"><i class="ti ti-download" aria-hidden="true"></i> Zestawienie: wydział × rodzaj × status</a>
     </div>
 
     <section id="booths-section" class="card">
@@ -123,17 +124,6 @@
         <thead><tr><th>ID</th><th>Nazwa</th><th>Budynek i termin</th><th>Głosy w Pucharze</th><th>10/10</th><th>Próby</th><th>Genotyp</th><th>Akcje</th></tr></thead>
         <tbody id="booths-body"></tbody>
       </table>
-      </div>
-      <div id="lecture-box" class="inline-form" hidden>
-        <h3>Zajęcia: link dla prowadzących</h3>
-        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Stanowisko „Zajęcia” służy do promocji akcji na wykładach, także przed jej rozpoczęciem. Nie ma wolontariusza, więc nie wystawia się tam kodów QR, a stanowisko nie jest widoczne w wykazach. Prowadzący otwiera ten link na ekranie sali, bez logowania. Ekran pokazuje rotujący kod QR do symulatora.</p></details>
-        <label for="lecture-url">Link do ekranu Zajęć</label>
-        <input type="text" id="lecture-url" readonly>
-        <div class="copy-row">
-          <button class="btn btn-primary" id="lecture-copy" type="button"><i class="ti ti-copy" aria-hidden="true"></i> Kopiuj link</button>
-          <button class="btn" id="lecture-rotate" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Wygeneruj nowy link</button>
-          <span id="lecture-status" class="hint" role="status"></span>
-        </div>
       </div>
       <form id="booth-form" class="inline-form">
         <h3>Nowe stoisko</h3>
@@ -394,7 +384,7 @@
       <div class="test-block">
         <h3>Sesja gry w tej przeglądarce</h3>
         <p class="status-line" id="t-status">-</p>
-        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Sesję gry tworzy się, otwierając link do symulatora w tej przeglądarce i klikając „Zaakceptuj i sprawdź parametry”. Linki są ważne ok. 2 minut, a przepustka na stoisko 30 minut.</p></details>
+        <details class="help"><summary><i class="ti ti-help-circle" aria-hidden="true"></i> Pomoc</summary><p class="hint">Sesję gry tworzy się, otwierając link do symulatora w tej przeglądarce i klikając „Zaakceptuj i sprawdź parametry”. Linki są ważne ok. 2-3 minut, a przepustka na stoisko 30 minut.</p></details>
         <button class="btn btn-small" id="t-refresh" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Odśwież status</button>
       </div>
 
@@ -409,7 +399,7 @@
         <h3>Następna próba = 10/10</h3>
         <p>Następna próba w tej przeglądarce da 10/10, także gdy ta sesja już wygrała.</p>
         <button class="btn btn-primary" id="t-arm" type="button"><i class="ti ti-bolt" aria-hidden="true"></i> Następna próba w tej przeglądarce = 10/10</button>
-        <button class="btn" id="t-play-link" type="button"><i class="ti ti-external-link" aria-hidden="true"></i> Link do symulatora (ważny ok. 2 minut)</button>
+        <button class="btn" id="t-play-link" type="button"><i class="ti ti-external-link" aria-hidden="true"></i> Link do symulatora (ważny ok. 2-3 minut)</button>
         <button class="btn" id="t-reset" type="button"><i class="ti ti-refresh" aria-hidden="true"></i> Zresetuj moje próby</button>
         <p class="inline-result" id="t-arm-result" hidden></p>
       </div>
@@ -454,7 +444,7 @@
     <div>
       <div class="footer-logos">
         <img class="logo-dkms" src="/static/brand/dkms-logo.svg" alt="DKMS" width="132" height="40">
-        <img class="logo-pwr" src="/static/brand/pwr-logo.svg" alt="Politechnika Wrocławska" width="340" height="73">
+        <img class="logo-pwr" src="/static/brand/logoPWr_PL_poziom_wDwa_kolor_v1.png" alt="Politechnika Wrocławska" width="168" height="73">
         <img class="logo-ss" src="/static/brand/samorzad-studencki.svg" alt="Samorząd Studencki Politechniki Wrocławskiej" width="221" height="61">
         <img class="logo-hg" src="/static/brand/helpers-generation-logo-white.svg" alt="Helpers' Generation" width="132" height="45">
       </div>

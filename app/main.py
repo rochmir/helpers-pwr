@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 
@@ -18,11 +19,12 @@ from .routes import admin, admin_test, cup, game, legal, login, misc, partners, 
 
 log = logging.getLogger("helpersi")
 
-CSP = ("default-src 'self'; script-src 'self' https://challenges.cloudflare.com; "
-       "frame-src https://challenges.cloudflare.com; img-src 'self' data: blob:; "
+CSP = ("default-src 'self'; script-src 'self'; "
+       "frame-src 'none'; img-src 'self' data: blob:; "
        "style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
+SCREEN_PATHS = ("/ekran/", "/zajecia/")
 
 
 @asynccontextmanager
@@ -57,6 +59,11 @@ async def security_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "same-origin"
+    if request.url.path.startswith(SCREEN_PATHS):
+        # token w adresie ekranu: bez cache, bez Referer, bez indeksowania
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Robots-Tag"] = "noindex"
     response.headers["Content-Security-Policy"] = CSP
     return response
 
@@ -68,9 +75,11 @@ async def validation_error(_: Request, exc: RequestValidationError):
     return JSONResponse({"detail": f"Niepoprawne dane{field}."}, status_code=422)
 
 
-for module in (misc, game, login, volunteer, cup, stats, partners, admin, admin_test, legal):
+for module in (misc, game, login, volunteer, cup, stats, partners, admin, legal):
     app.include_router(module.router)
 app.include_router(legal.admin_router)
+if os.environ.get("TEST_TOOLS") == "1":  # narzędzia testowe tylko lokalnie/w testach (domyślnie wyłączone)
+    app.include_router(admin_test.router)
 
 # --- strony ---------------------------------------------------------------------
 PAGES = {"/": "index.html", "/graj": "graj.html", "/login": "login.html", "/potwierdz": "potwierdz.html",
@@ -117,19 +126,28 @@ def stoisko(booth_id: str, staff: dict | None = Depends(auth.optional_staff)):
     return _stoisko()
 
 
-@app.get("/zajecia/{screen_token}", include_in_schema=False)
-def zajecia(screen_token: str):
-    """Statyczny link dla prowadzących zajęcia: ten sam ekran co /stoisko/zajecia, bez logowania. Zły token = 404."""
+def _screen_booth(screen_token: str) -> bool:
     conn = db.connect()
     try:
-        ok = len(screen_token) <= 64 and db.lecture_token_ok(conn, screen_token)
-    except UnicodeEncodeError:
-        ok = False
+        return db.booth_by_screen_token(conn, screen_token) is not None
     finally:
         conn.close()
-    if not ok:
+
+
+@app.get("/ekran/{screen_token}", include_in_schema=False)
+def ekran(screen_token: str):
+    """Publiczny ekran stoiska pod stałym linkiem (bez logowania). Zły token = 404."""
+    if not _screen_booth(screen_token):
         raise HTTPException(404, "Nie znaleziono strony.")
     return _stoisko()
+
+
+@app.get("/zajecia/{screen_token}", include_in_schema=False)
+def zajecia(screen_token: str):
+    """Stary link prowadzących: przekierowanie na /ekran/{token}, gdy token pasuje; inaczej 404."""
+    if not _screen_booth(screen_token):
+        raise HTTPException(404, "Nie znaleziono strony.")
+    return RedirectResponse(f"/ekran/{screen_token}", status_code=301)
 
 
 # Statyki z wersją w ścieżce (strony HTML odwołują się tylko do nich); stary hash też działa,
