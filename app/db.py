@@ -329,15 +329,20 @@ LECTURE_BOOTH_NAME = "Zajęcia"
 RESERVED_BOOTH_IDS = frozenset({"ekran", "login", LECTURE_BOOTH_ID})
 
 
+def new_lecture_screen_code() -> str:
+    """Łatwy do zapamiętania kod ekranu Zajęć: sześć liter na przemian spółgłoska–samogłoska, np. „rumeki”."""
+    return "".join(secrets.choice("bdfghklmnprstvz" if i % 2 == 0 else "aeiou") for i in range(6))
+
+
 def ensure_lecture_booth(conn: sqlite3.Connection) -> None:
-    """Idempotentnie tworzy stanowisko „Zajęcia” (is_lecture=1) i nadaje mu token ekranu; raz przenosi stary ``settings.lecture_screen_token``."""
+    """Idempotentnie tworzy stanowisko „Zajęcia” (is_lecture=1) i nadaje mu łatwy kod ekranu; raz przenosi stary ``settings.lecture_screen_token``."""
     with tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone() is None:
             create_booth(conn, LECTURE_BOOTH_ID, LECTURE_BOOTH_NAME, is_lecture=True)
             log.info("Utworzono stanowisko %s", LECTURE_BOOTH_ID)
         row = conn.execute("SELECT screen_token FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone()
         if not row["screen_token"]:
-            token = get_setting(conn, "lecture_screen_token") or secrets.token_urlsafe(16)
+            token = get_setting(conn, "lecture_screen_token") or new_lecture_screen_code()
             conn.execute("UPDATE booths SET screen_token=? WHERE id=?", (token, LECTURE_BOOTH_ID))
 
 

@@ -1,0 +1,458 @@
+{
+  ".github/workflows/helpers-pwr.yml": {
+    "mtime": 1793967982.9684858,
+    "seen": 1795518819.5780056,
+    "ast_hash": "803849e71a87ee712e2ed70557231a69",
+    "semantic_hash": ""
+  },
+  "app/__init__.py": {
+    "mtime": 1793966446.0493073,
+    "seen": 1795518819.5780056,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/auth.py": {
+    "mtime": 1795435877.401126,
+    "seen": 1795518819.5780056,
+    "ast_hash": "5c9b7d1387652269570d32c934478470",
+    "semantic_hash": ""
+  },
+  "app/config.py": {
+    "mtime": 1795431079.6436763,
+    "seen": 1795518819.5780056,
+    "ast_hash": "b0017d841b27a683e7ee2c12f1c2d3c5",
+    "semantic_hash": ""
+  },
+  "app/db.py": {
+    "mtime": 1795518297.151247,
+    "seen": 1795518819.5780056,
+    "ast_hash": "7a728d957bb57bae7e5d202fbd2f4549",
+    "semantic_hash": ""
+  },
+  "app/game.py": {
+    "mtime": 1795434845.3540337,
+    "seen": 1795518819.5780056,
+    "ast_hash": "23198de5ae80d1e29c0e961a1b763b03",
+    "semantic_hash": ""
+  },
+  "app/legal.py": {
+    "mtime": 1795431662.619891,
+    "seen": 1795518819.5780056,
+    "ast_hash": "ce244eae52a82ba4e23b8cdc214aaa55",
+    "semantic_hash": ""
+  },
+  "app/main.py": {
+    "mtime": 1795518297.1530087,
+    "seen": 1795518819.5780056,
+    "ast_hash": "e51bd014456be975839a69384e1f137a",
+    "semantic_hash": ""
+  },
+  "app/pages.py": {
+    "mtime": 1793970800.3799882,
+    "seen": 1795518819.5780056,
+    "ast_hash": "3ef7a14079282bd79e866df4eb2707a4",
+    "semantic_hash": ""
+  },
+  "app/qrtoken.py": {
+    "mtime": 1795435877.287285,
+    "seen": 1795518819.5780056,
+    "ast_hash": "a597ef8e77f1ae7a5c9bdd4aa3f3c796",
+    "semantic_hash": ""
+  },
+  "app/routes/__init__.py": {
+    "mtime": 1793966446.0558834,
+    "seen": 1795518819.5780056,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "app/routes/admin.py": {
+    "mtime": 1795518297.1522522,
+    "seen": 1795518819.5780056,
+    "ast_hash": "1b3a4fa8af95f1ae90f22ab8b5f8ced4",
+    "semantic_hash": ""
+  },
+  "app/routes/admin_test.py": {
+    "mtime": 1794240145.8461843,
+    "seen": 1795518819.5780056,
+    "ast_hash": "256ddb1c7f40741ac96fea9df008adf0",
+    "semantic_hash": ""
+  },
+  "app/routes/cup.py": {
+    "mtime": 1795431199.6063073,
+    "seen": 1795518819.5780056,
+    "ast_hash": "bd0e1f0d18ca70444162752ca72c48a6",
+    "semantic_hash": ""
+  },
+  "app/routes/game.py": {
+    "mtime": 1795518297.163787,
+    "seen": 1795518819.5780056,
+    "ast_hash": "07429de8ad0ad6832cf3d76c098ae3aa",
+    "semantic_hash": ""
+  },
+  "app/routes/legal.py": {
+    "mtime": 1793970800.398022,
+    "seen": 1795518819.5780056,
+    "ast_hash": "3c7934c038c068ae130b9321df66e902",
+    "semantic_hash": ""
+  },
+  "app/routes/login.py": {
+    "mtime": 1793971666.2432396,
+    "seen": 1795518819.5780056,
+    "ast_hash": "cb1655013557c29da82297e16da88a92",
+    "semantic_hash": ""
+  },
+  "app/routes/misc.py": {
+    "mtime": 1793971666.2395234,
+    "seen": 1795518819.5780056,
+    "ast_hash": "3332678d8f6dc059a5e4767c3e0fa493",
+    "semantic_hash": ""
+  },
+  "app/routes/partners.py": {
+    "mtime": 1794236083.941722,
+    "seen": 1795518819.5780056,
+    "ast_hash": "c4d18b4d9cf79d9bb556959bf40d96c1",
+    "semantic_hash": ""
+  },
+  "app/routes/stats.py": {
+    "mtime": 1795435871.9890122,
+    "seen": 1795518819.5780056,
+    "ast_hash": "4e57e3c9dca8e2da12fc9997c4ac3541",
+    "semantic_hash": ""
+  },
+  "app/routes/volunteer.py": {
+    "mtime": 1795435854.1082106,
+    "seen": 1795518819.5780056,
+    "ast_hash": "6a1c931ca6d7370bae1cd7377a701368",
+    "semantic_hash": ""
+  },
+  "app/seed_dictionary.json": {
+    "mtime": 1793970800.421253,
+    "seen": 1795518819.5780056,
+    "ast_hash": "83b6428bfb231c631b7298fc0963e16c",
+    "semantic_hash": ""
+  },
+  "app/seed_students.json": {
+    "mtime": 1793970800.4299595,
+    "seen": 1795518819.5780056,
+    "ast_hash": "ee1485ce2125bd30b6bff8f592a23a96",
+    "semantic_hash": ""
+  },
+  "app/static/admin.js": {
+    "mtime": 1795435788.1756358,
+    "seen": 1795518819.5780056,
+    "ast_hash": "53ae9f85eb7cd73a03932958b1cb7e6d",
+    "semantic_hash": ""
+  },
+  "app/static/cert.js": {
+    "mtime": 1795434813.1265974,
+    "seen": 1795518819.5780056,
+    "ast_hash": "f5070361b28486b5afafe700a2d48a2c",
+    "semantic_hash": ""
+  },
+  "app/static/common.js": {
+    "mtime": 1795434813.3730304,
+    "seen": 1795518819.5780056,
+    "ast_hash": "f444a7fd24ead745d8ec555b90687383",
+    "semantic_hash": ""
+  },
+  "app/static/graj.js": {
+    "mtime": 1795518619.9952493,
+    "seen": 1795518819.5780056,
+    "ast_hash": "22398a25231365d2912ce19e6c32cef8",
+    "semantic_hash": ""
+  },
+  "app/static/index.js": {
+    "mtime": 1794237015.189203,
+    "seen": 1795518819.5780056,
+    "ast_hash": "ed06f3d0255dad3697fa01adade7651a",
+    "semantic_hash": ""
+  },
+  "app/static/login.js": {
+    "mtime": 1794237088.7901988,
+    "seen": 1795518819.5780056,
+    "ast_hash": "b726c7b5aab8b46063514cdadc6aba67",
+    "semantic_hash": ""
+  },
+  "app/static/potwierdz.js": {
+    "mtime": 1795431061.7464368,
+    "seen": 1795518819.5780056,
+    "ast_hash": "080bc2ae5ea5770827fe75df48fc1a26",
+    "semantic_hash": ""
+  },
+  "app/static/puchar.js": {
+    "mtime": 1795431094.2290807,
+    "seen": 1795518819.5780056,
+    "ast_hash": "9e72a185f4f0298b4e6c9250dc07afa3",
+    "semantic_hash": ""
+  },
+  "app/static/reels.js": {
+    "mtime": 1793966446.0830715,
+    "seen": 1795518819.5780056,
+    "ast_hash": "f845d9809d432d0d58bedbb8d4ccce0e",
+    "semantic_hash": ""
+  },
+  "app/static/statystyki.js": {
+    "mtime": 1794237015.1860037,
+    "seen": 1795518819.5780056,
+    "ast_hash": "75310f1003431fff0dc9b063a0849e93",
+    "semantic_hash": ""
+  },
+  "app/static/stoisko.js": {
+    "mtime": 1795518297.1632886,
+    "seen": 1795518819.5780056,
+    "ast_hash": "f3acc33c9b5bf6301549438617d87a6c",
+    "semantic_hash": ""
+  },
+  "app/static/wolontariusz.js": {
+    "mtime": 1794240761.1960323,
+    "seen": 1795518819.5780056,
+    "ast_hash": "c6911f244a9a829d6df639744692122f",
+    "semantic_hash": ""
+  },
+  "app/testing.py": {
+    "mtime": 1793966446.1031566,
+    "seen": 1795518819.5780056,
+    "ast_hash": "cc1d92b258f573b7ee6cbef7db0ccdb7",
+    "semantic_hash": ""
+  },
+  "docker-compose.local.yml": {
+    "mtime": 1795435888.7409253,
+    "seen": 1795518819.5780056,
+    "ast_hash": "9f54392059896d96ff435563fb24f562",
+    "semantic_hash": ""
+  },
+  "docker-compose.yml": {
+    "mtime": 1793967983.0072677,
+    "seen": 1795518819.5780056,
+    "ast_hash": "c01fecf75b253a5a15a0757424add6f5",
+    "semantic_hash": ""
+  },
+  "lokalnie.ps1": {
+    "mtime": 1793970878.5260518,
+    "seen": 1795518819.5780056,
+    "ast_hash": "49f54c4201eb35cc4d7f8079c9bac5a8",
+    "semantic_hash": ""
+  },
+  "lokalnie.sh": {
+    "mtime": 1793970878.6282518,
+    "seen": 1795518819.5780056,
+    "ast_hash": "1d31f682f89291144445a38632a89579",
+    "semantic_hash": ""
+  },
+  "tests/conftest.py": {
+    "mtime": 1795435888.5376267,
+    "seen": 1795518819.5780056,
+    "ast_hash": "598135331bc5317eef9f29c5a0916e6b",
+    "semantic_hash": ""
+  },
+  "tests/test_admin_test.py": {
+    "mtime": 1795436249.6336162,
+    "seen": 1795518819.5785034,
+    "ast_hash": "8e1f07b431269c12c0f4fbf1d8b2ccf0",
+    "semantic_hash": ""
+  },
+  "tests/test_api.py": {
+    "mtime": 1795436220.162615,
+    "seen": 1795518819.5785034,
+    "ast_hash": "8aa9d350d0636c5a5ff0c34a9033e1b4",
+    "semantic_hash": ""
+  },
+  "tests/test_game_logic.py": {
+    "mtime": 1795434845.790327,
+    "seen": 1795518819.5785034,
+    "ast_hash": "f52e823d542296556cdc986e0af1c62b",
+    "semantic_hash": ""
+  },
+  "tests/test_iter3.py": {
+    "mtime": 1795436202.3160071,
+    "seen": 1795518819.5785034,
+    "ast_hash": "15d62390056cf244eeed37bbc7789c16",
+    "semantic_hash": ""
+  },
+  "tests/test_iter4.py": {
+    "mtime": 1795436202.3205042,
+    "seen": 1795518819.5785034,
+    "ast_hash": "f563dda1c87592ccf5889bac26395a39",
+    "semantic_hash": ""
+  },
+  "tests/test_iter7.py": {
+    "mtime": 1795433965.1764395,
+    "seen": 1795518819.5785034,
+    "ast_hash": "ebda63329ba1e969e0ab561e52374a79",
+    "semantic_hash": ""
+  },
+  "tests/test_lecture.py": {
+    "mtime": 1795518303.5848422,
+    "seen": 1795518819.5785034,
+    "ast_hash": "e0f08c4e5fa96aeb136744fc3de95bcd",
+    "semantic_hash": ""
+  },
+  "tests/test_v3.py": {
+    "mtime": 1795436202.3170035,
+    "seen": 1795518819.5785034,
+    "ast_hash": "3f148903a58f069e251a10b83c23ae1e",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1795436231.6798527,
+    "seen": 1795518819.5785034,
+    "ast_hash": "68f0a419e9d0d30f66605af8ba02568a",
+    "semantic_hash": ""
+  },
+  "app/legal/polityka-prywatnosci.md": {
+    "mtime": 1795431662.5592008,
+    "seen": 1795518819.5785034,
+    "ast_hash": "83a40837cd4ecc2f3ee477fbc6a32038",
+    "semantic_hash": ""
+  },
+  "app/legal/regulamin-konkursu.md": {
+    "mtime": 1795434049.44515,
+    "seen": 1795518819.5785034,
+    "ast_hash": "10a1271eadcada28e03e816e14c8df09",
+    "semantic_hash": ""
+  },
+  "app/legal/regulamin-pucharu.md": {
+    "mtime": 1795434049.546342,
+    "seen": 1795518819.5785034,
+    "ast_hash": "5acbe95df5d54893bd26a70bb4415d10",
+    "semantic_hash": ""
+  },
+  "app/static/brand/SOURCES.txt": {
+    "mtime": 1795434999.117095,
+    "seen": 1795518819.5785034,
+    "ast_hash": "31ddf842f67197b693ce2cdc4bee249c",
+    "semantic_hash": ""
+  },
+  "app/static/dokument.html": {
+    "mtime": 1795518303.472524,
+    "seen": 1795518819.5785034,
+    "ast_hash": "973236da6bb92c6205398c7d256cfd68",
+    "semantic_hash": ""
+  },
+  "app/static/fonts/INTER-LICENSE.txt": {
+    "mtime": 1793966446.0756218,
+    "seen": 1795518819.5785034,
+    "ast_hash": "b21bb64f6fbffad38f101485452fad32",
+    "semantic_hash": ""
+  },
+  "app/static/fonts/README.txt": {
+    "mtime": 1793966446.0756218,
+    "seen": 1795518819.5785034,
+    "ast_hash": "c966b1c9a2b0a93f1362c1fa2977a4ea",
+    "semantic_hash": ""
+  },
+  "app/static/graj.html": {
+    "mtime": 1795518619.7034874,
+    "seen": 1795518819.5785034,
+    "ast_hash": "9fd348f5d5a35f99fd872eb4fb9b946e",
+    "semantic_hash": ""
+  },
+  "app/static/index.html": {
+    "mtime": 1795518303.4765997,
+    "seen": 1795518819.5785034,
+    "ast_hash": "5ec8f463a923a25fb26ccfa4ef051d95",
+    "semantic_hash": ""
+  },
+  "app/static/login.html": {
+    "mtime": 1795518303.5076313,
+    "seen": 1795518819.5785034,
+    "ast_hash": "69e68c65605256c1e4530f4d49799d36",
+    "semantic_hash": ""
+  },
+  "app/static/potwierdz.html": {
+    "mtime": 1795518303.5432255,
+    "seen": 1795518819.5785034,
+    "ast_hash": "0cf3a8535aaebe6ee24687c4224d58a2",
+    "semantic_hash": ""
+  },
+  "app/static/puchar.html": {
+    "mtime": 1795518303.5662642,
+    "seen": 1795518819.5785034,
+    "ast_hash": "0d4bb8b1b40a13b61c113a49e43fa824",
+    "semantic_hash": ""
+  },
+  "app/static/statystyki.html": {
+    "mtime": 1795518303.5827851,
+    "seen": 1795518819.5785034,
+    "ast_hash": "f4fa42079c84e0c4eb4bf686a537dbf4",
+    "semantic_hash": ""
+  },
+  "app/static/stoisko.html": {
+    "mtime": 1795452913.098456,
+    "seen": 1795518819.5785034,
+    "ast_hash": "e258d9d0d14fcab5fa7f1a9f8a58d852",
+    "semantic_hash": ""
+  },
+  "app/static/vendor/README.txt": {
+    "mtime": 1793966446.087302,
+    "seen": 1795518819.5785034,
+    "ast_hash": "4a2de656f162192dd9cf8bc61cd9cc4d",
+    "semantic_hash": ""
+  },
+  "app/static/vendor/TABLER-LICENSE.txt": {
+    "mtime": 1793966446.087302,
+    "seen": 1795518819.5785034,
+    "ast_hash": "f69250a42fa0688f33105678d88a541d",
+    "semantic_hash": ""
+  },
+  "requirements-dev.txt": {
+    "mtime": 1793966446.105175,
+    "seen": 1795518819.5785034,
+    "ast_hash": "72af7bf4e992ad82825ef95f03a1c93e",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1795434777.4323757,
+    "seen": 1795518819.5785034,
+    "ast_hash": "4194e5e8c595e9d7bf0d83a252cf0d45",
+    "semantic_hash": ""
+  },
+  "app/static/brand/apple-touch-icon.png": {
+    "mtime": 1793970800.4351814,
+    "seen": 1795518819.5785034,
+    "ast_hash": "e22ed3382cf177b87558b939b6dd7ac8",
+    "semantic_hash": ""
+  },
+  "app/static/brand/dkms-logo.svg": {
+    "mtime": 1793966446.0558834,
+    "seen": 1795518819.5785034,
+    "ast_hash": "116ba8e1f2c790e2f85cc56bbfbebbb4",
+    "semantic_hash": ""
+  },
+  "app/static/brand/favicon-32.png": {
+    "mtime": 1793970800.4351814,
+    "seen": 1795518819.5785034,
+    "ast_hash": "445947fc070697e7c83d4f84981a2cb9",
+    "semantic_hash": ""
+  },
+  "app/static/brand/favicon.svg": {
+    "mtime": 1793970800.4351814,
+    "seen": 1795518819.5785034,
+    "ast_hash": "718ce0f425b8b670e7f7ae675a16a341",
+    "semantic_hash": ""
+  },
+  "app/static/brand/helpers-generation-logo-white.svg": {
+    "mtime": 1794236927.1872492,
+    "seen": 1795518819.5785034,
+    "ast_hash": "daefb776dcefe8212aaaa1274898e2d3",
+    "semantic_hash": ""
+  },
+  "app/static/brand/logoPWr_PL_poziom_wDwa_kolor_v1.png": {
+    "mtime": 1795452913.0927894,
+    "seen": 1795518819.5785034,
+    "ast_hash": "bc6bd966181d71eacb69030fa9e86c7c",
+    "semantic_hash": ""
+  },
+  "app/static/brand/samorzad-studencki.svg": {
+    "mtime": 1794236927.2973568,
+    "seen": 1795518819.5785034,
+    "ast_hash": "b01e63642aa0b62d1a8b8e3b51537291",
+    "semantic_hash": ""
+  },
+  "app/static/brand/solvro.png": {
+    "mtime": 1795452895.1745038,
+    "seen": 1795518819.5785034,
+    "ast_hash": "1fedfc3c34d11ff9a35a6c585bf2fd12",
+    "semantic_hash": ""
+  }
+}

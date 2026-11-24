@@ -108,11 +108,22 @@ def test_booth_screen_rotation_invalidates_old_link(admin, booth, other_clients)
     assert [b for b in admin.get("/api/admin/booths").json() if b["id"] == booth][0]["has_screen"] is True
 
 
-def test_old_zajecia_link_redirects_to_ekran(admin, other_clients):
-    token = screen_token(admin)
+def test_lecture_code_opens_screen_without_login(admin, other_clients, booth):
+    code = screen_token(admin)
+    assert code.isalpha() and code.islower() and len(code) == 6  # łatwy kod: sześć liter
     guest = other_clients()
-    r = guest.get(f"/zajecia/{token}", follow_redirects=False)
-    assert r.status_code == 301 and r.headers["location"] == f"/ekran/{token}"
+    page = guest.get(f"/zajecia/{code}", follow_redirects=False)
+    assert page.status_code == 200 and "booth-name" in page.text
+    assert page.headers["cache-control"] == "no-store" and page.headers["x-robots-tag"] == "noindex"
+    assert guest.get(f"/api/screen/{code}/state").json()["play_path"].startswith("/graj?stoisko=zajecia&t=")
+    token = admin.post(f"/api/admin/booths/{booth}/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    assert guest.get(f"/zajecia/{token}").status_code == 404  # kod innego stanowiska nie otwiera Zajęć
+
+
+def test_lecture_code_is_memorable_on_rotation(admin):
+    old = screen_token(admin)
+    new = admin.post("/api/admin/booths/zajecia/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    assert new != old and new.isalpha() and new.islower() and len(new) == 6
 
 
 def test_public_screen_outside_booth_dates_has_no_play_path(admin, booth, other_clients):

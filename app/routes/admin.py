@@ -192,7 +192,8 @@ def rotate_booth_screen(booth_id: str, _: dict = Depends(auth.require_admin), co
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
-        token = secrets.token_urlsafe(16)
+        # Zajęcia dostają łatwy do zapamiętania kod (wolontariusz wpisuje go ręcznie), reszta losowy token.
+        token = db.new_lecture_screen_code() if booth_id == db.LECTURE_BOOTH_ID else secrets.token_urlsafe(16)
         conn.execute("UPDATE booths SET screen_token=? WHERE id=?", (token, booth_id))
     return _screen_view(token)
 

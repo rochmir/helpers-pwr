@@ -19,6 +19,7 @@ let bestOverall = 0; // najlepszy wynik dnia (serwer + rzuty z tej wizyty)
 let needSession = false; // true, gdy trzeba utworzyc sesje
 let pendingMe = null; // stan sesji (lub null), gdy czekamy na zgode w oknie startowym
 let winShown = false; // ekran wygranej jest widoczny: okno konca nie otwiera sie samo
+let onLecture = false; // stanowisko Zajecia: najpierw opis akcji, dopiero potem losowanie
 
 let legalUpdatedAt = null; // data ostatniej zmiany regulaminu konkursu / polityki (z /api/config)
 
@@ -151,8 +152,12 @@ function showEnd(best) {
   }
   bestOverall = Math.max(bestOverall, best);
   updateRewards();
-  const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec prób na tym stanowisku.';
-  setResult(title, 'Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro.', 'end');
+  if (onLecture) {
+    setResult('Wykorzystałeś wszystkie próby na Zajęciach.', 'Zapraszamy na nasze stanowiska. Podejdź do jednego z nich, tam masz kolejne 5 prób.', 'end');
+  } else {
+    const title = best > 0 ? 'Twój najlepszy wynik dziś: ' + best + '/10' : 'To już koniec prób na tym stanowisku.';
+    setResult(title, 'Limit prób na tym stanowisku na dziś wykorzystany. Zagraj na innym stanowisku albo wróć jutro.', 'end');
+  }
   // Przy wygranej gracz najpierw widzi ekran wygranej (token, Facebook); okno otwiera przyciskiem.
   if (!winShown) openEndDialog();
 }
@@ -163,7 +168,6 @@ const PASS_EXPIRED = 'Przepustka wygasła. Zeskanuj kod QR na stoisku.';
 /** Odmowa wejścia (problem) albo brak przepustki na to stanowisko: ekran skanowania, nawet gdy próby się skończyły. */
 function enterPlay(me, problem) {
   show('scan-section', false);
-  if (me.pass_is_lecture) showLecture();
   bestOverall = Math.max(bestOverall, me.best_today || 0);
   if (me.has_won) {
     if (me.won_genotype) won = { genotype: me.won_genotype, at: me.won_at, token: me.won_token, booth: me.won_booth_name };
@@ -302,6 +306,13 @@ async function openEndDialog() {
   $('#end-cert-title').textContent = won ? 'Twój certyfikat 10/10' : 'Odbierz swój wynik';
   endDlg.showModal();
   endDlg.scrollTop = 0;
+  if (onLecture) {
+    $('#end-title').textContent = 'Zapraszamy na nasze stanowiska';
+    $('#end-lead-text').textContent = 'Terminy i godziny stanowisk znajdziesz poniżej.';
+  } else {
+    $('#end-title').textContent = 'Koniec prób na tym stanowisku';
+    $('#end-lead-text').textContent = '';
+  }
   const list = $('#end-booth-list');
   const hoursEl = $('#end-booth-hours');
   const empty = $('#end-booth-empty');
@@ -355,8 +366,9 @@ async function init() {
     await showBoothList();
     return;
   }
+  let b;
   try {
-    const b = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state');
+    b = await api('GET', '/api/booth/' + encodeURIComponent(boothId) + '/state');
     $('#game-booth').textContent = b.name;
     show('game-booth-wrap', true);
     boothGenotype = b.genotype || '';
@@ -366,6 +378,21 @@ async function init() {
       : e.detail, 'error');
     return;
   }
+  if (b.is_lecture) {
+    // Zajęcia: najpierw opis akcji i stanowisk, losowanie dopiero po przycisku na dole.
+    onLecture = true;
+    showLecture();
+    $('#lecture-go-btn').addEventListener('click', () => {
+      show('lecture-section', false);
+      startFlow();
+    }, { once: true });
+    return;
+  }
+  await startFlow();
+}
+
+/** Zgoda, sesja i wejscie do gry (przepustka z kodu QR). Wolane od razu albo po przycisku na Zajeciach. */
+async function startFlow() {
   try {
     const cfg = await getConfig();
     legalUpdatedAt = (cfg && cfg.legal_updated_at) || null;

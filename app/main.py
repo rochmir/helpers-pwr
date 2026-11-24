@@ -144,10 +144,16 @@ def ekran(screen_token: str):
 
 @app.get("/zajecia/{screen_token}", include_in_schema=False)
 def zajecia(screen_token: str):
-    """Stary link prowadzących: przekierowanie na /ekran/{token}, gdy token pasuje; inaczej 404."""
-    if not _screen_booth(screen_token):
+    """Ekran Zajęć pod łatwym kodem (bez logowania) dla wolontariusza, który wpisuje go na komputerze wykładowcy.
+    Ten sam ekran co /ekran/{kod}; kod innego stanowiska albo zły kod = 404."""
+    conn = db.connect()
+    try:
+        booth = db.booth_by_screen_token(conn, screen_token)
+    finally:
+        conn.close()
+    if booth is None or not booth["is_lecture"]:
         raise HTTPException(404, "Nie znaleziono strony.")
-    return RedirectResponse(f"/ekran/{screen_token}", status_code=301)
+    return _stoisko()
 
 
 # Statyki z wersją w ścieżce (strony HTML odwołują się tylko do nich); stary hash też działa,

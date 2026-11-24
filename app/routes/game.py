@@ -67,7 +67,7 @@ def attempts_left(conn: sqlite3.Connection, sid: str) -> int:
 
 def _booth_state(b: sqlite3.Row, with_qr: bool) -> dict:
     """Wspólna odpowiedź o stanowisku; ``with_qr`` dodaje ważny link do gry (aktualny token QR)."""
-    out = {"id": b["id"], "name": b["name"], "genotype": b["current_genotype"],
+    out = {"id": b["id"], "name": b["name"], "is_lecture": bool(b["is_lecture"]), "genotype": b["current_genotype"],
            "genotype_updated_at": b["genotype_updated_at"], "matches_count": b["matches_count"],
            "rolls_count": b["rolls_count"], "play_path": None, "qr_seconds_left": None}
     if with_qr:

@@ -3,8 +3,8 @@ import { spinReels, prefersReducedMotion, confetti } from './reels.js';
 
 const segments = location.pathname.split('/').filter(Boolean);
 const lastPart = decodeURIComponent(segments[segments.length - 1] || '');
-// /ekran/{token}: publiczny ekran stoiska bez logowania (token w adresie zastępuje cookie personelu).
-const isPublicScreen = segments[0] === 'ekran';
+// /ekran/{token} i /zajecia/{kod}: publiczny ekran stoiska bez logowania (token w adresie zastępuje cookie personelu).
+const isPublicScreen = segments[0] === 'ekran' || segments[0] === 'zajecia';
 const boothId = isPublicScreen ? null : lastPart;
 const screenToken = isPublicScreen ? lastPart : null;
 const POLL_MS = 2500;
