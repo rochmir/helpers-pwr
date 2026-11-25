@@ -32,20 +32,24 @@ async function loadBooths() {
     const body = $('#booths-body');
     body.textContent = '';
     for (const b of booths) {
-      const act = (a, ico, label) => h('button', { class: 'btn btn-small', type: 'button', 'data-action': a, 'data-id': b.id }, icon(ico), label);
+      const act = (a, ico, label, title, cls = '') => h('button', { class: 'btn btn-small ' + cls, type: 'button', 'data-action': a, 'data-id': b.id, title: title || label }, icon(ico), label);
       const genotypeCell = h('div', { class: 'genotype genotype-mini', 'aria-label': 'Genotyp stoiska' });
       renderGenotype(genotypeCell, b.current_genotype);
+      const more = h('details', { class: 'row-menu' }, h('summary', { class: 'btn btn-small' }, icon('ti-dots'), 'Więcej'),
+        h('div', { class: 'row-menu-list' }, act('reset', 'ti-refresh', 'Resetuj genotyp'),
+          ...(b.is_lecture ? [] : [act('delete', 'ti-trash', 'Usuń stoisko', 'Usuń stoisko', 'btn-danger')])));
       body.append(h('tr', {},
-        h('td', { class: 'mono' }, b.id), h('td', {}, b.is_lecture ? b.name + ' (bez wolontariusza, poza wykazami)' : b.name),
-        h('td', {}, [b.building, formatDateRange(b.date_from, b.date_to)].filter(Boolean).join(', ')),
-        h('td', {}, b.registered),
-        h('td', {}, b.matches_count), h('td', {}, b.rolls_count),
-        h('td', {}, genotypeCell),
-        h('td', { class: 'actions' },
-          h('a', { class: 'btn btn-small', href: '/stoisko/' + encodeURIComponent(b.id), target: '_blank', rel: 'noopener' }, icon('ti-device-tv'), 'Otwórz ekran stoiska'),
-          act('playlink', 'ti-link', 'Link do symulatora (ważny ok. 1-2 min)'), act('screen', 'ti-device-desktop', 'Link ekranu'),
-          act('rename', 'ti-pencil', 'Zmień nazwę'), act('details', 'ti-calendar', 'Budynek i termin'),
-          act('reset', 'ti-refresh', 'Resetuj genotyp'), ...(b.is_lecture ? [] : [act('delete', 'ti-trash', 'Usuń')]))));
+        h('td', { class: 'mono', 'data-label': 'ID' }, b.id),
+        h('td', { class: 'booth-name-cell', 'data-label': 'Nazwa' }, b.name, b.is_lecture ? h('small', { class: 'booth-note' }, 'bez wolontariusza, poza wykazami') : null),
+        h('td', { 'data-label': 'Budynek i termin' }, [b.building, formatDateRange(b.date_from, b.date_to)].filter(Boolean).join(', ')),
+        h('td', { class: 'num', 'data-label': 'Głosy w Pucharze' }, b.registered),
+        h('td', { class: 'num', 'data-label': '10/10' }, b.matches_count), h('td', { class: 'num', 'data-label': 'Próby' }, b.rolls_count),
+        h('td', { 'data-label': 'Genotyp' }, genotypeCell),
+        h('td', { class: 'actions', 'data-label': 'Akcje' },
+          h('a', { class: 'btn btn-small', href: '/stoisko/' + encodeURIComponent(b.id), target: '_blank', rel: 'noopener', title: 'Otwórz ekran stoiska' }, icon('ti-device-tv'), 'Ekran'),
+          act('playlink', 'ti-link', 'Symulator', 'Link do symulatora (ważny ok. 1-2 min)'),
+          b.is_lecture ? act('screen', 'ti-presentation', 'Link prezentacyjny', 'Ekran z kodem QR', 'btn-primary btn-present') : act('screen', 'ti-device-desktop', 'Link ekranu'),
+          act('rename', 'ti-pencil', 'Nazwa', 'Zmień nazwę'), act('details', 'ti-calendar', 'Termin', 'Budynek i termin'), more)));
     }
     fillBoothSelects();
   });
@@ -114,12 +118,14 @@ function renderScreenLink(id, box, url) {
     return;
   }
   box.append(h('label', {}, 'Link do ekranu stoiska'),
-    h('input', { type: 'text', readonly: true, value: url }),
+    h('input', { type: 'text', class: 'link-input', readonly: true, value: url }),
     h('div', { class: 'copy-row' },
       h('button', { class: 'btn btn-primary', type: 'button', 'data-screen': 'copy' }, icon('ti-copy'), 'Kopiuj'),
       h('button', { class: 'btn', type: 'button', 'data-screen': 'rotate', 'data-id': id }, icon('ti-refresh'), 'Wygeneruj nowy'),
       h('span', { class: 'hint', role: 'status' })));
 }
+
+$('#booths-body').addEventListener('focusin', (ev) => { if (ev.target.classList.contains('link-input')) ev.target.select(); });
 
 $('#booths-body').addEventListener('click', async (ev) => {
   const btn = ev.target.closest('button[data-screen]');
@@ -141,10 +147,11 @@ $('#booths-body').addEventListener('click', async (ev) => {
     }
     return;
   }
-  if (kind === 'rotate' && !confirm('Wygenerować nowy link? Poprzedni przestanie działać, a ekrany otwarte ze starym linkiem stracą kod QR.')) return;
+  const lecture = btn.dataset.id === 'zajecia';
+  if (kind === 'rotate' && !confirm(lecture ? 'Wygenerować nowy link prezentacyjny? Poprzednie linki nadal będą działać.' : 'Wygenerować nowy link? Poprzedni przestanie działać, a ekrany otwarte ze starym linkiem stracą kod QR.')) return;
   await guard(async () => {
     renderScreenLink(btn.dataset.id, box, (await api('POST', '/api/admin/booths/' + encodeURIComponent(btn.dataset.id) + '/screen')).url);
-    if (kind === 'rotate') box.querySelector('.hint').textContent = 'Nowy link gotowy. Poprzedni nie działa.';
+    if (kind === 'rotate') box.querySelector('.hint').textContent = (lecture ? 'Nowy link gotowy. Poprzednie nadal działają.' : 'Nowy link gotowy. Poprzedni nie działa.');
   });
 });
 

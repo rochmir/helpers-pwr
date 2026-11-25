@@ -188,12 +188,22 @@ def get_booth_screen(booth_id: str, _: dict = Depends(auth.require_admin), conn:
 
 @router.post("/booths/{booth_id}/screen")
 def rotate_booth_screen(booth_id: str, _: dict = Depends(auth.require_admin), conn: sqlite3.Connection = Depends(db.get_db)):
-    """Tworzy albo rotuje link do ekranu stoiska; poprzedni przestaje działać."""
+    """Tworzy albo rotuje link do ekranu stoiska; poprzedni przestaje działać (poza Zajęciami: tam stare kody działają dalej)."""
     with db.tx(conn):
         if conn.execute("SELECT 1 FROM booths WHERE id=?", (booth_id,)).fetchone() is None:
             raise HTTPException(404, "Nie ma takiego stoiska.")
         # Zajęcia dostają łatwy do zapamiętania kod (wolontariusz wpisuje go ręcznie), reszta losowy token.
-        token = db.new_lecture_screen_code() if booth_id == db.LECTURE_BOOTH_ID else secrets.token_urlsafe(16)
+        if booth_id == db.LECTURE_BOOTH_ID:
+            # Zajęcia: poprzedni kod dalej działa (trafia do lecture_old_codes), nowy nie może kolidować z żadnym istniejącym
+            prev = conn.execute("SELECT screen_token FROM booths WHERE id=?", (booth_id,)).fetchone()["screen_token"]
+            if prev:
+                conn.execute("INSERT OR IGNORE INTO lecture_old_codes(code, created_at) VALUES(?,?)", (prev, config.now_iso()))
+            while True:
+                token = db.new_lecture_screen_code()
+                if db.booth_by_screen_token(conn, token) is None:
+                    break
+        else:
+            token = secrets.token_urlsafe(16)
         conn.execute("UPDATE booths SET screen_token=? WHERE id=?", (token, booth_id))
     return _screen_view(token)
 

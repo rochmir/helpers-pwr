@@ -253,3 +253,12 @@ def test_live_stats_split_categories(admin, booth, client):
     conn = db.connect()
     assert {r[1] for r in conn.execute("PRAGMA table_info(donors_stats)")} == {"id", "faculty", "created_at", "category", "study_year", "booth_id"}
     conn.close()
+
+
+def test_lecture_rotation_keeps_old_code_working(admin, other_clients):
+    old = screen_token(admin)
+    new = admin.post("/api/admin/booths/zajecia/screen", json={}).json()["url"].rsplit("/", 1)[1]
+    guest = other_clients()
+    assert new != old
+    assert guest.get(f"/zajecia/{old}").status_code == 200 and guest.get(f"/zajecia/{new}").status_code == 200
+    assert guest.get(f"/api/screen/{old}/state").status_code == 200

@@ -23,14 +23,21 @@ function wireAdminNav() {
   const sections = [...document.querySelectorAll('#admin-part > section.card')];
   const slug = (sec) => sec.id.replace(/-section$/, '');
   const panel = $('#panel');
-  sel.append(h('option', { value: BOOTH_SECTION }, 'Stoisko i kody QR'));
+  const side = $('#admin-side');
+  const ICONS = { stoisko: 'ti-user-heart', booths: 'ti-building-store', volunteers: 'ti-users', dictionary: 'ti-book', students: 'ti-school', wins: 'ti-trophy', token: 'ti-ticket', legal: 'ti-file-text', partners: 'ti-heart-handshake', settings: 'ti-settings', preview: 'ti-photo', tests: 'ti-flask' };
+  const addItem = (value, label) => {
+    sel.append(h('option', { value }, label));
+    side.append(h('button', { type: 'button', class: 'side-item', 'data-section': value }, h('i', { class: 'ti ' + (ICONS[value] || 'ti-point'), 'aria-hidden': 'true' }), label));
+  };
+  addItem(BOOTH_SECTION, 'Wolontariusz (widok wolontariusza)');
   for (const sec of sections) {
-    sel.append(h('option', { value: slug(sec) }, sec.querySelector('h2').textContent.trim()));
+    addItem(slug(sec), sec.querySelector('h2').textContent.trim());
   }
   const known = (v) => v === BOOTH_SECTION || sections.some((sec) => slug(sec) === v);
   const apply = (v, store) => {
     if (!known(v)) v = BOOTH_SECTION;
     sel.value = v;
+    for (const b of side.children) b.classList.toggle('active', b.dataset.section === v);
     panel.classList.toggle('admin-view-booth', v === BOOTH_SECTION);
     panel.classList.toggle('admin-view-section', v !== BOOTH_SECTION);
     for (const sec of sections) sec.hidden = slug(sec) !== v;
@@ -42,6 +49,7 @@ function wireAdminNav() {
   const fromHash = () => location.hash.replace(/^#/, '').replace(/-section$/, '');
   apply(fromHash() || lsGet(SECTION_KEY) || '', false);
   sel.addEventListener('change', () => apply(sel.value, true));
+  side.addEventListener('click', (ev) => { const b = ev.target.closest('button[data-section]'); if (b) apply(b.dataset.section, true); });
   window.addEventListener('hashchange', () => apply(fromHash(), true));
 }
 
@@ -86,6 +94,8 @@ async function showPanel(me) {
   await initVolunteer({ role: me.role, booth });
   $('#admin-part').hidden = me.role !== 'admin';
   $('#admin-switch').hidden = me.role !== 'admin';
+  $('#admin-side').hidden = me.role !== 'admin';
+  $('#panel-layout').classList.toggle('is-admin', me.role === 'admin');
   if (me.role !== 'admin') $('#panel').classList.remove('admin-view-booth', 'admin-view-section');
   if (me.role === 'admin') wireAdminNav();
   if (me.role === 'admin' && !adminLoaded) {

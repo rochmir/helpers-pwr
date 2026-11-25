@@ -61,6 +61,8 @@ CREATE TABLE IF NOT EXISTS cup_qr_codes(
   issued_by TEXT NULL, created_at TEXT NOT NULL, scanned_at TEXT NULL, voted_at TEXT NULL, revoked_at TEXT NULL);
 CREATE INDEX IF NOT EXISTS idx_cup_qr_issuer ON cup_qr_codes(issued_by, booth_id);
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- dawne kody ekranu Zajęć: nowy link prezentacyjny nie unieważnia poprzednich
+CREATE TABLE IF NOT EXISTS lecture_old_codes(code TEXT PRIMARY KEY, created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS volunteers(
   login TEXT PRIMARY KEY, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'volunteer' CHECK(role IN ('volunteer','admin')));
@@ -358,6 +360,10 @@ def booth_by_screen_token(conn: sqlite3.Connection, token: str | None) -> sqlite
     for b in conn.execute("SELECT * FROM booths WHERE screen_token IS NOT NULL AND screen_token<>''"):
         if hmac.compare_digest(given, b["screen_token"].encode()):
             found = b
+    if found is None:
+        for r in conn.execute("SELECT code FROM lecture_old_codes"):
+            if hmac.compare_digest(given, r["code"].encode()):
+                found = conn.execute("SELECT * FROM booths WHERE id=?", (LECTURE_BOOTH_ID,)).fetchone()
     return found
 
 

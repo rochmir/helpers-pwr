@@ -886,10 +886,49 @@ details.help > p { margin-top: .4rem; }
 }
 
 
-/* partner technologiczny w stopce (logo biale: ciemny kafelek jak przy HG) */
+/* partner technologiczny w stopce (logo kolorowe, przezroczyste tlo) */
 .footer-partner { background: var(--grey-bg); border-top: 1px solid rgba(0,0,0,.08); padding-block: 2rem; }
 .footer-partner .container { display: flex; flex-direction: column; align-items: flex-start; gap: 1.2rem 2rem; }
 @media (min-width: 576px) { .footer-partner .container { flex-direction: row; align-items: center; } }
-.logo-solvro { height: 4.4rem; width: auto; flex: none; padding: .9rem 1.4rem; background: #1b1b1f; border-radius: .3rem; box-sizing: border-box; }
+.logo-solvro { height: 4.4rem; width: auto; flex: none; }
 .footer-partner p { margin: 0; font-size: 1.3rem; line-height: 1.8rem; color: var(--grey-dark); }
 .footer-partner a { color: var(--black); }
+
+/* panel admina: lewe menu kategorii + glowne pole (od 992px); ponizej zostaje lista rozwijana */
+.admin-side { display: none; }
+.btn-present { box-shadow: 0 0 0 .3rem rgba(226,0,26,.18); font-weight: 700; }
+/* pola tekstowe i dlugie teksty w panelu admina */
+.screen-row td { background: var(--grey-bg); }
+.screen-row .inline-form { margin: 0; padding: 0; border: 0; max-width: 72rem; }
+.link-input { padding: 1rem 1.4rem; font: 400 1.4rem/2rem ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--white); text-overflow: ellipsis; }
+.inline-result a, .vol-out a, .table td a:not(.btn) { overflow-wrap: anywhere; word-break: break-word; }
+#admin-part input, #admin-part select { padding: 1.1rem 1.4rem; font-size: 1.5rem; line-height: 2.2rem; }
+#admin-part select { padding-right: 4.4rem; background-position: right 1.4rem center; }
+#admin-part textarea { padding: 1.1rem 1.4rem; min-height: 9rem; resize: vertical; }
+#admin-part input[type="checkbox"], #admin-part input[type="radio"] { padding: 0; }
+#admin-part .table td { overflow-wrap: break-word; }
+#admin-part .table td.actions { min-width: 0; }
+#admin-part .table td input, #admin-part .table td select { min-width: 12rem; }
+@media (min-width: 992px) {
+  .panel-layout.is-admin { display: grid; grid-template-columns: 28rem minmax(0, 1fr); gap: 2.4rem; align-items: stretch; height: calc(100vh - 3.2rem); min-height: 50rem; }
+  .panel-layout.is-admin .panel-main { overflow-y: auto; min-height: 0; padding-right: .8rem; scrollbar-gutter: stable; }
+  .panel-layout.is-admin .admin-side { overflow-y: auto; align-self: stretch; }
+  .panel-layout.is-admin .admin-switch { display: none; }
+  .panel-layout.is-admin .admin-side { display: flex; flex-direction: column; gap: .4rem; padding: .8rem; background: var(--grey-bg); border-radius: .4rem; }
+  .admin-side[hidden] { display: none !important; }
+  .side-item { display: flex; align-items: center; gap: 1rem; width: 100%; text-align: left; padding: 1.1rem 1.4rem; border: 0; border-left: .4rem solid transparent; border-radius: .3rem; background: transparent; font: inherit; font-size: 1.5rem; color: var(--black); cursor: pointer; }
+  .side-item i.ti { font-size: 2rem; flex: none; }
+  .side-item:hover { background: var(--white); }
+  .side-item.active { background: var(--white); border-left-color: var(--primary); color: var(--primary); font-weight: 700; }
+}
+
+/* sekcja stoisk */
+#booths-table .genotype-mini { width: min(16rem, 100%); }
+#booths-table th:nth-child(n+4):nth-child(-n+6), #booths-table td.num { width: 1%; white-space: nowrap; text-align: center; }
+#booths-table td.actions { min-width: 26rem; }
+.booth-note { display: block; font-size: 1.3rem; color: var(--grey-dark); font-weight: 400; }
+.row-menu { position: relative; display: inline-block; margin: 0 .4rem .4rem 0; }
+.row-menu > summary { list-style: none; cursor: pointer; }
+.row-menu > summary::-webkit-details-marker { display: none; }
+.row-menu-list { position: absolute; right: 0; z-index: 10; margin-top: .4rem; padding: .6rem; display: flex; flex-direction: column; gap: .4rem; min-width: 19rem; background: var(--white); border: .2rem solid var(--grey-light); border-radius: .4rem; box-shadow: 0 .6rem 2rem rgba(0,0,0,.15); }
+.row-menu-list .btn { margin: 0; justify-content: flex-start; }
